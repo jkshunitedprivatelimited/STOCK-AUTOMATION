@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
-import { 
+import {
   ArrowLeft, Search, X, Download, ArrowRight, RotateCcw, FileX, MapPin, User, Hash,
   FileText, IndianRupee
 } from "lucide-react";
@@ -10,26 +10,46 @@ import {
 const PRIMARY = "rgb(0, 100, 55)";
 const BORDER = "#e5e7eb";
 
+/* HELPER */
+const SEPARATOR = " |METADATA|";
+const parseItemName = (fullName) => {
+  if (!fullName || !fullName.includes(SEPARATOR)) {
+    return { name: fullName, meta: { gst: 0, sgst: 0 } };
+  }
+  const [name, metaStr] = fullName.split(SEPARATOR);
+  try {
+    const meta = JSON.parse(metaStr);
+    return { name, meta };
+  } catch (e) {
+    return { name, meta: { gst: 0, sgst: 0 } };
+  }
+};
+
 function CentralInvoices() {
   const navigate = useNavigate();
-  const { user } = useAuth(); 
-  
+  const { user } = useAuth();
+
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState(null);
-  
+
   const [search, setSearch] = useState("");
-  const [rangeMode, setRangeMode] = useState(false); 
+  const [rangeMode, setRangeMode] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [items, setItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-  useEffect(() => { 
-    fetchInvoices(); 
+  useEffect(() => {
+    fetchInvoices();
     fetchUserProfile();
+
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const fetchUserProfile = async () => {
@@ -87,7 +107,7 @@ function CentralInvoices() {
   const filteredInvoices = useMemo(() => {
     return invoices.filter((inv) => {
       const q = search.toLowerCase();
-      
+
       const fId = (inv.profiles?.franchise_id || "").toString().toLowerCase();
       const custName = (inv.customer_name || "").toLowerCase();
       const invId = (inv.id || "").toString().toLowerCase();
@@ -95,17 +115,17 @@ function CentralInvoices() {
       const amount = (inv.total_amount || 0).toString().toLowerCase();
       const date = inv.created_at ? new Date(inv.created_at).toLocaleDateString().toLowerCase() : "";
 
-      const matchesSearch = !search || 
-        fId.includes(q) || 
-        custName.includes(q) || 
+      const matchesSearch = !search ||
+        fId.includes(q) ||
+        custName.includes(q) ||
         invId.includes(q) ||
         phone.includes(q) ||
         amount.includes(q) ||
         date.includes(q);
-      
-      if (!inv.created_at) return matchesSearch; 
+
+      if (!inv.created_at) return matchesSearch;
       const invDate = inv.created_at.split('T')[0];
-      
+
       let matchesDate = true;
       if (rangeMode) {
         if (startDate && endDate) matchesDate = invDate >= startDate && invDate <= endDate;
@@ -147,22 +167,22 @@ function CentralInvoices() {
 
   return (
     <div style={styles.page}>
-      <div style={styles.container}>
-        
+      <div style={{ ...styles.container, padding: isMobile ? "20px" : "20px 40px" }}>
+
         {/* HEADER BAR - UPDATED FOR SINGLE ROW ALIGNMENT */}
-        <header style={styles.header}>
-          <div style={styles.headerLeft}>
+        <header style={{ ...styles.header, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '16px' : '0' }}>
+          <div style={{ ...styles.headerLeft, width: isMobile ? '100%' : '300px' }}>
             <button onClick={() => navigate(-1)} style={styles.backBtn}>
               <ArrowLeft size={20} />
               <span>Back</span>
             </button>
           </div>
 
-          <h1 style={styles.centerTitle}>INVOICE LEDGER</h1>
+          <h1 style={{ ...styles.centerTitle, fontSize: isMobile ? '20px' : '24px' }}>INVOICE LEDGER</h1>
 
-          <div style={styles.headerRight}>
+          <div style={{ ...styles.headerRight, width: isMobile ? '100%' : '300px', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
             <div style={styles.topFranchiseBadge}>
-              Franchise ID: {userProfile?.franchise_id || '1'}
+              ID: {userProfile?.franchise_id || '1'}
             </div>
             <button onClick={handleExport} style={styles.refreshBtn}>
               <Download size={18} />
@@ -172,90 +192,128 @@ function CentralInvoices() {
         </header>
 
         {/* QUICK STATS CARDS */}
-        <div style={styles.statsRow}>
-            <div style={styles.statCard}>
-                <div style={styles.statIcon}><FileText size={20} color={PRIMARY}/></div>
-                <div>
-                    <p style={styles.statLabel}>Total Invoices</p>
-                    <h2 style={styles.statValue}>{stats.total}</h2>
-                </div>
+        <div style={{ ...styles.statsRow, flexDirection: isMobile ? 'column' : 'row' }}>
+          <div style={styles.statCard}>
+            <div style={styles.statIcon}><FileText size={20} color={PRIMARY} /></div>
+            <div>
+              <p style={styles.statLabel}>Total Invoices</p>
+              <h2 style={styles.statValue}>{stats.total}</h2>
             </div>
-            <div style={styles.statCard}>
-                <div style={{...styles.statIcon, background: '#ecfdf5'}}><IndianRupee size={20} color={PRIMARY}/></div>
-                <div>
-                    <p style={styles.statLabel}>Total Revenue</p>
-                    <h2 style={styles.statValue}>₹{stats.revenue.toLocaleString('en-IN')}</h2>
-                </div>
+          </div>
+          <div style={styles.statCard}>
+            <div style={{ ...styles.statIcon, background: '#ecfdf5' }}><IndianRupee size={20} color={PRIMARY} /></div>
+            <div>
+              <p style={styles.statLabel}>Total Revenue</p>
+              <h2 style={styles.statValue}>₹{stats.revenue.toLocaleString('en-IN')}</h2>
             </div>
+          </div>
         </div>
 
         {/* SEARCH & FILTERS */}
-        <div style={styles.filterBar}>
-            <div style={styles.searchBox}>
-                <Search size={18} color="#9ca3af" />
-                <input 
-                    style={styles.input} 
-                    placeholder="Search by ID, Name, Phone, Date or Amount..." 
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                />
+        <div style={{ ...styles.filterBar, flexDirection: isMobile ? 'column' : 'row', alignItems: 'stretch' }}>
+          <div style={styles.searchBox}>
+            <Search size={18} color="#9ca3af" />
+            <input
+              style={styles.input}
+              placeholder="Search by ID, Name, Phone..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div style={{ ...styles.dateSection, flexDirection: isMobile ? 'column' : 'row', width: isMobile ? '100%' : 'auto' }}>
+            <div style={{ ...styles.toggleWrapper, alignSelf: isMobile ? 'flex-start' : 'center' }}>
+              <span style={{ ...styles.toggleLabel, color: !rangeMode ? PRIMARY : '#9ca3af' }}>Day</span>
+              <button onClick={() => setRangeMode(!rangeMode)} style={styles.switch}>
+                <div style={{ ...styles.knob, transform: rangeMode ? 'translateX(14px)' : 'translateX(0px)' }} />
+              </button>
+              <span style={{ ...styles.toggleLabel, color: rangeMode ? PRIMARY : '#9ca3af' }}>Range</span>
             </div>
 
-            <div style={styles.dateSection}>
-                <div style={styles.toggleWrapper}>
-                    <span style={{...styles.toggleLabel, color: !rangeMode ? PRIMARY : '#9ca3af'}}>Day</span>
-                    <button onClick={() => setRangeMode(!rangeMode)} style={styles.switch}>
-                        <div style={{...styles.knob, transform: rangeMode ? 'translateX(14px)' : 'translateX(0px)'}} />
-                    </button>
-                    <span style={{...styles.toggleLabel, color: rangeMode ? PRIMARY : '#9ca3af'}}>Range</span>
-                </div>
-
-                <div style={styles.dateInputs}>
-                    <input type="date" style={styles.dateInput} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-                    {rangeMode && (
-                        <>
-                            <ArrowRight size={14} color="#9ca3af" />
-                            <input type="date" style={styles.dateInput} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-                        </>
-                    )}
-                </div>
-                <button onClick={resetFilters} style={styles.resetBtn} title="Clear Filters"><RotateCcw size={16} /></button>
+            <div style={{ ...styles.dateInputs, width: isMobile ? '100%' : 'auto' }}>
+              <input type="date" style={{ ...styles.dateInput, flex: isMobile ? 1 : 0 }} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              {rangeMode && (
+                <>
+                  <ArrowRight size={14} color="#9ca3af" />
+                  <input type="date" style={{ ...styles.dateInput, flex: isMobile ? 1 : 0 }} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                </>
+              )}
             </div>
+            {!isMobile && <button onClick={resetFilters} style={styles.resetBtn} title="Clear Filters"><RotateCcw size={16} /></button>}
+          </div>
+          {isMobile && <button onClick={resetFilters} style={{ ...styles.resetBtn, width: '100%', justifyContent: 'center', display: 'flex', gap: '8px' }}>Reset Filters <RotateCcw size={16} /></button>}
         </div>
 
-        {/* TABLE SECTION */}
+        {/* TABLE SECTION / CARD LIST SECTION */}
         <div style={styles.tableWrapper}>
-          <table style={styles.table}>
-            <thead>
-              <tr style={styles.thRow}>
-                <th style={{...styles.th, width: '60px'}}>S.NO</th>
-                <th style={styles.th}>INVOICE ID</th>
-                <th style={styles.th}>FRANCHISE ID</th>
-                <th style={styles.th}>CUSTOMER NAME</th>
-                <th style={styles.th}>PHONE NUMBER</th>
-                <th style={styles.th}>DATE</th>
-                <th style={{...styles.th, textAlign: 'right', paddingRight: '40px'}}>AMOUNT PAID</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredInvoices.map((inv, index) => (
-                <tr key={inv.id} style={styles.tr} onClick={() => openInvoiceModal(inv)}>
-                  <td style={styles.tdIndex}>{index + 1}</td>
-                  <td style={styles.td}><span style={styles.idBadge}>#{inv.id.toString().slice(-6)}</span></td>
-                  <td style={styles.td}><code style={styles.code}>{inv.profiles?.franchise_id || "—"}</code></td>
-                  <td style={{...styles.td, fontWeight: '700'}}>{inv.customer_name}</td>
-                  <td style={{...styles.td, color: '#6b7280'}}>{inv.customer_phone || "—"}</td>
-                  <td style={styles.td}>{new Date(inv.created_at).toLocaleDateString()}</td>
-                  <td style={{...styles.td, textAlign: 'right', fontWeight: '800', paddingRight: '40px', color: PRIMARY}}>₹{Number(inv.total_amount || 0).toFixed(2)}</td>
+          {!isMobile ? (
+            <table style={styles.table}>
+              <thead>
+                <tr style={styles.thRow}>
+                  <th style={{ ...styles.th, width: '60px' }}>S.NO</th>
+                  <th style={styles.th}>INVOICE ID</th>
+                  <th style={styles.th}>FRANCHISE ID</th>
+                  <th style={styles.th}>CUSTOMER NAME</th>
+                  <th style={styles.th}>PHONE NUMBER</th>
+                  <th style={styles.th}>DATE</th>
+                  <th style={{ ...styles.th, textAlign: 'right', paddingRight: '40px' }}>AMOUNT PAID</th>
                 </tr>
+              </thead>
+              <tbody>
+                {filteredInvoices.map((inv, index) => (
+                  <tr key={inv.id} style={styles.tr} onClick={() => openInvoiceModal(inv)}>
+                    <td style={styles.tdIndex}>{index + 1}</td>
+                    <td style={styles.td}><span style={styles.idBadge}>#{inv.id.toString().slice(-6)}</span></td>
+                    <td style={styles.td}><code style={styles.code}>{inv.profiles?.franchise_id || "—"}</code></td>
+                    <td style={{ ...styles.td, fontWeight: '700' }}>{inv.customer_name}</td>
+                    <td style={{ ...styles.td, color: '#6b7280' }}>{inv.customer_phone || "—"}</td>
+                    <td style={styles.td}>{new Date(inv.created_at).toLocaleDateString()}</td>
+                    <td style={{ ...styles.td, textAlign: 'right', fontWeight: '800', paddingRight: '40px', color: PRIMARY }}>₹{Number(inv.total_amount || 0).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px' }}>
+              {filteredInvoices.map((inv) => (
+                <div
+                  key={inv.id}
+                  onClick={() => openInvoiceModal(inv)}
+                  style={{
+                    background: '#fff',
+                    border: `1px solid ${BORDER}`,
+                    borderRadius: '16px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span style={{ ...styles.idBadge, fontSize: '11px' }}>#{inv.id.toString().slice(-6)}</span>
+                      <h3 style={{ margin: '8px 0 0 0', fontSize: '16px', fontWeight: '700' }}>{inv.customer_name}</h3>
+                      <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#6b7280' }}>{inv.customer_phone || "No Phone"}</p>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ display: 'block', fontSize: '18px', fontWeight: '800', color: PRIMARY }}>₹{Number(inv.total_amount || 0).toFixed(2)}</span>
+                      <span style={{ fontSize: '11px', color: '#9ca3af' }}>{new Date(inv.created_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid #f3f4f6`, paddingTop: '12px' }}>
+                    <span style={{ fontSize: '12px', color: '#6b7280' }}>Franchise ID: {inv.profiles?.franchise_id || "—"}</span>
+                    <span style={{ fontSize: '12px', fontWeight: '600', color: PRIMARY }}>View Details →</span>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
-          
+            </div>
+          )}
+
           {filteredInvoices.length === 0 && (
             <div style={styles.emptyState}>
-                <FileX size={48} color="#e5e7eb" />
-                <p style={{marginTop: '12px', fontWeight: '600'}}>No records match your search</p>
+              <FileX size={48} color="#e5e7eb" />
+              <p style={{ marginTop: '12px', fontWeight: '600' }}>No records match your search</p>
             </div>
           )}
         </div>
@@ -264,47 +322,70 @@ function CentralInvoices() {
       {/* MODAL */}
       {showModal && selectedInvoice && (
         <div style={styles.modalOverlay}>
-          <div style={styles.modal}>
+          <div style={{ ...styles.modal, width: '800px' }}>
             <div style={styles.modalHeader}>
-              <div><h3 style={{margin: 0, letterSpacing: '-0.5px'}}>Statement Overview</h3><span style={{fontSize: '11px', color: '#9ca3af'}}>Transaction Ref: {selectedInvoice.id}</span></div>
-              <button onClick={() => setShowModal(false)} style={styles.closeBtn}><X size={20}/></button>
+              <div><h3 style={{ margin: 0, letterSpacing: '-0.5px' }}>Statement Overview</h3><span style={{ fontSize: '11px', color: '#9ca3af' }}>Transaction Ref: {selectedInvoice.id}</span></div>
+              <button onClick={() => setShowModal(false)} style={styles.closeBtn}><X size={20} /></button>
             </div>
             <div style={styles.modalBody}>
-                <div style={styles.infoGrid}>
-                    <div style={styles.infoCard}>
-                        <div style={styles.infoIcon}><Hash size={16} /></div>
-                        <div><label style={styles.label}>Franchise ID</label><p style={styles.p}>{selectedInvoice.profiles?.franchise_id || "N/A"}</p></div>
-                    </div>
-                    <div style={styles.infoCard}>
-                        <div style={styles.infoIcon}><User size={16} /></div>
-                        <div><label style={styles.label}>Owner Name</label><p style={styles.p}>{selectedInvoice.profiles?.name || "N/A"}</p></div>
-                    </div>
+              <div style={styles.infoGrid}>
+                <div style={styles.infoCard}>
+                  <div style={styles.infoIcon}><Hash size={16} /></div>
+                  <div><label style={styles.label}>Franchise ID</label><p style={styles.p}>{selectedInvoice.profiles?.franchise_id || "N/A"}</p></div>
                 </div>
-                <div style={styles.addressBox}>
-                    <div style={{color: PRIMARY, marginBottom: '5px'}}><MapPin size={16} /></div>
-                    <div><label style={styles.label}>Franchise Address</label><p style={{...styles.p, fontSize: '13px', fontWeight: '500'}}>{selectedInvoice.profiles?.address || "No address on file"}</p></div>
+                <div style={styles.infoCard}>
+                  <div style={styles.infoIcon}><User size={16} /></div>
+                  <div><label style={styles.label}>Owner Name</label><p style={styles.p}>{selectedInvoice.profiles?.name || "N/A"}</p></div>
                 </div>
-                <div style={styles.itemTableWrapper}>
-                    <table style={styles.itemTable}>
-                        <thead><tr style={styles.itemThRow}><th style={styles.itemTh}>ITEM DESCRIPTION</th><th style={styles.itemThCenter}>QTY</th><th style={styles.itemThRight}>TOTAL</th></tr></thead>
-                        <tbody>
-                            {itemsLoading ? <tr><td colSpan="3" style={{textAlign: 'center', padding: '10px'}}>Loading...</td></tr> : 
-                              items.map(item => (
-                                <tr key={item.id} style={{borderBottom: `1px solid ${BORDER}`}}>
-                                    <td style={styles.itemTd}>{item.item_name}</td>
-                                    <td style={styles.itemTdCenter}>{item.quantity}</td>
-                                    <td style={styles.itemTdRight}>₹{(item.quantity * item.price).toFixed(2)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+              </div>
+              <div style={styles.addressBox}>
+                <div style={{ color: PRIMARY, marginBottom: '5px' }}><MapPin size={16} /></div>
+                <div><label style={styles.label}>Franchise Address</label><p style={{ ...styles.p, fontSize: '13px', fontWeight: '500' }}>{selectedInvoice.profiles?.address || "No address on file"}</p></div>
+              </div>
+
+              {/* ITEMS TABLE REPLACED */}
+              <div style={styles.itemTableWrapper}>
+                <table style={{ ...styles.itemTable, fontSize: '11px' }}>
+                  <thead>
+                    <tr style={styles.itemThRow}>
+                      <th style={styles.itemTh}>ITEM</th>
+                      <th style={styles.itemThCenter}>QTY/UNIT</th>
+                      <th style={styles.itemThRight}>BASE RATE</th>
+                      <th style={styles.itemThRight}>GST %</th>
+                      <th style={styles.itemThRight}>SGST %</th>
+                      <th style={styles.itemThRight}>TOTAL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itemsLoading ? <tr><td colSpan="6" style={{ textAlign: 'center', padding: '10px' }}>Loading...</td></tr> :
+                      items.map(item => {
+                        const { name, meta } = parseItemName(item.item_name);
+                        const gst = Number(meta.gst) || 0;
+                        const sgst = Number(meta.sgst) || 0;
+                        const baseTotal = item.price * item.quantity;
+                        const taxAmt = baseTotal * ((gst + sgst) / 100);
+                        const finalTotal = baseTotal + taxAmt;
+                        return (
+                          <tr key={item.id} style={{ borderBottom: `1px solid ${BORDER}` }}>
+                            <td style={{ ...styles.itemTd, maxWidth: '150px' }}>{name}</td>
+                            <td style={styles.itemTdCenter}>{item.quantity} {item.unit}</td>
+                            <td style={styles.itemTdRight}>₹{item.price}</td>
+                            <td style={styles.itemTdRight}>{gst}%</td>
+                            <td style={styles.itemTdRight}>{sgst}%</td>
+                            <td style={{ ...styles.itemTdRight, fontWeight: 'bold' }}>₹{finalTotal.toFixed(2)}</td>
+                          </tr>
+                        )
+                      })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={styles.totalSection}>
+                <div style={styles.totalRow}>
+                  <span style={styles.totalLabel}>TOTAL AMOUNT PAID</span>
+                  <span style={styles.totalAmt}>₹{Number(selectedInvoice.total_amount).toFixed(2)}</span>
                 </div>
-                <div style={styles.totalSection}>
-                    <div style={styles.totalRow}>
-                        <span style={styles.totalLabel}>TOTAL AMOUNT PAID</span>
-                        <span style={styles.totalAmt}>₹{Number(selectedInvoice.total_amount).toFixed(2)}</span>
-                    </div>
-                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -316,42 +397,42 @@ function CentralInvoices() {
 const styles = {
   page: { background: "#fff", height: "100vh", width: "100vw", fontFamily: '"Inter", sans-serif', color: "#111827", overflow: "hidden" },
   container: { width: "100%", height: "100%", padding: "20px 40px", boxSizing: 'border-box', display: 'flex', flexDirection: 'column' },
-  
+
   // Header Style Updates
-  header: { 
-    display: "flex", 
-    justifyContent: "space-between", 
-    alignItems: "center", 
-    marginBottom: "20px", 
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "20px",
     flexShrink: 0,
-    width: "100%" 
+    width: "100%"
   },
-  headerLeft: { 
-    display: 'flex', 
-    alignItems: 'center', 
+  headerLeft: {
+    display: 'flex',
+    alignItems: 'center',
     width: '300px' // Balanced width
   },
-  centerTitle: { 
-    fontSize: "24px", 
-    fontWeight: "900", 
-    letterSpacing: "-1px", 
+  centerTitle: {
+    fontSize: "24px",
+    fontWeight: "900",
+    letterSpacing: "-1px",
     color: "#000",
     margin: 0,
     textAlign: 'center',
-    flex: 1 
+    flex: 1
   },
-  headerRight: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '15px', 
-    justifyContent: 'flex-end', 
+  headerRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '15px',
+    justifyContent: 'flex-end',
     width: '300px' // Balanced width to keep title centered
   },
 
   topFranchiseBadge: { fontSize: '14px', fontWeight: '700', color: '#000', background: '#f3f4f6', padding: '8px 16px', borderRadius: '10px', border: `1px solid ${BORDER}` },
   backBtn: { display: "flex", alignItems: "center", gap: "8px", background: "none", border: "none", color: "#6b7280", fontWeight: "600", cursor: "pointer" },
   refreshBtn: { display: "flex", alignItems: "center", gap: "8px", background: PRIMARY, color: "#fff", border: "none", padding: "10px 18px", borderRadius: "12px", fontSize: "11px", fontWeight: "800", cursor: "pointer" },
-  
+
   statsRow: { display: 'flex', gap: '20px', marginBottom: '20px', flexShrink: 0 },
   statCard: { flex: 1, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: '16px', padding: '15px 20px', display: 'flex', alignItems: 'center', gap: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
   statIcon: { width: '44px', height: '44px', borderRadius: '12px', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' },

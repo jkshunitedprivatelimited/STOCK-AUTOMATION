@@ -2,6 +2,21 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../supabase/supabaseClient";
 import { useNavigate } from "react-router-dom";
 
+/* HELPER */
+const SEPARATOR = " |METADATA|";
+const parseItemName = (fullName) => {
+  if (!fullName || !fullName.includes(SEPARATOR)) {
+    return { name: fullName, meta: { gst: 0, sgst: 0 } };
+  }
+  const [name, metaStr] = fullName.split(SEPARATOR);
+  try {
+    const meta = JSON.parse(metaStr);
+    return { name, meta };
+  } catch (e) {
+    return { name, meta: { gst: 0, sgst: 0 } };
+  }
+};
+
 function InvoicesBilling() {
   const navigate = useNavigate();
 
@@ -128,26 +143,71 @@ function InvoicesBilling() {
                     <p><strong>Email:</strong> {invoice.customer_email || "N/A"}</p>
                   </div>
 
-                  {/* ITEMS */}
-                  <div className="border-t pt-3 space-y-2">
-                    {invoice.invoice_items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex justify-between text-sm"
-                      >
-                        <span>
-                          {item.item_name} — {item.quantity} {item.unit}
-                        </span>
-                        <span className="font-semibold">
-                          ₹{(item.quantity * item.price).toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
+                  {/* ITEMS TABLE for Segregation */}
+                  <div className="border-t pt-3">
+                    <table className="w-full text-xs text-left hidden md:table">
+                      <thead>
+                        <tr className="text-slate-400 uppercase border-b">
+                          <th className="pb-2">Item</th>
+                          <th className="pb-2 text-center">Qty</th>
+                          <th className="pb-2 text-right">Base</th>
+                          <th className="pb-2 text-right">GST</th>
+                          <th className="pb-2 text-right">SGST</th>
+                          <th className="pb-2 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {invoice.invoice_items.map((item) => {
+                          const { name, meta } = parseItemName(item.item_name);
+                          const gst = Number(meta.gst) || 0;
+                          const sgst = Number(meta.sgst) || 0;
+                          const baseTotal = item.price * item.quantity;
+                          const taxAmt = baseTotal * ((gst + sgst) / 100);
+                          const finalTotal = baseTotal + taxAmt;
+
+                          return (
+                            <tr key={item.id}>
+                              <td className="py-2 font-medium">{name}</td>
+                              <td className="py-2 text-center text-slate-500">{item.quantity} {item.unit}</td>
+                              <td className="py-2 text-right">₹{baseTotal.toFixed(2)}</td>
+                              <td className="py-2 text-right text-slate-500">{gst}%</td>
+                              <td className="py-2 text-right text-slate-500">{sgst}%</td>
+                              <td className="py-2 text-right font-bold">₹{finalTotal.toFixed(2)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+
+                    {/* MOBILE ITEM LIST */}
+                    <div className="md:hidden space-y-3">
+                      {invoice.invoice_items.map((item) => {
+                        const { name, meta } = parseItemName(item.item_name);
+                        const gst = Number(meta.gst) || 0;
+                        const sgst = Number(meta.sgst) || 0;
+                        const baseTotal = item.price * item.quantity;
+                        const taxAmt = baseTotal * ((gst + sgst) / 100);
+                        const finalTotal = baseTotal + taxAmt;
+
+                        return (
+                          <div key={item.id} className="text-sm border-b border-gray-100 pb-2 last:border-0">
+                            <div className="flex justify-between font-medium">
+                              <span>{name}</span>
+                              <span>₹{finalTotal.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs text-gray-500 mt-1">
+                              <span>{item.quantity} {item.unit} × ₹{item.price}</span>
+                              <span>Tax: {gst + sgst}%</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {/* TOTAL */}
                   <div className="border-t pt-3 flex justify-between font-black">
-                    <span>Total Amount</span>
+                    <span>Total Amount (Inc. Tax)</span>
                     <span>₹{invoice.total_amount}</span>
                   </div>
 

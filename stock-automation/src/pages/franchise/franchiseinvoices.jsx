@@ -1,10 +1,10 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase/supabaseClient";
-import { 
-  ArrowLeft, 
-  Search, 
-  Calendar, 
+import {
+  ArrowLeft,
+  Search,
+  Calendar,
   Printer,
   ChevronRight,
   CheckCircle2,
@@ -13,8 +13,23 @@ import {
   Clock,
   Hash,
   ShieldCheck,
-  MapPin 
-} from "lucide-react"; 
+  MapPin
+} from "lucide-react";
+
+/* HELPER */
+const SEPARATOR = " |METADATA|";
+const parseItemName = (fullName) => {
+  if (!fullName || !fullName.includes(SEPARATOR)) {
+    return { name: fullName, meta: { gst: 0, sgst: 0 } };
+  }
+  const [name, metaStr] = fullName.split(SEPARATOR);
+  try {
+    const meta = JSON.parse(metaStr);
+    return { name, meta };
+  } catch (e) {
+    return { name, meta: { gst: 0, sgst: 0 } };
+  }
+};
 
 function FranchiseInvoices() {
   const navigate = useNavigate();
@@ -22,7 +37,7 @@ function FranchiseInvoices() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedFranchise, setSelectedFranchise] = useState("all");
-  
+
   const [showModal, setShowModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [invoiceItems, setInvoiceItems] = useState([]);
@@ -82,23 +97,48 @@ function FranchiseInvoices() {
   const handlePrint = () => {
     if (!selectedInvoice) return;
     const total = selectedInvoice.total_amount;
-    const itemsHTML = invoiceItems.map((item, i) => `
+
+    // Generate HTML for items with segregated tax
+    const itemsHTML = invoiceItems.map((item, i) => {
+      const { name, meta } = parseItemName(item.item_name);
+      const gst = Number(meta.gst) || 0;
+      const sgst = Number(meta.sgst) || 0;
+      const baseTotal = item.price * item.quantity;
+      const taxAmt = baseTotal * ((gst + sgst) / 100);
+      const finalTotal = baseTotal + taxAmt;
+
+      return `
       <tr>
-        <td style="border-bottom: 1px solid #eee; padding: 10px;">${i + 1}</td>
-        <td style="border-bottom: 1px solid #eee; padding: 10px;">${item.item_name}</td>
-        <td style="border-bottom: 1px solid #eee; padding: 10px; text-align: center;">${item.quantity} ${item.unit}</td>
-        <td style="border-bottom: 1px solid #eee; padding: 10px; text-align: right;">₹${item.price}</td>
-        <td style="border-bottom: 1px solid #eee; padding: 10px; text-align: right;">₹${(item.quantity * item.price).toFixed(2)}</td>
-      </tr>`).join("");
+        <td style="border-bottom: 1px solid #eee; padding: 8px; font-size: 12px;">${i + 1}</td>
+        <td style="border-bottom: 1px solid #eee; padding: 8px; font-size: 12px;">${name}</td>
+        <td style="border-bottom: 1px solid #eee; padding: 8px; font-size: 12px; text-align: center;">${item.quantity} ${item.unit}</td>
+        <td style="border-bottom: 1px solid #eee; padding: 8px; font-size: 12px; text-align: right;">₹${item.price}</td>
+        <td style="border-bottom: 1px solid #eee; padding: 8px; font-size: 12px; text-align: right;">${gst + sgst}%</td>
+        <td style="border-bottom: 1px solid #eee; padding: 8px; font-size: 12px; text-align: right;">₹${finalTotal.toFixed(2)}</td>
+      </tr>`;
+    }).join("");
 
     const html = `<html><body style="font-family: sans-serif; padding: 40px;">
       <h2 style="color: ${brandGreen}">TAX INVOICE</h2>
-      <p><b>Customer:</b> ${selectedInvoice.customer_name}</p>
-      <p><b>Franchise ID:</b> ${selectedInvoice.profiles?.franchise_id}</p>
-      <p><b>Address:</b> ${selectedInvoice.profiles?.address || 'N/A'}</p>
-      <p><b>Ref:</b> ${selectedInvoice.id.slice(0,8).toUpperCase()}</p>
+      <div style="margin-bottom: 20px;">
+        <p style="margin: 4px 0;"><b>Customer:</b> ${selectedInvoice.customer_name}</p>
+        <p style="margin: 4px 0;"><b>Franchise ID:</b> ${selectedInvoice.profiles?.franchise_id}</p>
+        <p style="margin: 4px 0;"><b>Address:</b> ${selectedInvoice.profiles?.address || 'N/A'}</p>
+        <p style="margin: 4px 0;"><b>Ref:</b> ${selectedInvoice.id.slice(0, 8).toUpperCase()}</p>
+        <p style="margin: 4px 0;"><b>Date:</b> ${new Date(selectedInvoice.created_at).toLocaleDateString()}</p>
+      </div>
+
       <table style="width: 100%; border-collapse: collapse;">
-        <thead><tr style="background: #f4f4f4;"><th>#</th><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
+        <thead>
+            <tr style="background: #f4f4f4;">
+                <th style="padding: 10px; font-size: 12px; text-align: left;">#</th>
+                <th style="padding: 10px; font-size: 12px; text-align: left;">Item</th>
+                <th style="padding: 10px; font-size: 12px; text-align: center;">Qty</th>
+                <th style="padding: 10px; font-size: 12px; text-align: right;">Base Rate</th>
+                <th style="padding: 10px; font-size: 12px; text-align: right;">Tax</th>
+                <th style="padding: 10px; font-size: 12px; text-align: right;">Total</th>
+            </tr>
+        </thead>
         <tbody>${itemsHTML}</tbody>
       </table>
       <div style="text-align: right; margin-top: 20px;"><h3>Grand Total: ₹${total}</h3></div>
@@ -125,7 +165,7 @@ function FranchiseInvoices() {
         <div className="flex flex-wrap gap-4 mb-12 items-center">
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl w-fit">
             <Filter size={14} className="text-slate-400" />
-            <select 
+            <select
               className="bg-transparent outline-none text-xs font-bold cursor-pointer"
               value={selectedFranchise}
               onChange={(e) => setSelectedFranchise(e.target.value)}
@@ -139,9 +179,9 @@ function FranchiseInvoices() {
 
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input 
-              type="text" 
-              placeholder="Search customer..." 
+            <input
+              type="text"
+              placeholder="Search customer..."
               className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-slate-400 text-sm font-medium"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -150,7 +190,7 @@ function FranchiseInvoices() {
         </div>
 
         {/* TABLE HEADERS */}
-        <div className="grid grid-cols-12 px-6 py-4 mb-2 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+        <div className="hidden md:grid grid-cols-12 px-6 py-4 mb-2 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
           <div className="col-span-4">Ref & Customer</div>
           <div className="col-span-3 text-center">Franchise ID</div>
           <div className="col-span-3 text-center">Status</div>
@@ -160,23 +200,41 @@ function FranchiseInvoices() {
         {/* INVOICE LIST */}
         <div className="space-y-3">
           {filteredInvoices.map((inv) => (
-            <div 
+            <div
               key={inv.id}
               onClick={() => openInvoiceDetails(inv)}
-              className="grid grid-cols-12 items-center bg-white border border-slate-100 p-5 rounded-2xl cursor-pointer hover:border-slate-300 transition-all hover:shadow-md group"
+              className="relative flex flex-col md:grid md:grid-cols-12 md:items-center bg-white border border-slate-100 p-5 rounded-2xl cursor-pointer hover:border-slate-300 transition-all hover:shadow-md group gap-y-4 md:gap-y-0"
             >
-              <div className="col-span-4">
-                <h3 className="font-bold text-slate-800 text-sm uppercase leading-none mb-1">{inv.customer_name}</h3>
-                <p className="text-[10px] text-slate-400 font-mono tracking-tighter">{inv.id.slice(0,8).toUpperCase()}</p>
+              {/* Mobile Top Row: Customer + Amount */}
+              <div className="col-span-4 flex justify-between items-start w-full">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm uppercase leading-none mb-1">{inv.customer_name}</h3>
+                  <p className="text-[10px] text-slate-400 font-mono tracking-tighter">{inv.id.slice(0, 8).toUpperCase()}</p>
+                </div>
+                {/* Mobile Amount (visible here on mobile, hidden on desktop to avoid dupe if strictly separated, but here we can just use normal flow) */}
+                <div className="md:hidden">
+                  <p className="text-base font-black text-slate-900">₹{inv.total_amount}</p>
+                </div>
               </div>
-              <div className="col-span-3 text-center text-xs font-bold text-slate-600">{inv.profiles?.franchise_id || '---'}</div>
-              <div className="col-span-3 flex justify-center">
-                <span className="flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border" 
-                      style={{ backgroundColor: brandGreenLight, color: brandGreen, borderColor: 'rgba(0,100,55,0.2)' }}>
-                  <ShieldCheck size={10} /> Paid
-                </span>
+
+              {/* Middle Section */}
+              <div className="col-span-3 text-left md:text-center text-xs font-bold text-slate-600 flex items-center justify-between md:justify-center w-full">
+                <span className="md:hidden text-[10px] text-slate-400 font-black uppercase tracking-widest">Franchise ID</span>
+                <span>{inv.profiles?.franchise_id || '---'}</span>
               </div>
-              <div className="col-span-2 flex items-center justify-end gap-3">
+
+              <div className="col-span-3 flex justify-start md:justify-center w-full">
+                <div className="flex items-center justify-between w-full md:w-auto">
+                  <span className="md:hidden text-[10px] text-slate-400 font-black uppercase tracking-widest">Status</span>
+                  <span className="flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border"
+                    style={{ backgroundColor: brandGreenLight, color: brandGreen, borderColor: 'rgba(0,100,55,0.2)' }}>
+                    <ShieldCheck size={10} /> Paid
+                  </span>
+                </div>
+              </div>
+
+              {/* Desktop Amount & Arrow */}
+              <div className="col-span-2 hidden md:flex items-center justify-end gap-3">
                 <p className="text-base font-black text-slate-900">₹{inv.total_amount}</p>
                 <ChevronRight size={16} className="text-slate-200 group-hover:text-slate-900" />
               </div>
@@ -188,12 +246,12 @@ function FranchiseInvoices() {
       {/* POPUP MODAL */}
       {showModal && selectedInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-all duration-300">
-          <div className="bg-white rounded-[32px] w-full max-w-lg overflow-hidden shadow-2xl transform transition-all scale-100">
+          <div className="bg-white rounded-[32px] w-full max-w-4xl overflow-hidden shadow-2xl transform transition-all scale-100">
             <div className="p-8">
               <div className="flex justify-between items-center mb-8 border-b border-slate-50 pb-4">
                 <div className="flex flex-col">
-                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Transaction Ref</span>
-                   <span className="text-xs font-mono font-bold text-slate-800 tracking-widest uppercase">{selectedInvoice.id}</span>
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Transaction Ref</span>
+                  <span className="text-xs font-mono font-bold text-slate-800 tracking-widest uppercase">{selectedInvoice.id}</span>
                 </div>
                 <button onClick={() => setShowModal(false)} className="p-2 hover:bg-slate-50 rounded-full transition-colors group">
                   <X size={20} className="text-slate-300 group-hover:text-slate-600" />
@@ -208,7 +266,7 @@ function FranchiseInvoices() {
 
                 <div className="col-span-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1">
-                    <MapPin size={10} style={{color: brandGreen}}/> Franchise Address
+                    <MapPin size={10} style={{ color: brandGreen }} /> Franchise Address
                   </p>
                   <p className="text-[11px] font-bold text-slate-600 leading-relaxed uppercase">
                     {selectedInvoice.profiles?.address || "Address not specified"}
@@ -220,10 +278,10 @@ function FranchiseInvoices() {
                   <p className="font-bold text-slate-800 tracking-widest italic">#{selectedInvoice.profiles?.franchise_id}</p>
                 </div>
                 <div className="text-right">
-                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
-                   <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest" style={{ backgroundColor: brandGreenLight, color: brandGreen }}>
-                    <CheckCircle2 size={12}/> Success
-                   </span>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest" style={{ backgroundColor: brandGreenLight, color: brandGreen }}>
+                    <CheckCircle2 size={12} /> Success
+                  </span>
                 </div>
 
                 <div className="col-span-2">
@@ -237,34 +295,55 @@ function FranchiseInvoices() {
 
               <div className="space-y-4 py-6 border-t border-slate-100 mb-6">
                 <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] mb-1 text-center">Order Breakdown</p>
-                <div className="max-h-40 overflow-y-auto px-1 space-y-3">
-                  {itemsLoading ? (
-                    <p className="text-center text-[10px] font-bold uppercase text-slate-400 py-4">Loading items...</p>
-                  ) : (
-                    invoiceItems.map((item, i) => (
-                      <div key={i} className="flex justify-between items-center group">
-                        <div>
-                          <p className="text-xs font-bold text-slate-800 uppercase leading-none mb-1">{item.item_name}</p>
-                          <p className="text-[10px] text-slate-400">{item.quantity} {item.unit} × ₹{item.price}</p>
-                        </div>
-                        <p className="font-black text-slate-900 text-sm">₹{item.quantity * item.price}</p>
-                      </div>
-                    ))
-                  )}
+                <div className="max-h-60 overflow-y-auto w-full">
+                  <table className="w-full text-xs text-left">
+                    <thead>
+                      <tr className="text-slate-400 uppercase border-b bg-slate-50">
+                        <th className="py-2 px-2">Item</th>
+                        <th className="py-2 px-2 text-center">Qty</th>
+                        <th className="py-2 px-2 text-right">Base</th>
+                        <th className="py-2 px-2 text-right">Tax</th>
+                        <th className="py-2 px-2 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {itemsLoading ? (
+                        <tr><td colSpan="5" className="text-center py-4 text-slate-400 font-bold uppercase">Loading items...</td></tr>
+                      ) : (
+                        invoiceItems.map((item, i) => {
+                          const { name, meta } = parseItemName(item.item_name);
+                          const gst = Number(meta.gst) || 0;
+                          const sgst = Number(meta.sgst) || 0;
+                          const baseTotal = item.price * item.quantity;
+                          const taxAmt = baseTotal * ((gst + sgst) / 100);
+                          const finalTotal = baseTotal + taxAmt;
+                          return (
+                            <tr key={i}>
+                              <td className="py-2 px-2 font-bold text-slate-700">{name}</td>
+                              <td className="py-2 px-2 text-center text-slate-500">{item.quantity} {item.unit}</td>
+                              <td className="py-2 px-2 text-right">₹{item.price}</td>
+                              <td className="py-2 px-2 text-right text-slate-400">{gst + sgst}%</td>
+                              <td className="py-2 px-2 text-right font-black text-slate-900">₹{finalTotal.toFixed(2)}</td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
-              {/* Total Section in Brand Green instead of Black */}
+              {/* Total Section in Brand Green */}
               <div className="rounded-2xl p-6 flex justify-between items-center shadow-sm border border-slate-100" style={{ backgroundColor: brandGreenLight }}>
                 <span className="text-[10px] font-black uppercase tracking-[0.2em]" style={{ color: brandGreen }}>Settlement Amount</span>
                 <span className="text-2xl font-black italic" style={{ color: brandGreen }}>₹{selectedInvoice.total_amount}</span>
               </div>
             </div>
 
-            {/* Redesigned Button: Centered, smaller, and premium */}
+            {/* Redesigned Button */}
             <div className="px-8 pb-10 flex justify-center">
-              <button 
-                onClick={handlePrint} 
+              <button
+                onClick={handlePrint}
                 className="flex items-center gap-2 px-8 py-3 rounded-full text-white font-bold text-xs uppercase tracking-widest shadow-lg shadow-green-900/20 hover:scale-105 active:scale-95 transition-all duration-200"
                 style={{ backgroundColor: brandGreen }}
               >

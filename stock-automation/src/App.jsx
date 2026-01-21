@@ -21,7 +21,7 @@ import Settings from "./pages/stock/settings";
 /* FRANCHISE */
 import StockOrder from "./pages/franchise/stockorder";
 import FranchiseInvoices from "./pages/franchise/franchiseinvoices";
-import FranchiseAnalytics from "./pages/franchise/franchiseanalytics"; 
+import FranchiseAnalytics from "./pages/franchise/franchiseanalytics";
 import RequestPortal from "./pages/franchise/RequestPortal"; // New Import
 
 /* CENTRAL */
@@ -31,6 +31,8 @@ import CentralProfiles from "./pages/central/centralprofiles";
 import Accounts from "./pages/central/accounts";
 import PosManagement from "./pages/central/posmanagement";
 import Reports from "./pages/central/reports";
+import CentralInternalOrder from "./pages/central/CentralInternalOrder";
+import CentralStockMaster from "./pages/central/CentralStockMaster";
 import FranchiseReplies from "./pages/central/FranchiseReplies";
 
 /* AUTH CONTEXT */
@@ -110,7 +112,7 @@ function App() {
               </ProtectedRoute>
             }
           />
-          
+
           <Route
             path="/central/reports"
             element={
@@ -128,14 +130,30 @@ function App() {
               </ProtectedRoute>
             }
           />
-<Route
-  path="/central/replies"
-  element={
-    <ProtectedRoute allowedRoles={["central"]}>
-      <FranchiseReplies />
-    </ProtectedRoute>
-  }
-/>
+          <Route
+            path="/central/stock"
+            element={
+              <ProtectedRoute allowedRoles={["central"]}>
+                <CentralStockMaster />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/central/internal-order"
+            element={
+              <ProtectedRoute allowedRoles={["central"]}>
+                <CentralInternalOrder />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/central/replies"
+            element={
+              <ProtectedRoute allowedRoles={["central"]}>
+                <FranchiseReplies />
+              </ProtectedRoute>
+            }
+          />
           {/* ================= FRANCHISE ADMIN ================= */}
           <Route
             path="/dashboard/franchiseowner"
