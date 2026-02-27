@@ -93,7 +93,7 @@ function Login() {
     setIsLoading(true);
 
     try {
-      const cleanPassword = password.trim();
+      const cleanPassword = password; // DO NOT TRIM! Users may have trailing spaces.
       const cleanEmail = email.trim().toLowerCase();
 
       if (!cleanEmail || !cleanPassword) {
@@ -120,9 +120,9 @@ function Login() {
         });
 
         if (result.error) {
-          // This is an auth error (wrong password, user not found, etc.)
-          console.log("❌ [LOGIN DEBUG] Invalid credentials.", result.error.message);
-          throw new Error("Invalid email or password.");
+          // This is an auth error (wrong password, user not found, email not confirmed, etc.)
+          console.log("❌ [LOGIN DEBUG] Auth error:", result.error.message);
+          throw new Error(result.error.message);
         }
         authData = result.data;
       } catch (retryErr) {
