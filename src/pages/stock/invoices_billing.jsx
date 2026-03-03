@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
-import { FiArrowLeft, FiPrinter, FiSearch, FiCalendar, FiX, FiFileText } from "react-icons/fi";
+import { FiArrowLeft, FiPrinter, FiSearch, FiCalendar, FiX, FiFileText, FiRotateCcw } from "react-icons/fi";
 import { formatCurrency, amountToWords } from "../../utils/formatters";
 
 // --- THEME CONSTANTS ---
@@ -20,9 +20,6 @@ const getSessionItem = (key) => {
 const setSessionItem = (key, value) => {
     try { sessionStorage.setItem(key, JSON.stringify(value)); } catch (e) { }
 };
-
-
-
 
 // --- INVOICE PRINT COMPONENT ---
 const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsChunk }) => {
@@ -271,6 +268,15 @@ function InvoicesBilling() {
         } catch (err) { console.error(err); }
     };
 
+    // --- NEW: Reset Filters Function ---
+    const resetFilters = () => {
+        setSearchQuery("");
+        setSingleDate("");
+        setStartDate("");
+        setEndDate("");
+        setFilterType("date");
+    };
+
     const filteredInvoices = useMemo(() => {
         return invoices.filter((inv) => {
             const searchLower = searchQuery.toLowerCase();
@@ -335,7 +341,8 @@ function InvoicesBilling() {
 
             <div className="main-ui print:hidden">
                 <nav className="border-b border-slate-200 bg-white sticky top-0 z-50 h-16 shadow-sm">
-                    <div className="max-w-7xl mx-auto px-4 md:px-8 h-full flex items-center justify-between relative">
+                    {/* REMOVED max-w-7xl, ADDED w-full */}
+                    <div className="w-full px-4 md:px-8 h-full flex items-center justify-between relative">
                         <button onClick={() => navigate(-1)} className="z-20 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-black hover:opacity-60 transition-all">
                             <FiArrowLeft size={18} /> <span>Back</span>
                         </button>
@@ -350,7 +357,8 @@ function InvoicesBilling() {
                     </div>
                 </nav>
 
-                <div className="max-w-7xl mx-auto px-4 md:px-6 mt-6">
+                {/* REMOVED max-w-7xl, ADDED w-full */}
+                <div className="w-full px-4 md:px-6 lg:px-8 mt-6">
                     <div className="bg-white p-5 md:p-8 rounded-[1.5rem] md:rounded-[2rem] shadow-xl mb-6 flex flex-col gap-6">
                         <div className="flex flex-col md:flex-row gap-4 items-stretch">
                             <div className="relative flex-1 group">
@@ -364,22 +372,49 @@ function InvoicesBilling() {
                                 </div>
                             </div>
                         </div>
-                        <div className="flex flex-col md:flex-row gap-4 items-center pt-4 border-t border-gray-100">
-                            <div className="bg-gray-100 p-1 rounded-xl flex w-full md:w-auto">
-                                <button onClick={() => { setFilterType("date"); setStartDate(""); setEndDate(""); }} className={`flex-1 md:flex-none px-4 py-2.5 rounded-lg text-[10px] font-black uppercase transition-all ${filterType === "date" ? 'bg-white shadow-sm text-black' : 'text-gray-400'}`}>Exact Date</button>
-                                <button onClick={() => { setFilterType("range"); setSingleDate(""); }} className={`flex-1 md:flex-none px-4 py-2.5 rounded-lg text-[10px] font-black uppercase transition-all ${filterType === "range" ? 'bg-white shadow-sm text-black' : 'text-gray-400'}`}>Date Range</button>
+
+                        {/* UPDATED DATE ROW & RESET BUTTON (Aligns left on Desktop) */}
+                        <div className="flex flex-col md:flex-row md:items-center gap-3 pt-4 border-t border-gray-100">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-slate-50 px-4 py-3 rounded-2xl border border-black/5 w-full md:w-auto">
+                                <div className="flex w-full sm:w-auto bg-slate-200 p-1 rounded-lg shrink-0 justify-center">
+                                    <button onClick={() => { setFilterType("date"); setStartDate(""); setEndDate(""); }} className={`flex-1 sm:flex-none px-6 py-1.5 rounded-md text-[9px] font-black uppercase transition-all ${filterType === 'date' ? 'bg-white text-black shadow-sm' : 'text-black/50'}`}>Date</button>
+                                    <button onClick={() => { setFilterType("range"); setSingleDate(""); }} className={`flex-1 sm:flex-none px-6 py-1.5 rounded-md text-[9px] font-black uppercase transition-all ${filterType === 'range' ? 'bg-white text-black shadow-sm' : 'text-black/50'}`}>Range</button>
+                                </div>
+                                <div className="w-full sm:w-auto flex justify-center sm:justify-start">
+                                    {filterType === "date" ? (
+                                        <input
+                                            type="date"
+                                            value={singleDate}
+                                            onChange={(e) => setSingleDate(e.target.value)}
+                                            className="bg-white border border-black/10 px-3 py-1.5 rounded-lg text-[11px] font-bold outline-none w-full sm:w-auto text-center sm:text-left text-black shadow-sm transition-all focus:border-black/30"
+                                        />
+                                    ) : (
+                                        <div className="flex items-center justify-center sm:justify-start gap-2 w-full sm:w-auto">
+                                            <input
+                                                type="date"
+                                                value={startDate}
+                                                onChange={(e) => setStartDate(e.target.value)}
+                                                className="bg-white border border-black/10 px-3 py-1.5 rounded-lg text-[11px] font-bold outline-none flex-1 sm:flex-none text-center sm:text-left text-black shadow-sm transition-all focus:border-black/30"
+                                            />
+                                            <span className="text-black/40 font-bold">-</span>
+                                            <input
+                                                type="date"
+                                                value={endDate}
+                                                onChange={(e) => setEndDate(e.target.value)}
+                                                className="bg-white border border-black/10 px-3 py-1.5 rounded-lg text-[11px] font-bold outline-none flex-1 sm:flex-none text-center sm:text-left text-black shadow-sm transition-all focus:border-black/30"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                            <div className="w-full md:w-auto flex-grow flex items-center">
-                                {filterType === "date" ? (
-                                    <input type="date" value={singleDate} onChange={(e) => setSingleDate(e.target.value)} className="w-full md:w-48 px-4 py-2.5 bg-white border-2 border-gray-100 rounded-xl text-xs font-bold" />
-                                ) : (
-                                    <div className="flex items-center gap-2 w-full bg-white border-2 border-gray-100 rounded-xl p-1">
-                                        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="flex-1 bg-transparent px-2 py-1.5 text-xs font-bold outline-none" />
-                                        <span className="text-gray-300 font-bold">-</span>
-                                        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="flex-1 bg-transparent px-2 py-1.5 text-xs font-bold outline-none" />
-                                    </div>
-                                )}
-                            </div>
+                            <button
+                                onClick={resetFilters}
+                                style={{ backgroundColor: THEME_COLOR }}
+                                className="p-3.5 px-5 w-full md:w-auto flex justify-center items-center gap-2 text-white rounded-2xl shadow-sm hover:opacity-90 active:scale-95 transition-all shrink-0"
+                            >
+                                <FiRotateCcw size={18} />
+                                <span className="text-[10px] font-black uppercase tracking-widest">Reset Filters</span>
+                            </button>
                         </div>
                     </div>
 

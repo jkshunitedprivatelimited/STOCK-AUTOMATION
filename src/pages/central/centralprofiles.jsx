@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from "react"; // Added useCallback
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase/supabaseClient";
 import {
@@ -14,6 +14,9 @@ import {
   AlertTriangle,
   MapPin,
   User,
+  Eye,
+  EyeOff,
+  Lock,
 } from "lucide-react";
 import { BRAND_GREEN } from "../../utils/theme";
 
@@ -27,7 +30,7 @@ function CentralProfiles() {
   const navigate = useNavigate();
 
   const [profiles, setProfiles] = useState([]);
-  const [allCompanies, setAllCompanies] = useState([]); // NEW: State for master company list
+  const [allCompanies, setAllCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [companyFilter, setCompanyFilter] = useState("all");
@@ -44,6 +47,14 @@ function CentralProfiles() {
   const [deleting, setDeleting] = useState(false);
   const [userFranchiseId, setUserFranchiseId] = useState("");
 
+  // Password change states
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
     window.addEventListener('resize', handleResize);
@@ -52,11 +63,10 @@ function CentralProfiles() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return navigate("/");
 
-      // UPDATED: Added companiesRes to fetch the master list of company names
       const [profileRes, listRes, companiesRes] = await Promise.all([
         supabase.from("profiles").select("role, franchise_id").eq("id", session.user.id).single(),
         supabase.from("profiles").select("*"),
-        supabase.from("companies").select("company_name") // Fetching from companies table
+        supabase.from("companies").select("company_name")
       ]);
 
       if (profileRes.data?.role !== "central") return navigate("/");
@@ -64,7 +74,6 @@ function CentralProfiles() {
       setUserFranchiseId(profileRes.data?.franchise_id || "CENTRAL-HQ");
       setProfiles(listRes.data || []);
 
-      // Extract unique company names from the master table
       if (companiesRes.data) {
         const names = companiesRes.data.map(c => c.company_name).filter(Boolean);
         setAllCompanies([...new Set(names)].sort());
@@ -89,7 +98,6 @@ function CentralProfiles() {
     year: 'numeric'
   }).format(new Date());
 
-  // UPDATED: Now uses allCompanies state (the master list) instead of deriving from profiles
   const dropdownCompanies = useMemo(() => {
     return ["all", ...allCompanies];
   }, [allCompanies]);
@@ -133,6 +141,11 @@ function CentralProfiles() {
   const openEditModal = (profile) => {
     setSelectedProfile(profile);
     setEditForm({ ...profile });
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordMsg("");
+    setShowNewPw(false);
+    setShowConfirmPw(false);
     setShowEditModal(true);
   };
 
@@ -152,6 +165,49 @@ function CentralProfiles() {
     setSaving(false);
   };
 
+  const handlePasswordChange = async () => {
+    setPasswordMsg("");
+    if (!newPassword || !confirmPassword) {
+      setPasswordMsg("Please fill both password fields");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordMsg("Password must be at least 6 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordMsg("Passwords do not match");
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('update-password', {
+        body: { userId: selectedProfile.id, newPassword }
+      });
+
+      if (error) {
+        let msg = error.message || "Failed to update password";
+        try {
+          if (error.context) {
+            const body = await error.context.json();
+            if (body?.error) msg = body.error;
+          }
+        } catch (_) { }
+        throw new Error(msg);
+      }
+
+      if (data?.error) throw new Error(data.error);
+
+      setPasswordMsg("Password updated successfully!");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      setPasswordMsg("Error: " + (err.message || "Failed to update password"));
+    }
+    setChangingPassword(false);
+  };
+
   const getRoleStyle = (role) => {
     switch (role) {
       case 'central': return { background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' };
@@ -165,7 +221,6 @@ function CentralProfiles() {
 
   return (
     <div style={styles.page}>
-
       {/* HEADER */}
       <header style={styles.header}>
         <div style={styles.headerInner}>
@@ -186,7 +241,6 @@ function CentralProfiles() {
       </header>
 
       <div style={{ ...styles.container, padding: isMobile ? "20px 15px" : "20px" }}>
-
         {/* SEARCH & DATE BAR */}
         <div style={{
           ...styles.actionBar,
@@ -222,7 +276,6 @@ function CentralProfiles() {
           alignItems: isMobile ? 'stretch' : 'center',
           gap: isMobile ? '15px' : '0'
         }}>
-
           {/* Left Side: Dropdown + Total Users Text */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexDirection: isMobile ? 'column' : 'row', width: isMobile ? '100%' : 'auto' }}>
             <div style={{ ...styles.companyFilterWrapper, width: isMobile ? '100%' : 'fit-content' }}>
@@ -233,7 +286,6 @@ function CentralProfiles() {
                 onChange={(e) => setCompanyFilter(e.target.value)}
               >
                 <option value="all">All Companies</option>
-                {/* UPDATED: Mapping from dropdownCompanies (master list) */}
                 {dropdownCompanies.filter(c => c !== "all").map(c => (
                   <option key={c} value={c}>{c}</option>
                 ))}
@@ -321,7 +373,6 @@ function CentralProfiles() {
                   <th style={styles.th}>COMPANY</th>
                   <th style={styles.th}>FRANCHISE ID</th>
                   <th style={styles.th}>ROLE</th>
-                  <th style={styles.th}>ADDRESS</th>
                   <th style={styles.th}>CONTACT</th>
                   <th style={{ ...styles.th, textAlign: 'center' }}>ACTION</th>
                 </tr>
@@ -337,9 +388,6 @@ function CentralProfiles() {
                       <span style={{ ...styles.roleBadge, ...getRoleStyle(p.role) }}>
                         {p.role?.toUpperCase()}
                       </span>
-                    </td>
-                    <td style={{ ...styles.td, maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {p.address || "No Address Provided"}
                     </td>
                     <td style={styles.td}>{p.phone || "—"}</td>
                     <td style={{ ...styles.td, textAlign: 'center' }}>
@@ -365,7 +413,7 @@ function CentralProfiles() {
         <div style={styles.modalOverlay} onClick={() => setShowEditModal(false)}>
           <div style={{
             ...styles.modal,
-            width: isMobile ? '95%' : '550px',
+            width: isMobile ? '95%' : '650px', // slightly wider to fit new fields cleanly
             maxHeight: '90vh',
             overflowY: 'auto'
           }} onClick={e => e.stopPropagation()}>
@@ -381,6 +429,18 @@ function CentralProfiles() {
                 </div>
 
                 <div style={styles.inputGroup}>
+                  <label style={styles.label}>Work Email</label>
+                  <input style={styles.modalInput} name="email" value={editForm.email || ""} onChange={handleInputChange} />
+                </div>
+              </div>
+
+              <div style={{ ...styles.formRow, flexDirection: isMobile ? 'column' : 'row' }}>
+                <div style={styles.inputGroup}>
+                  <label style={styles.label}>Phone Number</label>
+                  <input style={styles.modalInput} name="phone" value={editForm.phone || ""} onChange={handleInputChange} />
+                </div>
+
+                <div style={styles.inputGroup}>
                   <label style={styles.label}>System Role</label>
                   <div style={styles.selectWrapper}>
                     <select style={styles.modalSelect} name="role" value={editForm.role || ""} onChange={handleInputChange}>
@@ -391,12 +451,11 @@ function CentralProfiles() {
                     <ChevronDown size={18} color="#9ca3af" style={styles.selectIcon} />
                   </div>
                 </div>
-
               </div>
+
               <div style={{ ...styles.formRow, flexDirection: isMobile ? 'column' : 'row' }}>
                 <div style={styles.inputGroup}>
                   <label style={styles.label}>Company Name</label>
-                  {/* UPDATED: Added a select for Company Name to ensure consistency with master list */}
                   <div style={styles.selectWrapper}>
                     <select
                       style={styles.modalSelect}
@@ -417,16 +476,42 @@ function CentralProfiles() {
                   <input style={styles.modalInput} name="franchise_id" value={editForm.franchise_id || ""} onChange={handleInputChange} />
                 </div>
               </div>
+
+              {/* NEW FIELDS ADDED HERE */}
               <div style={{ ...styles.formRow, flexDirection: isMobile ? 'column' : 'row' }}>
                 <div style={styles.inputGroup}>
-                  <label style={styles.label}>Phone Number</label>
-                  <input style={styles.modalInput} name="phone" value={editForm.phone || ""} onChange={handleInputChange} />
+                  <label style={styles.label}>Branch Location</label>
+                  <input style={styles.modalInput} name="branch_location" value={editForm.branch_location || ""} onChange={handleInputChange} />
                 </div>
                 <div style={styles.inputGroup}>
-                  <label style={styles.label}>Work Email</label>
-                  <input style={styles.modalInput} name="email" value={editForm.email || ""} onChange={handleInputChange} />
+                  <label style={styles.label}>Nearest Bus Stop</label>
+                  <input style={styles.modalInput} name="nearest_bus_stop" value={editForm.nearest_bus_stop || ""} onChange={handleInputChange} />
                 </div>
               </div>
+
+              <div style={{ ...styles.formRow, flexDirection: isMobile ? 'column' : 'row' }}>
+                <div style={styles.inputGroup}>
+                  <label style={styles.label}>City</label>
+                  <input style={styles.modalInput} name="city" value={editForm.city || ""} onChange={handleInputChange} />
+                </div>
+                <div style={styles.inputGroup}>
+                  <label style={styles.label}>State</label>
+                  <input style={styles.modalInput} name="state" value={editForm.state || ""} onChange={handleInputChange} />
+                </div>
+              </div>
+
+              <div style={{ ...styles.formRow, flexDirection: isMobile ? 'column' : 'row' }}>
+                <div style={styles.inputGroup}>
+                  <label style={styles.label}>Country</label>
+                  <input style={styles.modalInput} name="country" value={editForm.country || "India"} onChange={handleInputChange} />
+                </div>
+                <div style={styles.inputGroup}>
+                  <label style={styles.label}>Pincode</label>
+                  <input style={styles.modalInput} name="pincode" value={editForm.pincode || ""} onChange={handleInputChange} />
+                </div>
+              </div>
+              {/* END OF NEW FIELDS */}
+
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Permanent Address</label>
                 <textarea
@@ -436,9 +521,69 @@ function CentralProfiles() {
                   onChange={handleInputChange}
                 />
               </div>
+
               <button onClick={saveChanges} disabled={saving} style={styles.saveBtn}>
-                {saving ? "SYNCING..." : "SAVE CHANGES"}
+                {saving ? "SAVING..." : "SAVE CHANGES"}
               </button>
+
+              {/* CHANGE PASSWORD SECTION */}
+              <div style={{ marginTop: '15px', paddingTop: '20px', borderTop: `1px solid ${BORDER}` }}>
+                <span style={{ fontSize: '12px', fontWeight: '900', color: '#111827', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '12px' }}>
+                  Change Password
+                </span>
+
+                <div style={{ marginBottom: '12px', padding: '12px 14px', background: '#f1f5f9', borderRadius: '12px', border: `1px solid ${BORDER}` }}>
+                  <span style={{ fontSize: '10px', fontWeight: '800', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email</span>
+                  <p style={{ margin: '4px 0 0', fontSize: '13px', fontWeight: '700', color: '#374151' }}>{selectedProfile?.email || 'N/A'}</p>
+                </div>
+
+                <div style={{ ...styles.formRow, flexDirection: isMobile ? 'column' : 'row' }}>
+                  <div style={styles.inputGroup}>
+                    <label style={styles.label}>New Password</label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        style={{ ...styles.modalInput, width: '100%', boxSizing: 'border-box', paddingRight: '44px' }}
+                        type={showNewPw ? 'text' : 'password'}
+                        placeholder="Min 6 characters"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                      />
+                      <button onClick={() => setShowNewPw(!showNewPw)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}>
+                        {showNewPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div style={styles.inputGroup}>
+                    <label style={styles.label}>Confirm Password</label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        style={{ ...styles.modalInput, width: '100%', boxSizing: 'border-box', paddingRight: '44px' }}
+                        type={showConfirmPw ? 'text' : 'password'}
+                        placeholder="Re-enter password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                      />
+                      <button onClick={() => setShowConfirmPw(!showConfirmPw)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}>
+                        {showConfirmPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {passwordMsg && (
+                  <p style={{ fontSize: '11px', fontWeight: '800', textAlign: 'center', marginTop: '8px', color: passwordMsg.includes('success') ? ACTION_GREEN : '#dc2626' }}>
+                    {passwordMsg}
+                  </p>
+                )}
+
+                <button
+                  onClick={handlePasswordChange}
+                  disabled={changingPassword || !newPassword || !confirmPassword}
+                  style={{ ...styles.saveBtn, background: '#1e293b', width: '100%', opacity: (!newPassword || !confirmPassword) ? 0.5 : 1 }}
+                >
+                  {changingPassword ? "UPDATING..." : "UPDATE PASSWORD"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -477,8 +622,6 @@ function CentralProfiles() {
     </div>
   );
 }
-
-// ... Styles remains the same ...
 
 const styles = {
   page: { background: "#fff", minHeight: "100vh", fontFamily: '"Inter", sans-serif', color: "#111827" },

@@ -32,25 +32,44 @@ function FranchiseSettingsCard() {
     email: "",
     phone: "",
     franchise_id: "",
-    address: ""
+    address: "",
+    branch_location: "",
+    company: "",
+    pincode: "",
+    state: "",
+    city: "",
+    country: "",
+    nearest_bus_stop: ""
   });
   const [profileLoading, setProfileLoading] = useState(false);
   const [updateMsg, setUpdateMsg] = useState("");
 
   const brandGreen = "rgb(0, 100, 55)";
 
-  // FIX: Define fetchProfile BEFORE useEffect
   const fetchProfile = async () => {
     if (!authUser?.id) return;
     try {
       const { data } = await supabase
         .from("profiles")
-        .select("name, email, phone, franchise_id, address")
+        .select("name, email, phone, franchise_id, address, branch_location, company, pincode, state, city, country, nearest_bus_stop")
         .eq("id", authUser.id)
         .single();
 
       if (data) {
-        setProfileData(data);
+        setProfileData({
+          name: data.name || "",
+          email: data.email || "",
+          phone: data.phone || "",
+          franchise_id: data.franchise_id || "",
+          address: data.address || "",
+          branch_location: data.branch_location || "",
+          company: data.company || "",
+          pincode: data.pincode || "",
+          state: data.state || "",
+          city: data.city || "",
+          country: data.country || "",
+          nearest_bus_stop: data.nearest_bus_stop || ""
+        });
         setFranchiseId(data.franchise_id);
       }
     } catch (e) {
@@ -83,9 +102,12 @@ function FranchiseSettingsCard() {
     const { error } = await supabase
       .from("profiles")
       .update({
-        name: profileData.name,
-        email: profileData.email,
-        phone: profileData.phone
+        phone: profileData.phone,
+        address: profileData.address,
+        branch_location: profileData.branch_location,
+        pincode: profileData.pincode,
+        city: profileData.city,
+        nearest_bus_stop: profileData.nearest_bus_stop
       })
       .eq("id", authUser.id);
 
@@ -93,6 +115,10 @@ function FranchiseSettingsCard() {
       setUpdateMsg("Error: " + error.message);
     } else {
       setUpdateMsg("Profile updated successfully");
+      setTimeout(() => {
+        setShowProfileModal(false);
+        setUpdateMsg("");
+      }, 1500);
     }
     setLoading(false);
   };
@@ -244,41 +270,117 @@ function FranchiseSettingsCard() {
                 <div className="space-y-6">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Hash size={10} /> ID</label>
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-1"><Hash size={10} /> Franchise ID</label>
                       <p className="font-mono text-sm font-black text-slate-900">{profileData.franchise_id || "N/A"}</p>
                     </div>
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-1"><MapPin size={10} /> Loc</label>
-                      <p className="text-xs font-black text-slate-900 uppercase break-words leading-snug">{profileData.address || "No Address"}</p>
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-1"><MapPin size={10} /> Company Name</label>
+                      <p className="text-xs font-black text-slate-900 uppercase break-words leading-snug">{profileData.company || "N/A"}</p>
                     </div>
                   </div>
                   <div className="space-y-4">
                     <div className="relative space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Legal Name</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Store Address</label>
                       <input
                         type="text"
-                        value={profileData.name}
-                        onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
+                        value={profileData.address}
+                        onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
+                        placeholder="Enter store address"
                         className="w-full py-3 px-4 rounded-xl bg-white border-2 border-slate-100 text-sm font-bold text-slate-900 focus:border-black outline-none transition-all"
                       />
                     </div>
-                    <div className="relative space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
-                      <input
-                        type="email"
-                        value={profileData.email}
-                        onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                        className="w-full py-3 px-4 rounded-xl bg-white border-2 border-slate-100 text-sm font-bold text-slate-900 focus:border-black outline-none transition-all"
-                      />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="relative space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Owner Name (Uneditable)</label>
+                        <input
+                          type="text"
+                          value={profileData.name}
+                          disabled
+                          className="w-full py-3 px-4 rounded-xl bg-slate-100 border-2 border-slate-100 text-sm font-bold text-slate-400 outline-none cursor-not-allowed"
+                        />
+                      </div>
+
+                      <div className="relative space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email Address (Uneditable)</label>
+                        <input
+                          type="email"
+                          value={profileData.email}
+                          disabled
+                          className="w-full py-3 px-4 rounded-xl bg-slate-100 border-2 border-slate-100 text-sm font-bold text-slate-400 outline-none cursor-not-allowed"
+                        />
+                      </div>
+
+                      <div className="relative space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Phone Number</label>
+                        <input
+                          type="text"
+                          value={profileData.phone}
+                          onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                          placeholder="Enter phone number"
+                          className="w-full py-3 px-4 rounded-xl bg-white border-2 border-slate-100 text-sm font-bold text-slate-900 focus:border-black outline-none transition-all"
+                        />
+                      </div>
                     </div>
-                    <div className="relative space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Phone Number</label>
-                      <input
-                        type="text"
-                        value={profileData.phone}
-                        onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                        className="w-full py-3 px-4 rounded-xl bg-white border-2 border-slate-100 text-sm font-bold text-slate-900 focus:border-black outline-none transition-all"
-                      />
+
+                    {/* REDUNDANT ADDRESS FIELD REMOVED FROM HERE */}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="relative space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Branch / Outlet Location</label>
+                        <input
+                          type="text"
+                          value={profileData.branch_location}
+                          onChange={(e) => setProfileData({ ...profileData, branch_location: e.target.value })}
+                          placeholder="e.g. Main Branch, Outlet 2"
+                          className="w-full py-3 px-4 rounded-xl bg-white border-2 border-slate-100 text-sm font-bold text-slate-900 focus:border-black outline-none transition-all"
+                        />
+                      </div>
+                      <div className="relative space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nearest Bus Stop / Landmark</label>
+                        <input
+                          type="text"
+                          value={profileData.nearest_bus_stop}
+                          onChange={(e) => setProfileData({ ...profileData, nearest_bus_stop: e.target.value })}
+                          placeholder="e.g. MG Road Bus Stop"
+                          className="w-full py-3 px-4 rounded-xl bg-white border-2 border-slate-100 text-sm font-bold text-slate-900 focus:border-black outline-none transition-all"
+                        />
+                      </div>
+                      <div className="relative space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">City</label>
+                        <input
+                          type="text"
+                          value={profileData.city}
+                          onChange={(e) => setProfileData({ ...profileData, city: e.target.value })}
+                          className="w-full py-3 px-4 rounded-xl bg-white border-2 border-slate-100 text-sm font-bold text-slate-900 focus:border-black outline-none transition-all"
+                        />
+                      </div>
+                      <div className="relative space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">State (Uneditable)</label>
+                        <input
+                          type="text"
+                          value={profileData.state}
+                          disabled
+                          className="w-full py-3 px-4 rounded-xl bg-slate-100 border-2 border-slate-100 text-sm font-bold text-slate-400 outline-none cursor-not-allowed"
+                        />
+                      </div>
+                      <div className="relative space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Pincode</label>
+                        <input
+                          type="text"
+                          value={profileData.pincode}
+                          onChange={(e) => setProfileData({ ...profileData, pincode: e.target.value })}
+                          className="w-full py-3 px-4 rounded-xl bg-white border-2 border-slate-100 text-sm font-bold text-slate-900 focus:border-black outline-none transition-all"
+                        />
+                      </div>
+                      <div className="relative space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Country (Uneditable)</label>
+                        <input
+                          type="text"
+                          value={profileData.country}
+                          disabled
+                          className="w-full py-3 px-4 rounded-xl bg-slate-100 border-2 border-slate-100 text-sm font-bold text-slate-400 outline-none cursor-not-allowed"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -368,7 +470,6 @@ function FranchiseSettingsCard() {
 }
 
 // --- STYLES ---
-// (No longer needed, using Tailwind inline on sticky header)
 const styles = {};
 
 export default FranchiseSettingsCard;

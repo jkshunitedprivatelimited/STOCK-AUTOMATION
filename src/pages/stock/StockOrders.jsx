@@ -15,8 +15,6 @@ const TABS = ["all", "incoming", "packed", "dispatched"];
 const BRAND_COLOR = "rgb(0, 100, 55)";
 const ITEMS_PER_INVOICE_PAGE = 15;
 
-
-
 const formatDateTime = (dateString, timeText = null) => {
   if (!dateString) return "N/A";
   const dateObj = new Date(dateString);
@@ -473,7 +471,7 @@ function StockOrders() {
           </div>
         </nav>
 
-        <div className="max-w-7xl mx-auto px-4 md:px-8 mt-6 space-y-6">
+        <div className="w-full px-4 md:px-6 lg:px-8 mt-6 space-y-6">
           {/* STATS */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
@@ -516,25 +514,48 @@ function StockOrders() {
               ))}
             </div>
 
-            <div className="flex flex-col lg:flex-row gap-3">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-slate-50 px-4 py-3 rounded-2xl border border-black/5 flex-1">
-                <div className="flex bg-slate-200 p-1 rounded-lg shrink-0">
-                  <button onClick={() => setDateMode('date')} className={`px-3 py-1 rounded-md text-[9px] font-black uppercase transition-all ${dateMode === 'date' ? 'bg-white text-black shadow-sm' : 'text-black/50'}`}>Date</button>
-                  <button onClick={() => setDateMode('range')} className={`px-3 py-1 rounded-md text-[9px] font-black uppercase transition-all ${dateMode === 'range' ? 'bg-white text-black shadow-sm' : 'text-black/50'}`}>Range</button>
+            {/* UPDATED DATE ROW & RESET BUTTON (Aligns left on Desktop) */}
+            <div className="flex flex-col md:flex-row md:items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-slate-50 px-4 py-3 rounded-2xl border border-black/5 w-full md:w-auto">
+                <div className="flex w-full sm:w-auto bg-slate-200 p-1 rounded-lg shrink-0 justify-center">
+                  <button onClick={() => setDateMode('date')} className={`flex-1 sm:flex-none px-6 py-1.5 rounded-md text-[9px] font-black uppercase transition-all ${dateMode === 'date' ? 'bg-white text-black shadow-sm' : 'text-black/50'}`}>Date</button>
+                  <button onClick={() => setDateMode('range')} className={`flex-1 sm:flex-none px-6 py-1.5 rounded-md text-[9px] font-black uppercase transition-all ${dateMode === 'range' ? 'bg-white text-black shadow-sm' : 'text-black/50'}`}>Range</button>
                 </div>
-                <div className="flex-1">
+                <div className="w-full sm:w-auto flex justify-center sm:justify-start">
                   {dateMode === "date" ? (
-                    <input type="date" value={singleDate} onChange={(e) => setSingleDate(e.target.value)} className="bg-transparent text-[11px] font-bold outline-none w-full text-black" />
+                    <input
+                      type="date"
+                      value={singleDate}
+                      onChange={(e) => setSingleDate(e.target.value)}
+                      className="bg-white border border-black/10 px-3 py-1.5 rounded-lg text-[11px] font-bold outline-none w-full sm:w-auto text-center sm:text-left text-black shadow-sm transition-all focus:border-black/30"
+                    />
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent text-[11px] font-bold outline-none flex-1 text-black" />
-                      <span className="text-black/40">-</span>
-                      <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent text-[11px] font-bold outline-none flex-1 text-black" />
+                    <div className="flex items-center justify-center sm:justify-start gap-2 w-full sm:w-auto">
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="bg-white border border-black/10 px-3 py-1.5 rounded-lg text-[11px] font-bold outline-none flex-1 sm:flex-none text-center sm:text-left text-black shadow-sm transition-all focus:border-black/30"
+                      />
+                      <span className="text-black/40 font-bold">-</span>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="bg-white border border-black/10 px-3 py-1.5 rounded-lg text-[11px] font-bold outline-none flex-1 sm:flex-none text-center sm:text-left text-black shadow-sm transition-all focus:border-black/30"
+                      />
                     </div>
                   )}
                 </div>
               </div>
-              <button onClick={resetFilters} className="p-4 bg-slate-100 text-black/50 rounded-2xl hover:bg-slate-200 transition-all"><FiRotateCcw /></button>
+              <button
+                onClick={resetFilters}
+                style={{ backgroundColor: BRAND_COLOR }}
+                className="p-3.5 px-5 w-full md:w-auto flex justify-center items-center gap-2 text-white rounded-2xl shadow-sm hover:opacity-90 active:scale-95 transition-all shrink-0"
+              >
+                <FiRotateCcw size={18} />
+                <span className="text-[10px] font-black uppercase tracking-widest">Reset Filters</span>
+              </button>
             </div>
           </div>
 
@@ -593,7 +614,7 @@ function StockOrders() {
         {/* MODAL */}
         {selectedOrder && (
           <div className="fixed inset-0 z-[100] flex flex-col justify-end lg:items-center lg:justify-center p-0 lg:p-4 bg-black/60 backdrop-blur-sm">
-            <div className="bg-white w-full max-w-3xl flex flex-col shadow-2xl overflow-hidden lg:h-[80vh] lg:rounded-[3rem] lg:border-[6px] lg:border-slate-100 rounded-t-[2.5rem] h-[95dvh] transition-all">
+            <div className="bg-white w-full max-w-5xl flex flex-col shadow-2xl overflow-hidden lg:h-[80vh] lg:rounded-[3rem] lg:border-[6px] lg:border-slate-100 rounded-t-[2.5rem] h-[95dvh] transition-all">
               <div className="p-5 lg:p-8 border-b border-black/5 flex justify-between items-center bg-white sticky top-0 shrink-0">
                 <div className="flex-1 min-w-0 pr-4">
                   <div className="flex items-center gap-3 mb-1 flex-wrap">
