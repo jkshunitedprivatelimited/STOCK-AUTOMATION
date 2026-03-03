@@ -128,7 +128,7 @@ function FranchiseOwnerDashboard() {
             </div>
 
             <div className="title-wrapper">
-              <h1 className="header-title">Hi, {franchiseName || "Owner"} 👋</h1>
+              <h1 className="header-title">Hi, {franchiseName || "Owner"}</h1>
               <span className="header-subtitle">Franchise Dashboard</span>
             </div>
           </div>

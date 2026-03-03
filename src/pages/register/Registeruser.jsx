@@ -171,10 +171,17 @@ function RegisterUser() {
       });
 
       if (error) {
-        throw new Error(error.message || "Failed to communicate with Auth Edge Function.");
+        let msg = error.message || "Failed to communicate with Auth Edge Function.";
+        try {
+          if (error.context) {
+            const body = await error.context.json();
+            if (body?.error) msg = body.error;
+          }
+        } catch (_) { }
+        throw new Error(msg);
       }
 
-      // Check if the edge function returned its own internal error
+      // Check if the edge function returned its own internal error successfully parsed mapping
       if (data?.error) {
         throw new Error(data.error);
       }
