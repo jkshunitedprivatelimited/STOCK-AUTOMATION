@@ -155,6 +155,22 @@ function CentralProfiles() {
 
   const saveChanges = async () => {
     setSaving(true);
+
+    // If franchise_id changed, cascade update to menus table
+    const oldFranchiseId = selectedProfile.franchise_id;
+    const newFranchiseId = editForm.franchise_id;
+    if (oldFranchiseId && newFranchiseId && oldFranchiseId !== newFranchiseId) {
+      const { error: menuError } = await supabase
+        .from("menus")
+        .update({ franchise_id: newFranchiseId })
+        .eq("franchise_id", oldFranchiseId);
+      if (menuError) {
+        alert("Failed to update menus: " + menuError.message);
+        setSaving(false);
+        return;
+      }
+    }
+
     const { error } = await supabase.from("profiles").update(editForm).eq("id", selectedProfile.id);
     if (!error) {
       setShowEditModal(false);

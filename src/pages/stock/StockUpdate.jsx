@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
@@ -94,6 +94,13 @@ const SortArrows = ({ columnKey, sortConfig, brandColor }) => {
     );
 };
 
+const CompanyBadge = ({ value }) => {
+    if (!value || value === "All") return <span className="text-emerald-600">All</span>;
+    const list = value.split(",").map(c => c.trim()).filter(Boolean);
+    if (list.length === 0) return <span className="text-emerald-600">All</span>;
+    if (list.length === 1) return <span className="text-blue-600">{list[0]}</span>;
+    return <span className="text-blue-600 cursor-help" title={list.join(", ")}>{list.length} Companies</span>;
+};
 // --- MAIN COMPONENT ---
 function StockUpdate() {
     const { user } = useAuth();
@@ -106,6 +113,9 @@ function StockUpdate() {
     const [showModal, setShowModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("All");
+    const [selectedCompanies, setSelectedCompanies] = useState([]);
+    const [isCompanyFilterOpen, setIsCompanyFilterOpen] = useState(false);
+    const [companies, setCompanies] = useState([]);
 
     // Toggle for Stock Entry Mode (Primary vs Alt)
     const [stockEntryMode, setStockEntryMode] = useState("Primary");
@@ -117,9 +127,22 @@ function StockUpdate() {
 
     const [sortConfig, setSortConfig] = useState({ key: 'item_name', direction: 'ascending' });
     const [editingId, setEditingId] = useState(null);
+    const companyDropdownRef = useRef(null);
+
+    // Close company filter dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (companyDropdownRef.current && !companyDropdownRef.current.contains(e.target)) {
+                setIsCompanyFilterOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     const initialForm = {
         item_name: "",
+        company_availability: [],
         quantity: "",
         quantity_alt: "",
         unit: "pcs",
@@ -149,16 +172,36 @@ function StockUpdate() {
     }, [items]);
 
     // --- FETCH DATA ---
+    const fetchCompanies = async () => {
+        const { data, error } = await supabase.from("companies").select("company_name").order("company_name", { ascending: true });
+        if (error) console.error("Error fetching companies:", error);
+        if (data) setCompanies(data.map(c => c.company_name.replace(/,/g, "")));
+    };
+
     const fetchItems = async () => {
         setLoading(true);
-        const { data, error } = await supabase.from("stocks").select("*").order("item_name", { ascending: true }).range(0, 999);
-
-        if (error) console.error("Error fetching stocks:", error);
-        if (data) setItems(data);
+        // Fetch ALL items with pagination (Supabase default limit is 1000)
+        let allItems = [];
+        let from = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        while (hasMore) {
+            const { data, error } = await supabase.from("stocks").select("*").order("item_name", { ascending: true }).range(from, from + pageSize - 1);
+            if (error) { console.error("Error fetching stocks:", error); break; }
+            if (data && data.length > 0) {
+                allItems = [...allItems, ...data];
+                from += pageSize;
+                if (data.length < pageSize) hasMore = false;
+            } else {
+                hasMore = false;
+            }
+        }
+        setItems(allItems);
         setLoading(false);
     };
 
     useEffect(() => {
+        fetchCompanies();
         fetchItems();
     }, [user]);
 
@@ -172,6 +215,15 @@ function StockUpdate() {
         if (showOnlineOnly) results = results.filter(item => item.online_store === true);
         else if (showOfflineOnly) results = results.filter(item => item.online_store === false);
         if (selectedCategory !== "All") results = results.filter(item => (item.category || "Uncategorized") === selectedCategory);
+        if (selectedCompanies.length > 0) {
+            results = results.filter(item => {
+                const comp = item.company_availability || "All";
+                if (comp === "All") return true;
+                const compList = comp.split(",").map(c => c.trim()).filter(Boolean);
+                if (compList.length === 0) return true;
+                return selectedCompanies.some(c => compList.includes(c));
+            });
+        }
 
         if (term) {
             results = results.filter(item =>
@@ -194,7 +246,7 @@ function StockUpdate() {
             });
         }
         setFilteredItems(results);
-    }, [searchTerm, selectedCategory, items, showLowStock, showAvailableOnly, showOnlineOnly, showOfflineOnly, sortConfig]);
+    }, [searchTerm, selectedCategory, selectedCompanies, items, showLowStock, showAvailableOnly, showOnlineOnly, showOfflineOnly, sortConfig]);
 
     const requestSort = (key) => {
         let direction = 'ascending';
@@ -227,6 +279,17 @@ function StockUpdate() {
     const toggleOnline = () => { setShowOnlineOnly(!showOnlineOnly); if (!showOnlineOnly) setShowOfflineOnly(false); };
     const toggleOffline = () => { setShowOfflineOnly(!showOfflineOnly); if (!showOfflineOnly) setShowOnlineOnly(false); };
 
+    const clearFilters = () => {
+        setSearchTerm("");
+        setSelectedCategory("All");
+        setSelectedCompanies([]);
+        setIsCompanyFilterOpen(false);
+        setShowLowStock(false);
+        setShowAvailableOnly(false);
+        setShowOnlineOnly(false);
+        setShowOfflineOnly(false);
+    };
+
     // --- OPEN EDIT ---
     const openEdit = (item) => {
         setEditingId(item.id);
@@ -239,8 +302,14 @@ function StockUpdate() {
             setStockEntryMode("Primary");
         }
 
+        const compAvail = item.company_availability || "All";
+        let compArray = compAvail === "All" ? [] : compAvail.split(",").map(c => c.trim()).filter(Boolean);
+        // Remove orphaned company references (companies that no longer exist)
+        compArray = compArray.filter(c => companies.includes(c));
+
         setFormData({
             ...item,
+            company_availability: compArray,
             quantity: item.quantity?.toString() || "",
             quantity_alt: item.quantity_alt?.toString() || "",
             price: item.price?.toString() || "",
@@ -287,7 +356,8 @@ function StockUpdate() {
             purchase_unit: formData.purchase_unit,
             moq_unit: formData.moq_unit,
             description: formData.description,
-            online_store: formData.online_store
+            online_store: formData.online_store,
+            company_availability: formData.company_availability.length === 0 ? "All" : formData.company_availability.join(",")
         };
 
         try {
@@ -375,14 +445,66 @@ function StockUpdate() {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1 mb-2 no-scrollbar">
-                        <button onClick={() => setShowLowStock(!showLowStock)} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${showLowStock ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showLowStock ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <AlertTriangle size={14} /> Low Stock </button>
-                        <button onClick={() => setShowAvailableOnly(!showAvailableOnly)} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${showAvailableOnly ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showAvailableOnly ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <CheckCircle size={14} /> Available </button>
-                        <button onClick={toggleOnline} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${showOnlineOnly ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showOnlineOnly ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <Globe size={14} /> Online </button>
-                        <button onClick={toggleOffline} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${showOfflineOnly ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showOfflineOnly ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <EyeOff size={14} /> Offline </button>
+                    <div className="flex items-center gap-2 overflow-visible flex-wrap pb-1 mb-2">
+                        <div className="relative flex-shrink-0" ref={companyDropdownRef}>
+                            <button
+                                onClick={() => setIsCompanyFilterOpen(!isCompanyFilterOpen)}
+                                className={`pl-3 pr-8 py-2 rounded-lg text-xs font-bold border transition-all outline-none cursor-pointer w-full text-left flex items-center ${
+                                    selectedCompanies.length > 0 ? "bg-[rgb(0,100,55)] text-white border-[rgb(0,100,55)] shadow-md" : "bg-white text-black border-slate-200 hover:border-[rgb(0,100,55)]"
+                                }`}
+                            >
+                                {selectedCompanies.length === 0 ? "1. Select Company" 
+                                    : selectedCompanies.length === 1 ? selectedCompanies[0]
+                                    : `${selectedCompanies.length} Companies`}
+                            </button>
+                            <ChevronDown size={14} className={`absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${selectedCompanies.length > 0 ? "text-white" : "text-slate-400"}`} />
+                            
+                            {isCompanyFilterOpen && (
+                                <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2 flex flex-col gap-1 max-h-[300px] overflow-y-auto">
+                                    <label className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold uppercase cursor-pointer transition-all ${selectedCompanies.length === 0 ? "bg-slate-100 text-[rgb(0,100,55)]" : "hover:bg-slate-50 text-slate-600"}`}>
+                                        <input type="checkbox" className="hidden" checked={selectedCompanies.length === 0} onChange={() => { setSelectedCompanies([]); setIsCompanyFilterOpen(false); }} />
+                                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${selectedCompanies.length === 0 ? "bg-[rgb(0,100,55)] border-[rgb(0,100,55)] text-white" : "border-slate-300"}`}>
+                                            {selectedCompanies.length === 0 && <CheckCircle size={10} />}
+                                        </div>
+                                        All Companies
+                                    </label>
+                                    {companies.map(comp => {
+                                        const isChecked = selectedCompanies.includes(comp);
+                                        return (
+                                            <label key={comp} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold uppercase cursor-pointer transition-all ${isChecked ? "bg-slate-100 text-[rgb(0,100,55)]" : "hover:bg-slate-50 text-slate-600"}`}>
+                                                <input type="checkbox" className="hidden" checked={isChecked} 
+                                                    onChange={() => {
+                                                        setSelectedCompanies(prev => {
+                                                            if (isChecked) return prev.filter(c => c !== comp);
+                                                            return [...prev, comp];
+                                                        });
+                                                    }} 
+                                                />
+                                                <div className={`w-4 h-4 rounded border flex items-center justify-center ${isChecked ? "bg-[rgb(0,100,55)] border-[rgb(0,100,55)] text-white" : "border-slate-300"}`}>
+                                                    {isChecked && <CheckCircle size={10} />}
+                                                </div>
+                                                {comp}
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        <button disabled={selectedCompanies.length === 0} onClick={() => setShowLowStock(!showLowStock)} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${selectedCompanies.length === 0 ? 'opacity-50 cursor-not-allowed bg-slate-50 text-slate-400 border-slate-200' : showLowStock ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showLowStock && selectedCompanies.length > 0 ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <AlertTriangle size={14} /> Low Stock </button>
+                        <button disabled={selectedCompanies.length === 0} onClick={() => setShowAvailableOnly(!showAvailableOnly)} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${selectedCompanies.length === 0 ? 'opacity-50 cursor-not-allowed bg-slate-50 text-slate-400 border-slate-200' : showAvailableOnly ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showAvailableOnly && selectedCompanies.length > 0 ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <CheckCircle size={14} /> Available </button>
+                        <button disabled={selectedCompanies.length === 0} onClick={toggleOnline} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${selectedCompanies.length === 0 ? 'opacity-50 cursor-not-allowed bg-slate-50 text-slate-400 border-slate-200' : showOnlineOnly ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showOnlineOnly && selectedCompanies.length > 0 ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <Globe size={14} /> Online </button>
+                        <button disabled={selectedCompanies.length === 0} onClick={toggleOffline} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${selectedCompanies.length === 0 ? 'opacity-50 cursor-not-allowed bg-slate-50 text-slate-400 border-slate-200' : showOfflineOnly ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showOfflineOnly && selectedCompanies.length > 0 ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <EyeOff size={14} /> Offline </button>
+                        
+                        {(showLowStock || showAvailableOnly || showOnlineOnly || showOfflineOnly || searchTerm || selectedCategory !== "All" || selectedCompanies.length > 0) && (
+                            <button onClick={clearFilters} className="whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 bg-red-50 text-red-600 border-red-100 hover:bg-red-100">
+                                <X size={14} /> Clear Filters
+                            </button>
+                        )}
                     </div>
 
                     <div className="flex gap-2 overflow-x-auto pb-3 border-t border-slate-100 pt-3">
+                        <span className="text-xs font-bold text-slate-400 self-center mr-2">Categories:</span>
                         {categories.map((cat) => (
                             <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-bold border transition-all whitespace-nowrap flex-shrink-0 ${selectedCategory === cat ? "text-white shadow-md" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`} style={selectedCategory === cat ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> {cat} </button>
                         ))}
@@ -402,7 +524,7 @@ function StockUpdate() {
                                 <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col gap-3">
                                     <div className="flex justify-between items-start">
                                         <div className="flex-1 min-w-0 pr-2">
-                                            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1"> <Tag size={10} /> {item.category} </div>
+                                            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1"> <Tag size={10} /> {item.category} • <CompanyBadge value={item.company_availability} /> </div>
                                             <div className="font-black text-base text-black leading-tight mb-1 break-words">{item.item_name}</div>
                                             <div className="text-[10px] bg-slate-100 inline-block px-2 py-0.5 rounded text-slate-500 font-mono"> {item.item_code || 'NO SKU'} </div>
                                         </div>
@@ -446,7 +568,7 @@ function StockUpdate() {
                                             <td className="px-6 py-4 font-bold text-xs text-black whitespace-nowrap">{item.item_code || '-'}</td>
                                             <td className="px-6 py-4">
                                                 <div className="font-bold text-black uppercase text-xs flex items-center gap-2 max-w-[250px]"> <span className="truncate" title={item.item_name}>{item.item_name}</span> {item.online_store ? <Globe size={12} className="text-blue-500 flex-shrink-0" /> : <EyeOff size={12} className="text-slate-300 group-hover:text-slate-500 flex-shrink-0" />} </div>
-                                                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{item.category}</div>
+                                                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{item.category} • <CompanyBadge value={item.company_availability} /></div>
                                             </td>
                                             <td className="px-6 py-4 text-xs tracking-tighter whitespace-nowrap"> <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-sm ${isLowStock ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-700 border-emerald-100'}`}> {item.quantity} {item.unit} </div> </td>
                                             <td className="px-6 py-4 whitespace-nowrap"> <div className="font-black text-xs text-black">₹{item.price}</div> <div className="text-[9px] font-bold text-slate-400">{item.gst_rate}% ({item.sales_tax_inc})</div> </td>
@@ -502,14 +624,48 @@ function StockUpdate() {
                                     <input name="hsn_code" value={formData.hsn_code} onChange={handleInput} placeholder="8-digit" className="w-full bg-slate-50 rounded-lg border border-slate-200 px-3 py-3 outline-none focus:border-[rgb(0,100,55)] transition tracking-widest text-black text-sm" />
                                 </div>
 
-                                <div className="md:col-span-3">
+                                <div className="md:col-span-2">
+                                    <label className="text-[10px] font-bold uppercase text-black block mb-1">Applicable For</label>
+                                    <div className="flex flex-wrap gap-2 bg-slate-50 rounded-lg border border-slate-200 p-3 min-h-[42px] max-h-[120px] overflow-y-auto">
+                                        <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase cursor-pointer border transition-all ${
+                                            formData.company_availability.length === 0 ? "bg-[rgb(0,100,55)] text-white border-[rgb(0,100,55)] shadow-sm" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
+                                        }`}>
+                                            <input type="checkbox" className="hidden" checked={formData.company_availability.length === 0}
+                                                onChange={() => setFormData(prev => ({ ...prev, company_availability: [] }))}
+                                            />
+                                            All Companies
+                                        </label>
+                                        {companies.map(comp => {
+                                            const isChecked = formData.company_availability.includes(comp);
+                                            return (
+                                                <label key={comp} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase cursor-pointer border transition-all ${
+                                                    isChecked ? "bg-[rgb(0,100,55)] text-white border-[rgb(0,100,55)] shadow-sm" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                                                }`}>
+                                                    <input type="checkbox" className="hidden" checked={isChecked}
+                                                        onChange={() => {
+                                                            setFormData(prev => {
+                                                                const arr = prev.company_availability;
+                                                                const updated = isChecked ? arr.filter(c => c !== comp) : [...arr, comp];
+                                                                return { ...prev, company_availability: updated };
+                                                            });
+                                                        }}
+                                                    />
+                                                    {comp}
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="text-[9px] text-slate-400 mt-1">{formData.company_availability.length === 0 ? "Available for all companies" : `Selected: ${formData.company_availability.join(", ")}`}</p>
+                                </div>
+
+                                <div className="md:col-span-2">
                                     <label className="text-[10px] font-bold uppercase text-black block mb-1">Description</label>
                                     <textarea
                                         name="description"
                                         value={formData.description}
                                         onChange={handleInput}
                                         placeholder="Add a short description..."
-                                        className="w-full bg-slate-50 rounded-lg border border-slate-200 px-3 py-3 outline-none focus:border-[rgb(0,100,55)] transition text-black text-sm min-h-[80px] resize-none"
+                                        className="w-full bg-slate-50 rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-[rgb(0,100,55)] transition text-black text-sm min-h-[42px] resize-none"
                                     />
                                 </div>
 
