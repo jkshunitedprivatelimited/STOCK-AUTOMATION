@@ -423,7 +423,7 @@ export default function OldQuotations() {
             <div className="screen-content h-full flex flex-col overflow-hidden">
                 {/* Header */}
                 <div className="border-b border-slate-200 px-4 md:px-6 py-3 md:py-4 shrink-0 flex items-center justify-between gap-2">
-                    <button onClick={() => navigate("/central/package-bills")} className="flex items-center gap-1 text-black hover:opacity-70 font-bold transition text-xs md:text-base w-24">
+                    <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-black hover:opacity-70 font-bold transition text-xs md:text-base w-24">
                         <ArrowLeft size={18} /> <span>Back</span>
                     </button>
                     <h1 className="text-base md:text-2xl font-black uppercase text-black text-center flex-1">Old Quotations</h1>
