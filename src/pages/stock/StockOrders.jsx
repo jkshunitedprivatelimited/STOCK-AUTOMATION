@@ -145,7 +145,6 @@ const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsCh
                   </tr>
                 );
               })}
-              ))}
             </tbody>
           </table>
         </div>
@@ -206,6 +205,10 @@ function StockOrders() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   /* eslint-disable-next-line no-unused-vars */
   const [loading, setLoading] = useState(true);
+
+  const [whatsappSent, setWhatsappSent] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('whatsapp_sent_orders')) || {}; } catch { return {}; }
+  });
 
   const [activeTab, setActiveTab] = useState(() => {
     try { return sessionStorage.getItem("stock_active_tab") || "all"; } catch { return "all"; }
@@ -366,16 +369,82 @@ function StockOrders() {
       if (error) throw error;
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
       if (selectedOrder?.id === orderId) setSelectedOrder(prev => ({ ...prev, status: newStatus }));
+      // Reset WhatsApp sent indicator so user knows a new message is needed for the new status
+      setWhatsappSent(prev => {
+        const next = { ...prev };
+        delete next[orderId];
+        try { localStorage.setItem('whatsapp_sent_orders', JSON.stringify(next)); } catch {}
+        return next;
+      });
     } catch (err) {
       alert("Error: " + err.message);
     }
   };
 
-  const handleWhatsApp = (order) => {
+  const handleWhatsApp = (order, e) => {
+    if (e) e.stopPropagation();
     const cleanPhone = order.customer_phone?.replace(/\D/g, "");
     if (!cleanPhone) return alert("Missing phone number");
-    const message = `ORDER STATUS: ${order.status?.toUpperCase()}%0AHello ${order.customer_name}, your order is being processed!`;
-    window.open(`https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${message}`, "_blank");
+    
+    const status = order.status?.toLowerCase()?.trim();
+
+    let message = "";
+    if (status === "incoming") {
+      message = [
+        "ORDER STATUS: RECEIVED",
+        "",
+        `Hello ${order.customer_name},`,
+        "",
+        `Thank you! Your order (${order.id?.substring(0, 8)}) has been received and is being processed.`,
+        "",
+        "We will update you once it is packed."
+      ].join("\n");
+    } else if (status === "packed") {
+      message = [
+        "ORDER STATUS: PACKED",
+        "",
+        `Hello ${order.customer_name},`,
+        "",
+        `Great news! Your order (${order.id?.substring(0, 8)}) has been packed and is ready for dispatch.`,
+        "",
+        "We will notify you once it is on the way!"
+      ].join("\n");
+    } else if (status === "dispatched") {
+      message = [
+        "ORDER STATUS: DISPATCHED",
+        "",
+        `Hello ${order.customer_name},`,
+        "",
+        `Your order (${order.id?.substring(0, 8)}) has been dispatched and is on its way!`,
+        "",
+        "Thank you for your order."
+      ].join("\n");
+    } else {
+      message = [
+        "ORDER UPDATE",
+        "",
+        `Hello ${order.customer_name},`,
+        "",
+        `Your order status is: ${order.status}`
+      ].join("\n");
+    }
+
+    window.open(`https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${encodeURIComponent(message)}`, "_blank");
+    
+    setWhatsappSent(prev => {
+      const next = { ...prev, [order.id]: true };
+      try { localStorage.setItem('whatsapp_sent_orders', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const toggleWhatsappSent = (orderId, e) => {
+    if (e) e.stopPropagation();
+    setWhatsappSent(prev => {
+      const next = { ...prev, [orderId]: !prev[orderId] };
+      try { localStorage.setItem('whatsapp_sent_orders', JSON.stringify(next)); } catch {}
+      return next;
+    });
   };
 
   const getCompanyDetails = (franchiseId) => {
@@ -385,10 +454,10 @@ function StockOrders() {
   };
 
   const SortIcon = ({ column }) => {
-    if (sortConfig.key !== column) return <span className="opacity-20 flex flex-col ml-1"><FiArrowUp size={8} /><FiArrowDown size={8} /></span>;
+    if (sortConfig.key !== column) return <span className="inline-flex flex-col items-center ml-1 opacity-20 leading-none" style={{ gap: 0 }}><FiArrowUp size={7} /><FiArrowDown size={7} /></span>;
     return sortConfig.direction === 'asc'
-      ? <FiArrowUp size={12} className="ml-1 text-black" />
-      : <FiArrowDown size={12} className="ml-1 text-black" />;
+      ? <FiArrowUp size={10} className="ml-1 text-black inline-block" />
+      : <FiArrowDown size={10} className="ml-1 text-black inline-block" />;
   };
 
   return (
@@ -560,6 +629,13 @@ function StockOrders() {
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-black text-black/50 uppercase tracking-widest truncate">{order.franchise_id || "TV-GEN"}</span>
                       <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase border ${order.status === 'dispatched' ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 'bg-slate-100 text-black/60'}`}>{order.status}</span>
+                      <button
+                        onClick={(e) => handleWhatsApp(order, e)}
+                        className={`p-1 rounded-full transition-all ${whatsappSent[order.id] ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400 hover:bg-green-50'}`}
+                        title={whatsappSent[order.id] ? "WhatsApp Sent" : "Mark WhatsApp Sent"}
+                      >
+                        <FaWhatsapp size={12} />
+                      </button>
                     </div>
                     <h3 className="font-black text-sm uppercase leading-none text-black truncate">{order.customer_name}</h3>
                     <p className="text-[10px] font-bold text-black/60 flex items-center gap-1"><FiClock size={10} /> {formatDateTime(order.created_at, order.order_time_text)}</p>
@@ -575,25 +651,35 @@ function StockOrders() {
                 <table className="w-full text-left min-w-[800px] border-collapse">
                   <thead className="sticky top-0 z-20 bg-slate-50 shadow-sm">
                     <tr className="text-black uppercase text-[10px] font-black">
-                      <th className="px-6 py-4">Serial</th>
-                      <th className="px-6 py-4 cursor-pointer" onClick={() => handleSort('created_at')}>Date & Time <SortIcon column="created_at" /></th>
-                      <th className="px-6 py-4 cursor-pointer" onClick={() => handleSort('franchise_id')}>Franchise ID <SortIcon column="franchise_id" /></th>
-                      <th className="px-6 py-4 cursor-pointer" onClick={() => handleSort('customer_name')}>Customer Name <SortIcon column="customer_name" /></th>
-                      <th className="px-6 py-4 cursor-pointer" onClick={() => handleSort('status')}>Status <SortIcon column="status" /></th>
-                      <th className="px-6 py-4 text-right cursor-pointer" onClick={() => handleSort('total_amount')}>Total <SortIcon column="total_amount" /></th>
+                      <th className="px-4 py-4 w-[60px]">Serial</th>
+                      <th className="px-4 py-4 cursor-pointer whitespace-nowrap" onClick={() => handleSort('created_at')}><span className="inline-flex items-center">Date & Time<SortIcon column="created_at" /></span></th>
+                      <th className="px-4 py-4 cursor-pointer whitespace-nowrap" onClick={() => handleSort('franchise_id')}><span className="inline-flex items-center">Franchise ID<SortIcon column="franchise_id" /></span></th>
+                      <th className="px-4 py-4 cursor-pointer whitespace-nowrap" onClick={() => handleSort('customer_name')}><span className="inline-flex items-center">Customer Name<SortIcon column="customer_name" /></span></th>
+                      <th className="px-4 py-4 cursor-pointer whitespace-nowrap" onClick={() => handleSort('status')}><span className="inline-flex items-center">Status<SortIcon column="status" /></span></th>
+                      <th className="px-2 py-4 text-center w-[56px]">WA</th>
+                      <th className="px-4 py-4 text-right cursor-pointer whitespace-nowrap" onClick={() => handleSort('total_amount')}><span className="inline-flex items-center justify-end">Total<SortIcon column="total_amount" /></span></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50 font-bold text-xs">
                     {filteredOrders.map((order, idx) => (
                       <tr key={order.id} onClick={() => setSelectedOrder(order)} className="hover:bg-slate-50 cursor-pointer transition-colors group">
-                        <td className="px-6 py-6 text-black/60">{(idx + 1).toString().padStart(2, '0')}</td>
-                        <td className="px-6 py-6 text-black whitespace-nowrap">{formatDateTime(order.created_at, order.order_time_text)}</td>
-                        <td className="px-6 py-6 uppercase font-black text-black">{order.franchise_id}</td>
-                        <td className="px-6 py-6 uppercase font-black text-black">{order.customer_name}</td>
-                        <td className="px-6 py-6 uppercase">
+                        <td className="px-4 py-5 text-black/60 w-[60px]">{(idx + 1).toString().padStart(2, '0')}</td>
+                        <td className="px-4 py-5 text-black whitespace-nowrap">{formatDateTime(order.created_at, order.order_time_text)}</td>
+                        <td className="px-4 py-5 uppercase font-black text-black">{order.franchise_id}</td>
+                        <td className="px-4 py-5 uppercase font-black text-black">{order.customer_name}</td>
+                        <td className="px-4 py-5 uppercase">
                           <span className={`px-3 py-1 rounded-full text-[9px] font-black border ${order.status === 'dispatched' ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 'bg-slate-100 text-black/60'}`}>{order.status}</span>
                         </td>
-                        <td className="px-6 py-6 text-right font-black text-black">₹{order.total_amount}</td>
+                        <td className="px-2 py-5 text-center w-[56px]">
+                          <button
+                            onClick={(e) => handleWhatsApp(order, e)}
+                            className={`p-1.5 rounded-full transition-all ${whatsappSent[order.id] ? 'bg-green-100 text-green-600' : 'bg-red-50 text-red-400 hover:bg-green-50'}`}
+                            title={whatsappSent[order.id] ? "WhatsApp Sent ✓" : "WhatsApp Not Sent – Click to Send"}
+                          >
+                            <FaWhatsapp size={14} />
+                          </button>
+                        </td>
+                        <td className="px-4 py-5 text-right font-black text-black">₹{order.total_amount}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -658,7 +744,9 @@ function StockOrders() {
               <div className="p-5 lg:p-8 bg-white border-t border-black/5 flex flex-col md:flex-row gap-3 shrink-0">
                 <div className="flex-1 flex gap-2">
                   <button onClick={() => window.print()} className="flex-1 py-4 bg-slate-100 text-black/70 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all">Print</button>
-                  <button onClick={() => handleWhatsApp(selectedOrder)} className="flex-1 py-4 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all"><FaWhatsapp size={16} /> WhatsApp</button>
+                  <button onClick={() => handleWhatsApp(selectedOrder)} className={`flex-1 py-4 rounded-2xl border font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${whatsappSent[selectedOrder.id] ? "bg-green-100 text-green-700 border-green-200" : "bg-emerald-50 text-emerald-800 border-emerald-100"}`}>
+                    <FaWhatsapp size={16} /> {whatsappSent[selectedOrder.id] ? "Resend WA" : "WhatsApp"}
+                  </button>
                 </div>
                 <div className="flex-1 flex gap-2">
                   {selectedOrder.status === 'incoming' && (
