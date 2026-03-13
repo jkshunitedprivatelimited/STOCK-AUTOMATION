@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import {
   FileText, Users, Settings, LayoutDashboard,
   BarChart3, ChevronRight, Package, ShoppingBag,
-  Headphones, Calendar, Truck, UserCheck, Printer, Receipt
+  Headphones, Calendar, Truck, UserCheck, Printer, Receipt, Ticket
 } from "lucide-react";
 import { BRAND_GREEN } from "../../utils/theme";
 
@@ -66,6 +66,7 @@ function CentralDashboard() {
     { title: "Staff Profiles", path: "/central/central_staff_profiles", icon: <UserCheck size={isMobile ? 20 : 24} />, desc: "Employee management" },
 
     { title: "Register a company", path: "/central/central_register_company", icon: <Printer size={isMobile ? 20 : 24} />, desc: "Add new companies" },
+    { title: "Vouchers", path: "/central/central_voucher", icon: <Ticket size={isMobile ? 20 : 24} />, desc: "Manage & print vouchers" },
     { title: "Settings", path: "/central/central_settings", icon: <Settings size={isMobile ? 20 : 24} />, desc: "System configuration" },
   ];
 
