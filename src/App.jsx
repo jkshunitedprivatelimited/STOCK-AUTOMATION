@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { supabase } from "./frontend_supabase/supabaseClient";
 
 /* AUTH */
+const StaticPage = lazy(() => import("./pages/login/static_page"));
 const Login = lazy(() => import("./pages/login/Login"));
 const RegisterUser = lazy(() => import("./pages/register/Registeruser"));
 
@@ -46,6 +47,7 @@ const InvoiceDesign = lazy(() => import("./pages/central/central_register_compan
 const PackageBills = lazy(() => import("./pages/central/central_new_franchise_bills"));
 const OldQuotations = lazy(() => import("./pages/central/central_quotation_bills"));
 const OldTokenBills = lazy(() => import('./pages/central/central_token_bills'));
+const CentralVoucher = lazy(() => import('./pages/central/central_voucher'));
 
 /* CONTEXTS & COMPONENTS */
 import { AuthProvider } from "./context/AuthContext";
@@ -114,7 +116,8 @@ function App() {
               <Routes>
 
               {/* ================= PUBLIC ================= */}
-              <Route path="/" element={<Login />} />
+              <Route path="/" element={<StaticPage />} />
+              <Route path="/login" element={<Login />} />
 
               {/* ================= STORE MODE ================= */}
               <Route
@@ -213,6 +216,15 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={["central"]}>
                     <OldTokenBills />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/central/central_voucher"
+                element={
+                  <ProtectedRoute allowedRoles={["central"]}>
+                    <CentralVoucher />
                   </ProtectedRoute>
                 }
               />
