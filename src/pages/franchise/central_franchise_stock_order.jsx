@@ -394,14 +394,50 @@ function StockOrder() {
     };
   }, [addToast]);
 
-  // Fix 5: Check for pending payment on mount (recovery from tab close/crash)
+  // Fix 10: Warn user before closing tab during payment
+  useEffect(() => {
+    if (!processingOrder) return;
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = ''; // Chrome requires returnValue to be set
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [processingOrder]);
+
+  // Fix 5: Check for pending payment on mount — actively verify in DB
   useEffect(() => {
     const pendingPaymentId = localStorage.getItem('pendingPaymentId');
-    if (pendingPaymentId) {
-      addToast('success', 'Payment Received', `Your payment (${pendingPaymentId}) was received. If you don't see your order, it will be processed automatically. Contact support if needed.`, 12000);
-      // Clear it — the webhook will handle recovery
-      localStorage.removeItem('pendingPaymentId');
-    }
+    if (!pendingPaymentId) return;
+
+    (async () => {
+      try {
+        // Actively check if the order was created (by frontend retries or webhook)
+        const { data: existingOrder } = await supabase
+          .from('invoices')
+          .select('id, order_id')
+          .eq('payment_id', pendingPaymentId)
+          .single();
+
+        if (existingOrder) {
+          addToast('success', 'Order Confirmed', `Your order #${existingOrder.order_id} was placed successfully!`, 8000);
+        } else {
+          // Order not yet in DB — the webhook may still be processing, or it failed and will refund
+          addToast('success', 'Payment Received',
+            `Your payment (${pendingPaymentId}) was received. Your order is being processed and will appear shortly. If it doesn't appear within 10 minutes, contact support with this ID.`,
+            15000
+          );
+        }
+      } catch {
+        // Query itself failed — show generic message
+        addToast('success', 'Payment Received',
+          `Your payment (${pendingPaymentId}) was received. If you don't see your order, it will be processed automatically.`,
+          12000
+        );
+      } finally {
+        localStorage.removeItem('pendingPaymentId');
+      }
+    })();
   }, [addToast]);
 
 
@@ -646,15 +682,29 @@ function StockOrder() {
       const isScriptLoaded = await loadRazorpayScript();
       if (!isScriptLoaded) throw new Error("Payment gateway could not be loaded. Please refresh and try again.");
 
-      // Fix 1: Build Razorpay notes for webhook recovery
+      // Fix 1: Build Razorpay notes for webhook recovery (includes financials for Gap 4)
       const razorpayNotes = {
         user_id: user.id,
         customer_name: profile.name,
         customer_email: profile.email,
         customer_phone: profile.phone || "",
         customer_address: profile.address || "",
+        branch_location: profile.branch_location || "",
         franchise_id: profile.franchise_id || "N/A",
-        items: JSON.stringify(orderItems)
+        items: JSON.stringify(orderItems),
+        subtotal: String(calculations.subtotal),
+        tax_amount: String(calculations.totalGst),
+        round_off: String(calculations.roundOff),
+        total_amount: String(calculations.roundedBill),
+        company_name: companyDetails?.company_name || "",
+        company_address: companyDetails?.company_address || "",
+        company_gst: companyDetails?.company_gst || "",
+        bank_details: JSON.stringify({
+          bank_name: companyDetails?.bank_name || "",
+          bank_acc_no: companyDetails?.bank_acc_no || "",
+          bank_ifsc: companyDetails?.bank_ifsc || ""
+        }),
+        terms: (companyDetails?.terms || "").substring(0, 200)
       };
 
       const options = {
@@ -670,6 +720,30 @@ function StockOrder() {
 
           // Fix 5: Persist payment ID immediately for crash recovery
           try { localStorage.setItem('pendingPaymentId', paymentId); } catch { /* storage full, non-critical */ }
+
+          // Fix 11: Idempotency check — if order already exists for this payment, skip DB insert
+          try {
+            const { data: existingOrder } = await supabase
+              .from('invoices')
+              .select('order_id, total_amount')
+              .eq('payment_id', paymentId)
+              .single();
+
+            if (existingOrder) {
+              console.log('[Order] Idempotency: order already exists for payment', paymentId);
+              try { localStorage.removeItem('pendingPaymentId'); } catch { /* non-critical */ }
+              setLastOrderId(existingOrder.order_id);
+              setPrintData({ ...calculations, roundedBill: existingOrder.total_amount, orderTime: formattedTime });
+              setOrderSuccess(true);
+              setProcessingOrder(false);
+              isSubmittingRef.current = false;
+              fetchData();
+              setCart([]);
+              setQtyInput({});
+              setIsCartOpen(false);
+              return;
+            }
+          } catch { /* No existing order — proceed normally */ }
 
           // Fix 2: Retry the DB call with exponential backoff
           const MAX_DB_RETRIES = 3;
