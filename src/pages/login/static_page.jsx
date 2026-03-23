@@ -231,15 +231,14 @@ const StaticPage = () => {
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white leading-tight whitespace-nowrap">
               JKSH United Pvt. Ltd.
             </h1>
-            <p className="mt-6 text-white/80 text-lg max-w-xl leading-relaxed">
-              United by vision, driven by excellence. JKSH United Private
-              Limited is a growth-oriented consumer brand company building
-              scalable, experience-driven businesses across India. Home to{" "}
-              <strong className="text-white">T&nbsp;Vanamm</strong> — India's
-              modern tea café brand with 150+ franchise outlets — and{" "}
-              <strong className="text-white">T&nbsp;Leaf</strong>, our premium
-              tea brand delivering authentic Indian tea experiences.
-            </p>
+            <div className="mt-6 text-white/80 text-lg max-w-xl leading-relaxed space-y-4 text-justify md:text-left">
+              <p>
+                United by vision, driven by excellence. JKSH United Private Limited is a growth-oriented consumer brand company building scalable, experience-driven businesses across India.
+              </p>
+              <p>
+                Home to <strong className="text-white">T&nbsp;Vanamm</strong> — India's modern tea café brand with 150+ franchise outlets — and <strong className="text-white">T&nbsp;Leaf</strong>, our premium tea brand delivering authentic Indian tea experiences.
+              </p>
+            </div>
             <div className="mt-8 flex flex-wrap gap-4 justify-center md:justify-start">
               <button
                 onClick={() => scrollTo("#about")}
