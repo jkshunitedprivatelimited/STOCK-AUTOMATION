@@ -75,6 +75,7 @@ const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsCh
   const sgst = totalGst / 2;
   const roundedBill = Number(order.total_amount) || 0;
   const roundOff = Number(order.round_off) || 0;
+  const transportationCharge = Number(order.transportation_charge) || 0;
   const orderId = order.id ? order.id.substring(0, 8).toUpperCase() : 'PENDING';
 
   const emptyRowsCount = Math.max(0, ITEMS_PER_INVOICE_PAGE - itemsChunk.length);
@@ -210,8 +211,8 @@ const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsCh
             <div className="flex justify-between py-1 px-1.5 border-b border-black text-black"><span>Taxable</span><span>{formatCurrency(taxableAmount)}</span></div>
             <div className="flex justify-between py-1 px-1.5 border-b border-slate-300 text-black"><span>Total GST</span><span>{formatCurrency(totalGst)}</span></div>
             <div className="flex justify-between py-0.5 px-2 border-b border-slate-300 text-black text-[9px] bg-slate-50 pl-4"><span>CGST</span><span>{formatCurrency(cgst)}</span></div>
-            <div className="flex justify-between py-0.5 px-2 border-b border-black text-black text-[9px] bg-slate-50 pl-4"><span>SGST</span><span>{formatCurrency(sgst)}</span></div>
-
+            <div className="flex justify-between py-0.5 px-2 border-b border-black text-black text-[9px] bg-slate-50 pl-4 mb-2"><span>SGST</span><span>{formatCurrency(sgst)}</span></div>
+            {transportationCharge > 0 && <div className="flex justify-between py-1 px-1.5 border-b border-slate-300 text-black"><span>Transportation</span><span>{formatCurrency(transportationCharge)}</span></div>}
             <div className="flex justify-between py-1 px-1.5 border-b border-black text-black"><span>Round Off</span><span>{formatCurrency(roundOff)}</span></div>
             <div className="flex justify-between py-1.5 px-2 border-b-2 border-black bg-slate-200 text-black"><span className="font-black uppercase text-black">Total</span><span className="font-black text-black">{formatCurrency(roundedBill)}</span></div>
             <div className="flex-1 flex flex-col justify-end p-2 text-center">
@@ -574,9 +575,13 @@ function StockOrders() {
     });
   }, []);
 
-  const getCompanyDetails = useCallback((franchiseId) => {
-    if (!franchiseId) return companies[0] || {};
-    return companies.find(c => c.franchise_id === franchiseId) || companies[0] || {};
+  const getCompanyDetails = useCallback((order) => {
+    if (!order) return companies[0] || {};
+    // Try matching by snapshot_company_name first (most accurate), then franchise_id
+    const byName = order.snapshot_company_name && companies.find(c => c.company_name === order.snapshot_company_name);
+    if (byName) return byName;
+    const byFranchise = order.franchise_id && companies.find(c => c.franchise_id === order.franchise_id);
+    return byFranchise || companies[0] || {};
   }, [companies]);
 
   const handleSelectOrder = useCallback((order) => {
@@ -592,7 +597,7 @@ function StockOrders() {
   // INP: memoize the invoice pages for print to avoid recalculating on every render
   const printInvoicePages = useMemo(() => {
     if (!selectedOrder) return null;
-    const companyDetails = getCompanyDetails(selectedOrder.franchise_id);
+    const companyDetails = getCompanyDetails(selectedOrder);
     const fullItems = selectedOrder.invoice_items || [];
     const pages = [];
     if (fullItems.length === 0) pages.push([]);
@@ -819,7 +824,9 @@ function StockOrders() {
                     </div>
                     <div className="pt-4 border-t-2 border-dashed border-black/10 space-y-2">
                       <div className="flex justify-between text-[10px] font-bold uppercase text-black/60"><span>Sub Total</span><span>₹{Number(selectedOrder.subtotal || 0).toFixed(2)}</span></div>
-                      <div className="flex justify-between text-[10px] font-bold uppercase text-black/60"><span>Round Off</span><span>{Number(selectedOrder.round_off || 0).toFixed(2)}</span></div>
+                      <div className="flex justify-between text-[10px] font-bold uppercase text-black/60"><span>GST</span><span>₹{Number(selectedOrder.tax_amount || 0).toFixed(2)}</span></div>
+                      {Number(selectedOrder.transportation_charge || 0) > 0 && <div className="flex justify-between text-[10px] font-bold uppercase text-black/60"><span>Transportation</span><span>₹{Number(selectedOrder.transportation_charge).toFixed(2)}</span></div>}
+                      <div className="flex justify-between text-[10px] font-bold uppercase text-black/60"><span>Round Off</span><span>₹{Number(selectedOrder.round_off || 0).toFixed(2)}</span></div>
                       <div className="flex justify-between items-center"><span className="text-[10px] font-black text-black uppercase">Grand Total</span><span className="text-2xl font-black text-black">₹{selectedOrder.total_amount}</span></div>
                     </div>
                   </div>

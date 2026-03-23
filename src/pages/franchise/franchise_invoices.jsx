@@ -66,7 +66,8 @@ const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsCh
     const cgst = totalTax / 2;
     const sgst = totalTax / 2;
     const roundedBill = Number(order.total_amount) || 0;
-    const calculatedTotal = totalTaxableValue + totalTax;
+    const transportationCharge = Number(order.transportation_charge) || 0;
+    const calculatedTotal = totalTaxableValue + totalTax + transportationCharge;
     const roundOff = roundedBill - calculatedTotal;
 
     const emptyRowsCount = Math.max(0, ITEMS_PER_INVOICE_PAGE - itemsChunk.length);
@@ -199,6 +200,7 @@ const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsCh
                         <div className="flex justify-between py-0.5 px-2 border-b border-slate-300 text-black text-[9px] bg-slate-50 pl-4"><span>CGST</span><span>{formatCurrency(cgst)}</span></div>
                         <div className="flex justify-between py-0.5 px-2 border-b border-black text-black text-[9px] bg-slate-50 pl-4"><span>SGST</span><span>{formatCurrency(sgst)}</span></div>
 
+                        {transportationCharge > 0 && <div className="flex justify-between py-1 px-1.5 border-b border-slate-300 text-black"><span>Transportation</span><span>{formatCurrency(transportationCharge)}</span></div>}
                         <div className="flex justify-between py-1 px-1.5 border-b border-black text-black"><span>Round Off</span><span>{formatCurrency(roundOff)}</span></div>
                         <div className="flex justify-between py-1.5 px-2 border-b-2 border-black bg-slate-200 text-black"><span className="font-black uppercase text-black">Total</span><span className="font-black text-black">{formatCurrency(roundedBill)}</span></div>
                         <div className="flex-1 flex flex-col justify-end p-2 text-center">
