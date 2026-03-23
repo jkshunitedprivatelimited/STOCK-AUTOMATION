@@ -6,7 +6,7 @@ const StaticPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative">
-      <div className="absolute top-6 right-6">
+      <div className="absolute top-6 left-6">
         <button
           onClick={() => navigate("/login")}
           className="bg-[rgb(0,100,55)] text-white px-6 py-2 rounded-lg font-semibold hover:bg-[rgb(0,80,45)] transition-colors shadow-sm"
