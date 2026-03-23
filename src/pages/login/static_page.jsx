@@ -1,32 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  ChevronRight,
   Menu,
   X,
-  ChevronRight,
-  Shield,
-  BadgeCheck,
-  Building2,
   MapPin,
-  Phone,
   Mail,
-  Clock,
-  Send,
-  ExternalLink,
-  Star,
-  Lightbulb,
-  Handshake,
-  Link2,
+  Phone,
+  Building2,
+  Shield,
   ScrollText,
-  Sprout,
-  Telescope,
-  Target,
-  Package,
-  Briefcase,
-  Coffee,
+  ExternalLink,
+  ChevronDown,
+  LayoutGrid,
   TrendingUp,
-  HardHat,
-  ClipboardList,
   ArrowUp,
 } from "lucide-react";
 
@@ -793,13 +780,23 @@ const StaticPage = () => {
                     placeholder="How can we help you?"
                   />
                 </div>
-                <button
-                  type="submit"
-                  ref={buttonRef}
-                  className="w-full sm:w-auto bg-[rgb(0,100,55)] text-white font-bold px-8 py-3 rounded-lg hover:bg-[rgb(0,80,45)] transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-75"
-                >
-                  <Send size={16} /> Submit Enquiry
-                </button>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <button
+                    type="submit"
+                    ref={buttonRef}
+                    className="flex-1 bg-[rgb(0,100,55)] text-white font-bold px-8 py-3 rounded-lg hover:bg-[rgb(0,80,45)] transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-75"
+                  >
+                    <Send size={16} /> Submit Enquiry
+                  </button>
+                  <a
+                    href="https://wa.me/919390658544"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 bg-[#25D366] text-white font-bold px-8 py-3 rounded-lg hover:bg-[#1DA851] transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <FaWhatsapp size={20} /> Chat with us on WhatsApp
+                  </a>
+                </div>
               </form>
             </div>
           </div>
