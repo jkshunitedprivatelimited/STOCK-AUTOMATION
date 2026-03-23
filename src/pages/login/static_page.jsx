@@ -858,22 +858,7 @@ const StaticPage = () => {
             <p>Registered under MCA, Government of India</p>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-6 mt-6 text-xs text-white/30">
-            <span className="hover:text-white/60 cursor-pointer transition-colors">
-              Privacy Policy
-            </span>
-            <span className="hover:text-white/60 cursor-pointer transition-colors">
-              Terms of Use
-            </span>
-            <a
-              href="https://wa.me/919390658544"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 px-3 py-1.5 rounded-full transition-colors text-xs font-semibold"
-            >
-              💬 WhatsApp
-            </a>
-          </div>
+
         </div>
       </footer>
 
