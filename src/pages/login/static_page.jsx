@@ -624,21 +624,7 @@ const StaticPage = () => {
               label="Registered Address"
               value="Floor #4, Flat No. #406, Alluri Trade Center, Near KPHB Metro (Pillar #761), Hyderabad, Telangana — 500072"
             />
-            <InfoRow
-              icon={BadgeCheck}
-              label="Status"
-              value="Active & Compliant"
-            />
-            <InfoRow
-              icon={ScrollText}
-              label="CIN Number"
-              value="To be updated"
-            />
-            <InfoRow
-              icon={Clock}
-              label="Date of Incorporation"
-              value="To be updated"
-            />
+
           </div>
         </div>
       </section>
@@ -664,10 +650,10 @@ const StaticPage = () => {
                     Email
                   </p>
                   <a
-                    href="mailto:info@jkshunited.com"
+                    href="mailto:jkshunitedpvtltd@gmail.com"
                     className="text-gray-800 font-medium text-sm hover:text-[rgb(0,100,55)] transition-colors"
                   >
-                    info@jkshunited.com
+                    jkshunitedpvtltd@gmail.com
                   </a>
                 </div>
               </div>
