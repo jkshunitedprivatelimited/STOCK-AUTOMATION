@@ -129,6 +129,7 @@ const FullPageInvoice = ({ data, profile, orderId, companyDetails, pageIndex, to
   const taxableAmount = data.subtotal || 0;
   const cgst = (data.totalGst || 0) / 2;
   const sgst = (data.totalGst || 0) / 2;
+  const transportationCharge = Number(data.transportationCharge) || 0;
 
   return (
     <div className="a4-page flex flex-col bg-white text-black font-sans text-xs leading-normal relative">
@@ -231,7 +232,8 @@ const FullPageInvoice = ({ data, profile, orderId, companyDetails, pageIndex, to
             <div className="flex justify-between py-1 px-2 border-b border-black"><span>Taxable</span><span>{formatCurrency(taxableAmount)}</span></div>
             <div className="flex justify-between py-1 px-2 border-b border-slate-300"><span>Total GST</span><span>{formatCurrency(data.totalGst || 0)}</span></div>
             <div className="flex justify-between py-0.5 px-2 border-b border-slate-300 text-[9px] bg-slate-50 pl-4"><span>CGST</span><span>{formatCurrency(cgst)}</span></div>
-            <div className="flex justify-between py-0.5 px-2 border-b border-black text-[9px] bg-slate-50 pl-4"><span>SGST</span><span>{formatCurrency(sgst)}</span></div>
+            <div className="flex justify-between py-0.5 px-2 border-b border-black text-[9px] bg-slate-50 pl-4 mb-2"><span>SGST</span><span>{formatCurrency(sgst)}</span></div>
+            {transportationCharge > 0 && <div className="flex justify-between py-1 px-2 border-b border-slate-300"><span>Transportation</span><span>{formatCurrency(transportationCharge)}</span></div>}
             <div className="flex justify-between py-1 px-2 border-b border-black"><span>Round Off</span><span>{formatCurrency(data.roundOff || 0)}</span></div>
             <div className="flex justify-between py-1.5 px-2 border-b-2 border-black bg-slate-200"><span className="font-black uppercase">Total</span><span className="font-black">{formatCurrency(data.roundedBill || 0)}</span></div>
             <div className="flex-1 flex flex-col justify-end p-2 text-center min-h-[50px]">
@@ -483,10 +485,11 @@ function StockOrder() {
     });
     const totalSub = details.reduce((acc, c) => acc + c.preciseSubtotal, 0);
     const totalGst = details.reduce((acc, c) => acc + c.preciseGst, 0);
-    const exactBill = parseFloat((totalSub + totalGst).toFixed(2));
+    const transportationCharge = Number(profile?.transportation_charge) || 0;
+    const exactBill = parseFloat((totalSub + totalGst + transportationCharge).toFixed(2));
     const roundedBill = Math.ceil(exactBill);
-    return { items: details, subtotal: totalSub, totalGst, roundedBill, roundOff: roundedBill - exactBill };
-  }, [liveCart]);
+    return { items: details, subtotal: totalSub, totalGst, transportationCharge, roundedBill, roundOff: roundedBill - exactBill };
+  }, [liveCart, profile]);
 
   const filteredStocks = useMemo(() => {
     const baseList = stocks.filter(item => {
@@ -644,7 +647,8 @@ function StockOrder() {
         quantity: i.qty,
         unit: i.cartUnit,
         price: i.effectivePrice,
-        gst_rate: i.gst_rate
+        gst_rate: i.gst_rate,
+        base_qty: i.qty * getPriceMultiplier(i.unit, i.cartUnit)
       }));
 
       // Fix 9: Stale stock guard — re-fetch live quantities before payment
@@ -682,30 +686,42 @@ function StockOrder() {
       const isScriptLoaded = await loadRazorpayScript();
       if (!isScriptLoaded) throw new Error("Payment gateway could not be loaded. Please refresh and try again.");
 
-      // Fix 1: Build Razorpay notes for webhook recovery (includes financials for Gap 4)
+      // Fix 1: Build Razorpay notes for webhook recovery (max 15 notes allowed)
+      const itemsJson = JSON.stringify(orderItems);
       const razorpayNotes = {
-        user_id: user.id,
-        customer_name: profile.name,
-        customer_email: profile.email,
-        customer_phone: profile.phone || "",
-        customer_address: profile.address || "",
-        branch_location: profile.branch_location || "",
-        franchise_id: profile.franchise_id || "N/A",
-        items: JSON.stringify(orderItems),
-        subtotal: String(calculations.subtotal),
-        tax_amount: String(calculations.totalGst),
-        round_off: String(calculations.roundOff),
-        total_amount: String(calculations.roundedBill),
-        company_name: companyDetails?.company_name || "",
-        company_address: companyDetails?.company_address || "",
-        company_gst: companyDetails?.company_gst || "",
-        bank_details: JSON.stringify({
-          bank_name: companyDetails?.bank_name || "",
-          bank_acc_no: companyDetails?.bank_acc_no || "",
-          bank_ifsc: companyDetails?.bank_ifsc || ""
+        cust: JSON.stringify({
+          id: user.id || "",
+          fid: profile.franchise_id || "N/A",
+          n: profile.name || "",
+          e: profile.email || "",
+          p: profile.phone || "",
+          a: profile.address || "",
+          b: profile.branch_location || ""
         }),
-        terms: (companyDetails?.terms || "").substring(0, 200)
+        calc: JSON.stringify({
+          st: calculations.subtotal,
+          ta: calculations.totalGst,
+          tc: calculations.transportationCharge,
+          ro: calculations.roundOff,
+          total: calculations.roundedBill
+        }),
+        cpy: JSON.stringify({
+          n: companyDetails?.company_name || "",
+          a: companyDetails?.company_address || "",
+          g: companyDetails?.company_gst || "",
+          t: String(companyDetails?.terms || "").substring(0, 50),
+          bn: companyDetails?.bank_name || "",
+          ba: companyDetails?.bank_acc_no || "",
+          bi: companyDetails?.bank_ifsc || ""
+        })
       };
+
+      // Chunk items across remaining Razorpay notes slots (max 250 chars per slot to stay securely under 254 limit)
+      // We start at i0. Max Razorpay notes = 15 keys. We used 3. We have 12 slots left (i0 to i11 = 3000 chars)
+      const maxChunks = 12;
+      for (let i = 0; i < Math.ceil(itemsJson.length / 250) && i < maxChunks; i++) {
+        razorpayNotes[`i${i}`] = itemsJson.substring(i * 250, (i + 1) * 250);
+      }
 
       const options = {
         key: RAZORPAY_KEY_ID,
@@ -725,15 +741,18 @@ function StockOrder() {
           try {
             const { data: existingOrder } = await supabase
               .from('invoices')
-              .select('order_id, total_amount')
+              .select('id, total_amount')
               .eq('payment_id', paymentId)
               .single();
 
             if (existingOrder) {
               console.log('[Order] Idempotency: order already exists for payment', paymentId);
               try { localStorage.removeItem('pendingPaymentId'); } catch { /* non-critical */ }
-              setLastOrderId(existingOrder.order_id);
-              setPrintData({ ...calculations, roundedBill: existingOrder.total_amount, orderTime: formattedTime });
+              // Derive a short order ID from the count of invoices (matches SQL function logic)
+              const { count } = await supabase.from('invoices').select('id', { count: 'exact', head: true });
+              const derivedOrderId = String(count || 1).padStart(6, '0');
+              setLastOrderId(derivedOrderId);
+              setPrintData({ ...calculations, roundedBill: Math.ceil(existingOrder.total_amount), orderTime: formattedTime });
               setOrderSuccess(true);
               setProcessingOrder(false);
               isSubmittingRef.current = false;
@@ -764,6 +783,7 @@ function StockOrder() {
                 p_items: orderItems,
                 p_subtotal: calculations.subtotal,
                 p_tax_amount: calculations.totalGst,
+                p_transportation_charge: calculations.transportationCharge,
                 p_round_off: calculations.roundOff,
                 p_total_amount: calculations.roundedBill,
                 p_order_time: formattedTime,
@@ -885,6 +905,7 @@ function StockOrder() {
                 <h2 style="color: #006437;">Order Confirmation #${result.order_id}</h2>
                 <p>Hi ${profile.name},</p>
                 <p>Thank you for your order. Please find your detailed tax invoice attached as a PDF.</p>
+                ${calculations.transportationCharge > 0 ? `<p>Transportation Charge: ${formatCurrency(calculations.transportationCharge)}</p>` : ''}
                 <p><strong>Total Amount: ${formatCurrency(calculations.roundedBill)}</strong></p>
                 <br/>
                 <p>Best regards,<br/>${companyDetails?.company_name || 'Tvanamm'}</p>
@@ -1045,6 +1066,7 @@ function StockOrder() {
                   <div className="space-y-2 mb-6 p-4 bg-slate-50 rounded-2xl text-[11px] font-black uppercase">
                     <div className="flex justify-between text-slate-400"><span>Subtotal</span><span>{formatCurrency(calculations.subtotal)}</span></div>
                     <div className="flex justify-between text-slate-400"><span>Total GST</span><span>{formatCurrency(calculations.totalGst)}</span></div>
+                    {calculations.transportationCharge > 0 && <div className="flex justify-between text-slate-400"><span>Transportation</span><span>{formatCurrency(calculations.transportationCharge)}</span></div>}
                     <div className="flex justify-between text-slate-400 border-b border-slate-100 pb-2 mb-2"><span>Round Off</span><span>{formatCurrency(calculations.roundOff)}</span></div>
                     <div className="flex justify-between text-lg pt-1"><span>Total Bill</span><span>{formatCurrency(calculations.roundedBill)}</span></div>
                   </div>
