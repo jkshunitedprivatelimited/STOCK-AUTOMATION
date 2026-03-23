@@ -348,16 +348,32 @@ const StaticPage = () => {
                 <p className="text-white/70 text-xs">Parent Company</p>
               </div>
             </div>
-            {/* Connector */}
+            {/* Connector System */}
             <div className="w-px h-10 bg-gradient-to-b from-[rgb(0,100,55)] to-gray-300" />
-            <div className="flex items-center gap-2">
-              <div className="w-24 h-px bg-gray-300" />
-              <div className="w-3 h-3 rounded-full border-2 border-[rgb(0,100,55)] bg-white" />
-              <div className="w-24 h-px bg-gray-300" />
+            
+            {/* Desktop: Grid-aligned connectors */}
+            <div className="hidden md:block w-full max-w-4xl relative">
+              {/* Central Anchor Node */}
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-3 h-3 rounded-full border-2 border-[rgb(0,100,55)] bg-white" />
+              
+              {/* Horizontal Bar linking column centers */}
+              <div className="absolute top-0 left-1/4 right-1/4 h-px bg-gray-300" />
+              
+              {/* Vertical drops matching card grid columns */}
+              <div className="grid grid-cols-2 gap-8">
+                <div className="flex justify-center">
+                  <div className="w-px h-8 bg-gray-300" />
+                </div>
+                <div className="flex justify-center">
+                  <div className="w-px h-8 bg-gray-300" />
+                </div>
+              </div>
             </div>
-            <div className="flex gap-6 mt-1">
-              <div className="w-px h-6 bg-gray-300 ml-[calc(50%-3.5rem)]" />
-              <div className="w-px h-6 bg-gray-300 mr-[calc(50%-3.5rem)]" />
+
+            {/* Mobile: Simple central drop */}
+            <div className="md:hidden flex flex-col items-center">
+              <div className="w-3 h-3 rounded-full border-2 border-[rgb(0,100,55)] bg-white z-10 shadow-sm" />
+              <div className="w-px h-10 bg-gray-300 mt-[-0.5rem]" />
             </div>
           </div>
 
