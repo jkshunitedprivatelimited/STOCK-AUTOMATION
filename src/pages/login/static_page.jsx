@@ -268,22 +268,6 @@ const StaticPage = () => {
           </div>
         </div>
 
-        {/* Bottom badge */}
-        <div className="relative max-w-7xl mx-auto px-5 mt-14">
-          <div className="inline-flex items-center gap-3 bg-white/10 backdrop-blur border border-white/20 rounded-xl px-5 py-3">
-            <Shield size={20} className="text-white/80" />
-            <div className="text-white text-sm">
-              <span className="font-bold">JKSH United</span>
-              <span className="mx-2 text-white/40">·</span>
-              <span className="text-white/70">
-                Incorporated · Private Limited
-              </span>
-            </div>
-            <span className="ml-2 inline-flex items-center gap-1 bg-emerald-400/20 text-emerald-300 text-xs font-bold px-2.5 py-1 rounded-full">
-              <BadgeCheck size={12} /> Verified Entity
-            </span>
-          </div>
-        </div>
       </section>
 
       {/* ═══════════════════ ABOUT ═══════════════════ */}
@@ -808,7 +792,7 @@ const StaticPage = () => {
                     rel="noopener noreferrer"
                     className="flex-1 bg-[#25D366] text-white font-bold px-8 py-3 rounded-lg hover:bg-[#1DA851] transition-colors flex items-center justify-center gap-2 shadow-sm"
                   >
-                    <FaWhatsapp size={20} /> Chat with us on WhatsApp
+                    <FaWhatsapp size={20} /> WhatsApp
                   </a>
                 </div>
               </form>
@@ -887,7 +871,7 @@ const StaticPage = () => {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 px-3 py-1.5 rounded-full transition-colors text-xs font-semibold"
             >
-              💬 Chat with us on WhatsApp
+              💬 WhatsApp
             </a>
           </div>
         </div>
