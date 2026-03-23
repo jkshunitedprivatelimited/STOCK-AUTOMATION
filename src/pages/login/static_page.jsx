@@ -751,7 +751,7 @@ const StaticPage = () => {
                     
                   } catch (err) {
                     console.error("Error sending message:", err);
-                    alert("Failed to send message. Please try again or email us directly at info@jkshunitedpvtltd.com");
+                    alert("Failed to send message. Please try again or email us directly at jkshunitedpvtltd@gmail.com");
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = originalText;
                   }

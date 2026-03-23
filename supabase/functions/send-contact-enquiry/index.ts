@@ -23,7 +23,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         from: 'JKSH United <noreply@jkshunited.com>',
-        to: 'info@jkshunitedpvtltd.com',
+        to: 'jkshunitedpvtltd@gmail.com',
         subject: `Website Enquiry: ${subject}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
