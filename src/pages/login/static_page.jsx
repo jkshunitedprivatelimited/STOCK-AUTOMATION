@@ -618,11 +618,15 @@ const StaticPage = () => {
               label="Country"
               value="India"
             />
-            <InfoRow
-              icon={MapPin}
-              label="Registered Address"
-              value="Floor #4, Flat No. #406, Alluri Trade Center, Near KPHB Metro (Pillar #761), Hyderabad, Telangana — 500072"
-            />
+            <div className="sm:col-span-2 flex justify-center">
+              <div className="w-full max-w-2xl">
+                <InfoRow
+                  icon={MapPin}
+                  label="Registered Address"
+                  value="Floor #4, Flat No. #406, Alluri Trade Center, Near KPHB Metro (Pillar #761), Hyderabad, Telangana — 500072"
+                />
+              </div>
+            </div>
 
           </div>
         </div>
