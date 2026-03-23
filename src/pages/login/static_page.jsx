@@ -1,21 +1,35 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ChevronRight,
   Menu,
   X,
-  MapPin,
-  Mail,
-  Phone,
-  Building2,
+  ChevronRight,
   Shield,
-  ScrollText,
+  BadgeCheck,
+  Building2,
+  MapPin,
+  Phone,
+  Mail,
+  Clock,
+  Send,
   ExternalLink,
-  ChevronDown,
-  LayoutGrid,
+  Star,
+  Lightbulb,
+  Handshake,
+  Link2,
+  ScrollText,
+  Sprout,
+  Telescope,
+  Target,
+  Package,
+  Briefcase,
+  Coffee,
   TrendingUp,
+  HardHat,
+  ClipboardList,
   ArrowUp,
 } from "lucide-react";
+import { FaWhatsapp } from "react-icons/fa";
 
 /* ─────────────────────────────────────────── constants ── */
 const PRIMARY = "rgb(0,100,55)";
