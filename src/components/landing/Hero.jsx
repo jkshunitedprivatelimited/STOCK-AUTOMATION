@@ -14,39 +14,34 @@ const Hero = () => {
         <div className="absolute inset-0 bg-gradient-to-r from-green-950/95 via-green-950/70 to-green-900/40"></div>
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full pt-16 sm:pt-0">
         <div className="max-w-3xl" style={{ animation: "heroFadeIn 1.2s cubic-bezier(0.22,1,0.36,1) forwards" }}>
           
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-8">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-            <span className="text-white/90 text-sm font-medium tracking-wide">Registered Private Limited Company</span>
-          </div>
-
-          <h1 className="text-5xl md:text-7xl font-extrabold text-white leading-[1.1] mb-6 tracking-tight">
-            JKSH United<br />
-            <span className="text-green-300">Private Limited</span>
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-extrabold text-white leading-[1.1] sm:leading-[1.1] md:leading-[1.1] mb-4 sm:mb-6 tracking-tight">
+            JKSH United<br className="hidden sm:block" />
+            <span className="text-green-300"> Private Limited</span>
           </h1>
           
-          <p className="text-xl md:text-2xl text-white/85 mb-4 font-light leading-relaxed max-w-2xl">
+          <p className="text-lg sm:text-lg md:text-2xl text-white/85 mb-3 sm:mb-4 font-light leading-relaxed max-w-2xl">
             United by vision, driven by excellence.
           </p>
-          <p className="text-base md:text-lg text-white/70 mb-10 leading-relaxed max-w-2xl">
+          <p className="text-sm sm:text-base md:text-lg text-white/80 mb-8 sm:mb-10 leading-relaxed max-w-2xl">
             A growth-oriented consumer brand company building scalable, experience-driven businesses across India.
             Home to <strong className="text-white font-semibold">T Vanamm</strong> — India's modern tea café brand with 150+ franchise outlets nationwide.
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full">
             <a
               href="#about"
-              className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-full bg-green-600 text-white hover:bg-green-500 transition-colors duration-300 shadow-lg shadow-green-600/30"
+              className="w-full sm:w-auto inline-flex items-center justify-center px-6 sm:px-8 py-3.5 sm:py-4 text-base sm:text-lg font-bold rounded-full bg-green-600 text-white hover:bg-green-500 transition-colors duration-300 shadow-lg shadow-green-600/30"
             >
               Explore Company
             </a>
             <a
               href="#contact"
-              className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-full bg-white/10 text-white border border-white/30 backdrop-blur-md hover:bg-white/20 transition-colors duration-300 group"
+              className="w-full sm:w-auto inline-flex items-center justify-center px-6 sm:px-8 py-3.5 sm:py-4 text-base sm:text-lg font-bold rounded-full bg-white/10 text-white border border-white/30 backdrop-blur-md hover:bg-white/20 transition-colors duration-300 group"
             >
-              Contact Us <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform duration-300" size={20} />
+              Contact Us <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform duration-300" size={18} />
             </a>
           </div>
         </div>
