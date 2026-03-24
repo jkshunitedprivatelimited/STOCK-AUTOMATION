@@ -3,7 +3,8 @@ import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { supabase } from "./frontend_supabase/supabaseClient";
 
 /* AUTH */
-const StaticPage = lazy(() => import("./pages/login/static_page"));
+const LandingPage = lazy(() => import("./pages/landing/LandingPage"));
+const Careers = lazy(() => import("./pages/landing/Careers"));
 const Login = lazy(() => import("./pages/login/Login"));
 const RegisterUser = lazy(() => import("./pages/register/Registeruser"));
 
@@ -117,7 +118,8 @@ function App() {
               <Routes>
 
               {/* ================= PUBLIC ================= */}
-              <Route path="/" element={<StaticPage />} />
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/careers" element={<Careers />} />
               <Route path="/login" element={<Login />} />
 
               {/* ================= STORE MODE ================= */}
