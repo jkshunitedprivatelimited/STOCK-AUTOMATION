@@ -11,6 +11,7 @@ import {
   Edit2,
   Building2,
   ChevronDown,
+  ChevronUp,
   AlertTriangle,
   MapPin,
   User,
@@ -35,6 +36,10 @@ function CentralProfiles() {
   const [searchQuery, setSearchQuery] = useState("");
   const [companyFilter, setCompanyFilter] = useState("all");
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+
+  // Sorting state
+  const [sortField, setSortField] = useState(null);
+  const [sortDirection, setSortDirection] = useState("asc");
 
   // Modal States
   const [showEditModal, setShowEditModal] = useState(false);
@@ -102,6 +107,15 @@ function CentralProfiles() {
     return ["all", ...allCompanies];
   }, [allCompanies]);
 
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
   const sortedAndFilteredProfiles = useMemo(() => {
     const query = searchQuery.toLowerCase();
     let filtered = profiles.filter(p => {
@@ -115,9 +129,21 @@ function CentralProfiles() {
       return matchesSearch && matchesCompany;
     });
 
-    const roleOrder = { central: 1, stock: 2, franchise: 3 };
-    return filtered.sort((a, b) => (roleOrder[a.role] || 4) - (roleOrder[b.role] || 4));
-  }, [profiles, searchQuery, companyFilter]);
+    if (sortField) {
+      filtered.sort((a, b) => {
+        const valA = (a[sortField] || "").toString().toLowerCase();
+        const valB = (b[sortField] || "").toString().toLowerCase();
+        if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+        if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+        return 0;
+      });
+    } else {
+      const roleOrder = { central: 1, stock: 2, franchise: 3 };
+      filtered.sort((a, b) => (roleOrder[a.role] || 4) - (roleOrder[b.role] || 4));
+    }
+
+    return filtered;
+  }, [profiles, searchQuery, companyFilter, sortField, sortDirection]);
 
   const confirmDelete = (profile) => {
     setProfileToDelete(profile);
@@ -128,16 +154,46 @@ function CentralProfiles() {
     if (!profileToDelete) return;
     setDeleting(true);
 
-    // First, delete associated menus for this franchise_id
+    // Delete associated data for this franchise_id to avoid foreign key constraints
     if (profileToDelete.franchise_id) {
-      const { error: menuError } = await supabase
-        .from("menus")
-        .delete()
-        .eq("franchise_id", profileToDelete.franchise_id);
-      if (menuError) {
-        alert("Error deleting associated menus: " + menuError.message);
-        setDeleting(false);
-        return;
+      const fid = profileToDelete.franchise_id;
+
+      try {
+        // 1. Delete bills and bills_items_generated
+        const { data: menuData } = await supabase.from("menus").select("id").eq("franchise_id", fid);
+        const menuIds = menuData?.map(m => m.id) || [];
+        if (menuIds.length > 0) {
+          const chunkSize = 100;
+          for (let i = 0; i < menuIds.length; i += chunkSize) {
+            await supabase.from("bills_items_generated").delete().in("item_id", menuIds.slice(i, i + chunkSize));
+          }
+        }
+        await supabase.from("bills_generated").delete().eq("franchise_id", fid);
+
+        // 2. Delete invoices and invoice_items
+        const { data: invoices } = await supabase.from("invoices").select("id").eq("franchise_id", fid);
+        const invoiceIds = invoices?.map(i => i.id) || [];
+        if (invoiceIds.length > 0) {
+          const chunkSize = 100;
+          for (let i = 0; i < invoiceIds.length; i += chunkSize) {
+            await supabase.from("invoice_items").delete().in("invoice_id", invoiceIds.slice(i, i + chunkSize));
+          }
+        }
+        await supabase.from("invoices").delete().eq("franchise_id", fid);
+
+        // 3. Delete stocks and stock_requests
+        await supabase.from("stocks").delete().eq("franchise_id", fid);
+        await supabase.from("stock_requests").delete().eq("franchise_id", fid);
+
+        // 4. Finally, delete the menus
+        const { error: menuError } = await supabase.from("menus").delete().eq("franchise_id", fid);
+        if (menuError) {
+          alert("Error deleting associated menus: " + menuError.message);
+          setDeleting(false);
+          return;
+        }
+      } catch (err) {
+        console.error("Error cleaning up franchise data:", err);
       }
     }
 
@@ -170,10 +226,11 @@ function CentralProfiles() {
   const saveChanges = async () => {
     setSaving(true);
 
-    // If franchise_id changed, cascade update to menus table
+    // If franchise_id changed, cascade update to all related tables
     const oldFranchiseId = selectedProfile.franchise_id;
     const newFranchiseId = editForm.franchise_id;
     if (oldFranchiseId && newFranchiseId && oldFranchiseId !== newFranchiseId) {
+      // 1. Update menus
       const { error: menuError } = await supabase
         .from("menus")
         .update({ franchise_id: newFranchiseId })
@@ -183,6 +240,63 @@ function CentralProfiles() {
         setSaving(false);
         return;
       }
+
+      // 2. Update bills_generated
+      const { data: billsData, error: billsError } = await supabase
+        .from("bills_generated")
+        .update({ franchise_id: newFranchiseId })
+        .eq("franchise_id", oldFranchiseId)
+        .select("id");
+      if (billsError) {
+        alert("Failed to update bills: " + billsError.message);
+        setSaving(false);
+        return;
+      }
+      console.log(`[CASCADE] bills_generated: ${billsData?.length || 0} rows updated from "${oldFranchiseId}" → "${newFranchiseId}"`);
+
+      // 3. Update requests
+      const { data: requestsData, error: requestsError } = await supabase
+        .from("requests")
+        .update({ franchise_id: newFranchiseId })
+        .eq("franchise_id", oldFranchiseId)
+        .select("id");
+      if (requestsError) {
+        alert("Failed to update requests: " + requestsError.message);
+        setSaving(false);
+        return;
+      }
+      console.log(`[CASCADE] requests: ${requestsData?.length || 0} rows updated from "${oldFranchiseId}" → "${newFranchiseId}"`);
+
+      // 4. Update invoices
+      const { data: invoicesData, error: invoicesError } = await supabase
+        .from("invoices")
+        .update({ franchise_id: newFranchiseId })
+        .eq("franchise_id", oldFranchiseId)
+        .select("id");
+      if (invoicesError) {
+        alert("Failed to update invoices: " + invoicesError.message);
+        setSaving(false);
+        return;
+      }
+      console.log(`[CASCADE] invoices: ${invoicesData?.length || 0} rows updated from "${oldFranchiseId}" → "${newFranchiseId}"`);
+
+      // Warn user if cascade updated 0 rows (likely RLS blocking updates)
+      const totalCascaded = (billsData?.length || 0) + (requestsData?.length || 0) + (invoicesData?.length || 0);
+      if (totalCascaded === 0) {
+        console.warn("[CASCADE] WARNING: 0 rows were updated across all tables. RLS may be blocking updates.");
+      }
+
+      // Clear reports page caches so they pick up the new franchise_id
+      try {
+        const keysToRemove = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const key = sessionStorage.key(i);
+          if (key && (key.startsWith("reports_") || key === "reports_data_cache")) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(k => sessionStorage.removeItem(k));
+      } catch (_) { /* ignore storage errors */ }
     }
 
     const { error } = await supabase.from("profiles").update(editForm).eq("id", selectedProfile.id);
@@ -399,11 +513,36 @@ function CentralProfiles() {
               <thead>
                 <tr style={styles.thRow}>
                   <th style={styles.th}>S.NO</th>
-                  <th style={styles.th}>USER</th>
-                  <th style={styles.th}>COMPANY</th>
-                  <th style={styles.th}>FRANCHISE ID</th>
-                  <th style={styles.th}>ROLE</th>
-                  <th style={styles.th}>CONTACT</th>
+                  <th style={styles.th}>
+                    <div style={styles.sortableDiv} onClick={() => handleSort('name')}>
+                      <span>USER</span>
+                      {sortField === 'name' ? (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />) : <ChevronDown size={14} color="#ccc" />}
+                    </div>
+                  </th>
+                  <th style={styles.th}>
+                    <div style={styles.sortableDiv} onClick={() => handleSort('company')}>
+                      <span>COMPANY</span>
+                      {sortField === 'company' ? (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />) : <ChevronDown size={14} color="#ccc" />}
+                    </div>
+                  </th>
+                  <th style={styles.th}>
+                    <div style={styles.sortableDiv} onClick={() => handleSort('franchise_id')}>
+                      <span>FRANCHISE ID</span>
+                      {sortField === 'franchise_id' ? (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />) : <ChevronDown size={14} color="#ccc" />}
+                    </div>
+                  </th>
+                  <th style={styles.th}>
+                    <div style={styles.sortableDiv} onClick={() => handleSort('role')}>
+                      <span>ROLE</span>
+                      {sortField === 'role' ? (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />) : <ChevronDown size={14} color="#ccc" />}
+                    </div>
+                  </th>
+                  <th style={styles.th}>
+                    <div style={styles.sortableDiv} onClick={() => handleSort('phone')}>
+                      <span>CONTACT</span>
+                      {sortField === 'phone' ? (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />) : <ChevronDown size={14} color="#ccc" />}
+                    </div>
+                  </th>
                   <th style={{ ...styles.th, textAlign: 'center' }}>ACTION</th>
                 </tr>
               </thead>
@@ -503,7 +642,13 @@ function CentralProfiles() {
                 </div>
                 <div style={styles.inputGroup}>
                   <label style={styles.label}>Franchise ID</label>
-                  <input style={styles.modalInput} name="franchise_id" value={editForm.franchise_id || ""} onChange={handleInputChange} />
+                  <input 
+                    style={{ ...styles.modalInput, background: "#f3f4f6", cursor: "not-allowed", color: "#6b7280" }} 
+                    name="franchise_id" 
+                    value={editForm.franchise_id || ""} 
+                    readOnly 
+                    disabled 
+                  />
                 </div>
               </div>
 
@@ -672,12 +817,13 @@ const styles = {
   companySelect: { border: "none", background: "none", outline: "none", fontSize: "13px", fontWeight: "600", color: "#374151", cursor: "pointer", appearance: "none" },
   dateSection: { display: "flex", alignItems: "center", gap: "10px", background: "#f3f4f6", padding: "0 16px", borderRadius: "14px", border: `1px solid ${BORDER}`, height: "46px" },
   dateText: { fontSize: "12px", fontWeight: "700", color: "#4b5563", textTransform: "uppercase" },
-  searchWrapper: { display: "flex", alignItems: "center", gap: "12px", background: "#f9fafb", border: `1.5px solid ${BORDER}`, borderRadius: "16px", padding: "0 16px", height: "46px" },
-  searchInput: { border: "none", background: "none", padding: "14px 0", outline: "none", fontSize: "14px", width: "100%", fontWeight: "500" },
+  searchWrapper: { display: "flex", flex: 1, alignItems: "center", gap: "12px", background: "#f9fafb", border: `1.5px solid ${BORDER}`, borderRadius: "16px", padding: "0 16px", height: "46px" },
+  searchInput: { border: "none", background: "none", padding: "14px 0", outline: "none", fontSize: "14px", width: "100%", fontWeight: "500", textOverflow: "ellipsis" },
   tableWrapper: { border: `1px solid ${BORDER}`, borderRadius: "24px", overflow: "hidden" },
   table: { width: "100%", borderCollapse: "collapse", textAlign: "left" },
   thRow: { background: "#f3f4f6", borderBottom: `2px solid ${PRIMARY}` },
   th: { padding: "18px 24px", fontSize: "11px", fontWeight: "900", color: PRIMARY, letterSpacing: "1.5px" },
+  sortableDiv: { cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", userSelect: "none" },
   tr: { borderTop: `1px solid ${BORDER}`, transition: "background-color 0.2s ease" },
   td: { padding: "16px 24px", fontSize: "13px", color: "#111827", fontWeight: "500" },
   code: { background: "#f3f4f6", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", color: "#4b5563", fontFamily: "monospace" },
