@@ -22,7 +22,7 @@ const About = () => {
               
               <div className="space-y-5 text-gray-600 text-lg leading-relaxed">
                 <p>
-                  <strong className="text-gray-900 font-semibold">JKSH United Private Limited</strong> is a professionally managed Indian Private Limited company focused on building and scaling consumer-facing brands. Our flagship brand, <strong className="text-green-700">T Vanamm</strong>, is a modern tea café concept operating across 150+ franchise locations in India.
+                  <strong className="text-gray-900 font-semibold">JKSH United Private Limited</strong> is a professionally managed Indian Private Limited company focused on building and scaling consumer-facing brands. Our flagship brand, <strong className="text-green-700">T Vanamm</strong>, is a modern tea café concept operating across 250+ franchise locations in India.
                 </p>
                 <p>
                   We operate with a strong commitment to quality, innovation, and franchise excellence — empowering entrepreneurs to build profitable businesses under a trusted brand identity.
@@ -33,11 +33,10 @@ const About = () => {
               </div>
 
               {/* Quick Stats */}
-              <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="mt-10 grid grid-cols-2 md:grid-cols-3 gap-3">
                 {[
                   { label: "Company Type", value: "Pvt. Ltd.", icon: null },
                   { label: "MCA Registered", value: null, icon: <ShieldCheck className="text-green-600" size={22} /> },
-                  { label: "100% Compliance", value: null, icon: <CheckCircle2 className="text-green-600" size={22} /> },
                   { label: "India Origin", value: null, icon: <MapPin className="text-green-600" size={22} /> },
                 ].map((stat, i) => (
                   <div key={i} className="flex flex-col p-4 bg-gray-50 rounded-xl border border-gray-100 items-center text-center hover:bg-green-50 transition-colors duration-300 group cursor-default">
@@ -59,11 +58,15 @@ const About = () => {
                   src="/woman-picking-tea-leaves-by-hand-green-tea-farm.jpg" 
                   alt="Woman Picking Tea Leaves" 
                   className="rounded-2xl w-full h-72 md:h-80 object-cover shadow-xl translate-y-6 ring-4 ring-white hover:shadow-2xl transition-shadow duration-500"
+                  loading="lazy"
+                  decoding="async"
                 />
                 <img 
                   src="/tea-pickers-working-kerela-india.jpg" 
                   alt="Tea Pickers Kerala" 
                   className="rounded-2xl w-full h-72 md:h-80 object-cover shadow-xl ring-4 ring-white hover:shadow-2xl transition-shadow duration-500"
+                  loading="lazy"
+                  decoding="async"
                 />
               </div>
               {/* Floating accent */}
