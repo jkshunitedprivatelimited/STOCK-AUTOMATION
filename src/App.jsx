@@ -5,7 +5,7 @@ import { supabase } from "./frontend_supabase/supabaseClient";
 /* AUTH */
 const LandingPage = lazy(() => import("./pages/landing/LandingPage"));
 const Careers = lazy(() => import("./pages/landing/Careers"));
-const Login = lazy(() => import("./pages/login/Login"));
+const Login = lazy(() => import("./pages/landing/Login"));
 const RegisterUser = lazy(() => import("./pages/register/Registeruser"));
 
 /* STORE */
