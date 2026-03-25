@@ -105,6 +105,7 @@ function Reports() {
 
     useEffect(() => {
         const fetchFranchisesForCompany = async () => {
+            
             if (!selectedCompany || selectedCompany === "all") {
                 setDbFranchiseList([]);
                 return;
@@ -114,6 +115,7 @@ function Reports() {
                 const cacheKey = `reports_franchises_${selectedCompany}`;
                 const cached = safeGetCache(cacheKey);
                 if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+                    
                     setDbFranchiseList(cached.data);
                     return;
                 }
@@ -124,18 +126,26 @@ function Reports() {
                     .eq('company', selectedCompany)
                     .neq('franchise_id', null);
 
+                
+
                 if (error) throw error;
                 if (data) {
                     const unique = [...new Set(data.map(p => p.franchise_id).filter(Boolean))].sort();
+                    
                     setDbFranchiseList(unique);
                     safeSetCache(cacheKey, { data: unique, timestamp: Date.now() });
                 }
             } catch (e) {
-                console.error("Error fetching franchises:", e);
+                console.error("[FRANCHISE-DEBUG] Error fetching franchises:", e);
             }
         };
         fetchFranchisesForCompany();
     }, [selectedCompany]);
+
+    // Use only active franchise IDs from the database
+    const mergedFranchiseList = useMemo(() => {
+        return dbFranchiseList;
+    }, [dbFranchiseList]);
 
     // Save dropdown selections to session storage
     useEffect(() => {
@@ -172,34 +182,56 @@ function Reports() {
                 supabase.from("bills_items_generated").select("bill_id, item_name, qty, price"),
                 supabase.from("invoices").select("*").order("created_at", { ascending: false }),
                 supabase.from("invoice_items").select("invoice_id, item_name, quantity, price"),
-                supabase.from("profiles").select("franchise_id, branch_location, address, company, name")
+                supabase.from("profiles").select("id, franchise_id, branch_location, address, company, name")
             ]);
 
-            // Create Profile Map
+            // Create Profile Map (franchise_id → profile)
             const profileMap = {};
+            const profileByUserId = {};
             if (profilesReq.data) {
                 profilesReq.data.forEach(p => {
                     if (p.franchise_id) profileMap[p.franchise_id] = p;
+                    if (p.id) profileByUserId[p.id] = p;
                 });
             }
 
+            // Build a helper to find profile info for bills whose franchise_id
+            // doesn't match any current profile (e.g. after a franchise_id rename
+            // where the cascade update couldn't modify bills due to RLS).
+            // We match by the bill's created_by user_id → profile, then fall back to franchise_id.
+            const findProfileForRecord = (record) => {
+                const fid = record.franchise_id;
+                const createdBy = record.created_by;
+
+                if (createdBy && profileByUserId[createdBy]) return profileByUserId[createdBy];
+                if (fid && profileMap[fid]) return profileMap[fid];
+                
+                // Return null; enrichment will use "Unknown Company".
+                return null;
+            };
+
             // Merge Data & Attach Company Name
-            const enrichedBills = (billsReq.data || []).map(bill => ({
-                ...bill,
-                company: profileMap[bill.franchise_id]?.company || "Unknown Company",
-                owner_name: profileMap[bill.franchise_id]?.name || "",
-                mapped_location: profileMap[bill.franchise_id]?.branch_location || "",
-                mapped_address: profileMap[bill.franchise_id]?.address || "Location not updated"
-            }));
+            const enrichedBills = (billsReq.data || []).map(bill => {
+                const profile = findProfileForRecord(bill);
+                return {
+                    ...bill,
+                    franchise_id: profile?.franchise_id || bill.franchise_id,
+                    company: profile?.company || "Unknown Company",
+                    owner_name: profile?.name || "",
+                    mapped_location: profile?.branch_location || "",
+                    mapped_address: profile?.address || "Location not updated"
+                };
+            });
 
             const enrichedInvoices = (invReq.data || []).map(inv => {
-                const fid = inv.franchise_id;
+                const profile = findProfileForRecord(inv);
                 return {
                     ...inv,
-                    company: profileMap[fid]?.company || "Unknown Company",
-                    owner_name: profileMap[fid]?.name || "",
-                    mapped_location: profileMap[fid]?.branch_location || "",
-                    mapped_address: profileMap[fid]?.address || "Location not updated"
+                    franchise_id: profile?.franchise_id || inv.franchise_id,
+                    company: profile?.company || "Unknown Company",
+                    owner_name: profile?.name || "",
+                    mapped_location: profile?.branch_location || "",
+                    mapped_address: profile?.address || "Location not updated"
                 };
             });
 
@@ -661,7 +693,7 @@ function Reports() {
                                     disabled={selectedCompany === "all"}
                                 >
                                     <option value="all">{selectedCompany === "all" ? "Select Company" : "All Branches"}</option>
-                                    {dbFranchiseList.map(f => <option key={f} value={f}>ID: {f}</option>)}
+                                    {mergedFranchiseList.map(f => <option key={f} value={f}>ID: {f}</option>)}
                                 </select>
                                 <ChevronDown size={14} className="absolute right-4 text-black z-0 pointer-events-none" />
                             </div>
