@@ -104,9 +104,9 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <PrinterProvider>
-          <BrowserRouter>
+      <BrowserRouter>
+        <AuthProvider>
+          <PrinterProvider>
             <Suspense fallback={
               <div className="h-screen w-full flex items-center justify-center bg-slate-50">
                 <div className="flex flex-col items-center">
@@ -461,9 +461,9 @@ function App() {
 
               </Routes>
             </Suspense>
-          </BrowserRouter>
-        </PrinterProvider>
-      </AuthProvider>
+          </PrinterProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </ErrorBoundary>
   );
 }

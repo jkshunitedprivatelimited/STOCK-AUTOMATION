@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase, fetchWithRetry } from "../frontend_supabase/supabaseClient";
 
 const AuthContext = createContext({
@@ -15,6 +16,7 @@ export function AuthProvider({ children }) {
   const [role, setRole] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   const hydrate = async (supabaseUser) => {
     if (!supabaseUser) {
@@ -179,7 +181,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     setRole(null);
     setProfile(null);
-    window.location.href = '/';
+    navigate('/');
   };
 
   return (

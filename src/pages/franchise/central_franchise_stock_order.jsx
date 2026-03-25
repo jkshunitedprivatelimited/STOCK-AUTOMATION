@@ -18,13 +18,7 @@ const ITEMS_PER_INVOICE_PAGE = 15;
 const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID;
 
 const getSessionData = (key, defaultValue) => {
-  const stored = sessionStorage.getItem(key);
-  if (stored === null) return defaultValue;
-  try {
-    return JSON.parse(stored);
-  } catch {
-    return defaultValue;
-  }
+  return defaultValue;
 };
 
 const getPriceMultiplier = (baseUnit, selectedUnit) => {
@@ -280,36 +274,18 @@ function StockOrder() {
     return () => { document.body.style.overflow = ""; };
   }, [isCartOpen, orderSuccess]);
 
-  const [cart, setCart] = useState(() => {
-    try {
-      const savedCart = localStorage.getItem("stockOrderCart");
-      return savedCart ? JSON.parse(savedCart) : [];
-    } catch { return []; }
-  });
+  const [cart, setCart] = useState([]);
 
-  const [notifiedItems, setNotifiedItems] = useState(() => {
-    try {
-      const saved = localStorage.getItem("notifiedStockItems");
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch { return new Set(); }
-  });
+  const [notifiedItems, setNotifiedItems] = useState(() => new Set());
 
-  useEffect(() => { sessionStorage.setItem("stock_search", JSON.stringify(search)); }, [search]);
-  useEffect(() => { sessionStorage.setItem("stock_category", JSON.stringify(selectedCategory)); }, [selectedCategory]);
-  useEffect(() => { sessionStorage.setItem("stock_available", JSON.stringify(showOnlyAvailable)); }, [showOnlyAvailable]);
-  useEffect(() => { sessionStorage.setItem("stock_qty_input", JSON.stringify(qtyInput)); }, [qtyInput]);
-  useEffect(() => { sessionStorage.setItem("stock_selected_unit", JSON.stringify(selectedUnit)); }, [selectedUnit]);
-  useEffect(() => { sessionStorage.setItem("stock_print_data", JSON.stringify(printData)); }, [printData]);
-  useEffect(() => { sessionStorage.setItem("stock_last_order_id", JSON.stringify(lastOrderId)); }, [lastOrderId]);
-  useEffect(() => { sessionStorage.setItem("stock_order_success", JSON.stringify(orderSuccess)); }, [orderSuccess]);
+
 
   useEffect(() => {
     const handler = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(handler);
   }, [search]);
 
-  useEffect(() => { localStorage.setItem("stockOrderCart", JSON.stringify(cart)); }, [cart]);
-  useEffect(() => { localStorage.setItem("notifiedStockItems", JSON.stringify([...notifiedItems])); }, [notifiedItems]);
+
 
   const toastTimeoutsRef = useRef(new Map());
 
@@ -341,9 +317,11 @@ function StockOrder() {
     if (!isBackground) setLoadingStocks(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      let profileData = null;
       if (user) {
         // 1. Fetch User Profile
-        const { data: profileData } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+        const { data: pData } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+        profileData = pData;
         if (profileData) {
           setProfile(profileData);
           if (profileData.role === 'central' || profileData.franchise_id === 'CENTRAL') setIsCentral(true);
@@ -353,7 +331,7 @@ function StockOrder() {
             const { data: companyData } = await supabase
               .from('companies')
               .select('*')
-              .eq('company_name', profileData.company) // This ensures it finds T VANAMM if the profile says so
+              .eq('company_name', profileData.company)
               .single();
 
             if (companyData) {
@@ -364,7 +342,19 @@ function StockOrder() {
       }
 
       const { data: stockData } = await supabase.from("stocks").select("*").eq('online_store', true).order("item_name");
-      setStocks(stockData || []);
+
+      // Filter stocks by company_availability for franchise users
+      const isCentralUser = profileData?.role === 'central' || profileData?.franchise_id === 'CENTRAL';
+      const userCompany = profileData?.company?.trim()?.toLowerCase();
+
+      const visibleStocks = (stockData || []).filter(item => {
+        if (isCentralUser) return true;
+        const avail = (item.company_availability || '').trim();
+        if (!avail || avail === 'All') return true; // "All" or empty = visible to everyone
+        const companies = avail.split(',').map(c => c.trim().toLowerCase());
+        return userCompany && companies.includes(userCompany);
+      });
+      setStocks(visibleStocks);
     } catch {
       addToast('error', 'Sync Failed', 'Could not refresh inventory.');
     } finally { setLoadingStocks(false); }
@@ -450,12 +440,15 @@ function StockOrder() {
       let hasChanges = false;
       const updatedCart = prevCart.map(cartItem => {
         const liveItem = stocks.find(s => s.id === cartItem.id);
-        if (liveItem) {
-          const check = validateAndClampQty(liveItem, cartItem.qty, cartItem.cartUnit);
-          if (!check.valid && check.clamped !== cartItem.qty) {
-            hasChanges = true;
-            return { ...cartItem, qty: check.clamped, displayQty: check.clamped };
-          }
+        if (!liveItem) {
+          // Item no longer visible (company_availability changed or removed)
+          hasChanges = true;
+          return { ...cartItem, qty: 0 };
+        }
+        const check = validateAndClampQty(liveItem, cartItem.qty, cartItem.cartUnit);
+        if (!check.valid && check.clamped !== cartItem.qty) {
+          hasChanges = true;
+          return { ...cartItem, qty: check.clamped, displayQty: check.clamped };
         }
         return cartItem;
       }).filter(item => item.qty > 0);
@@ -655,7 +648,7 @@ function StockOrder() {
       const cartStockIds = cart.map(c => c.id);
       const { data: freshStocks, error: freshError } = await supabase
         .from('stocks')
-        .select('id, quantity, item_name, unit')
+        .select('id, quantity, item_name, unit, company_availability')
         .in('id', cartStockIds);
 
       if (freshError) throw new Error("Could not verify stock availability. Please try again.");
@@ -666,6 +659,15 @@ function StockOrder() {
         if (!fresh) {
           stockIssues.push(`${cartItem.item_name} is no longer available.`);
           continue;
+        }
+        // Verify company_availability still permits this franchise
+        const freshAvail = (fresh.company_availability || '').trim();
+        if (freshAvail && freshAvail !== 'All') {
+          const allowedCompanies = freshAvail.split(',').map(c => c.trim().toLowerCase());
+          if (!profile?.company || !allowedCompanies.includes(profile.company.trim().toLowerCase())) {
+            stockIssues.push(`${cartItem.item_name} is no longer available for your company.`);
+            continue;
+          }
         }
         const factor = getPriceMultiplier(fresh.unit, cartItem.cartUnit);
         const neededBaseQty = cartItem.qty * factor;
@@ -1013,7 +1015,7 @@ function StockOrder() {
               <p className="text-slate-500 font-bold text-xs mb-8">Your order #{lastOrderId} has been placed. An invoice has been sent to your email.</p>
               <div className="space-y-3">
                 <button onClick={() => window.print()} className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase text-[11px] tracking-widest flex items-center justify-center gap-2"><FiDownload /> Print Invoice</button>
-                <button onClick={() => { setOrderSuccess(false); setPrintData(null); setLastOrderId(null); setCart([]); setQtyInput({}); setIsCartOpen(false); sessionStorage.removeItem("stock_print_data"); sessionStorage.removeItem("stock_last_order_id"); sessionStorage.removeItem("stock_order_success"); sessionStorage.removeItem("stock_qty_input"); fetchData(); }} className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-[11px]">Continue Shopping</button>
+                <button onClick={() => { setOrderSuccess(false); setPrintData(null); setLastOrderId(null); setCart([]); setQtyInput({}); setIsCartOpen(false); fetchData(); }} className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-[11px]">Continue Shopping</button>
               </div>
             </div>
           </div>

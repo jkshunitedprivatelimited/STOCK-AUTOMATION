@@ -38,7 +38,7 @@ function CentralProfiles() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
 
   // Sorting state
-  const [sortField, setSortField] = useState(null);
+  const [sortField, setSortField] = useState("franchise_id");
   const [sortDirection, setSortDirection] = useState("asc");
 
   // Modal States
