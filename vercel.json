@@ -17,6 +17,10 @@
       "destination": "https://vfhwuncpzbsjegmedvjr.supabase.co/realtime/v1/:path*"
     },
     {
+      "source": "/api/resend/:path*",
+      "destination": "https://api.resend.com/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

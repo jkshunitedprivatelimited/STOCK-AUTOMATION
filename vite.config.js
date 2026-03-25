@@ -59,6 +59,11 @@ export default defineConfig({
             }
           });
         }
+      },
+      '/api/resend': {
+        target: 'https://api.resend.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/resend/, ''),
       }
     }
   }

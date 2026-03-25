@@ -11,24 +11,50 @@ const Contact = () => {
     setStatus("loading");
     
     try {
-      const { data, error } = await supabase.functions.invoke('send-enquiry-email', {
-        body: formData
+      // For local development, use the Vite proxy to directly to hit Resend.
+      // For production (Vercel), use our serverless function at /api/contact which securely holds the API key.
+      const isDev = import.meta.env.DEV;
+      const endpoint = isDev ? '/api/resend/emails' : '/api/contact';
+      
+      const headers = { 'Content-Type': 'application/json' };
+      
+      let payload;
+      if (isDev) {
+        // Local: Vite proxy to api.resend.com expects the raw Resend payload
+        // Using dedicated contact key
+        headers['Authorization'] = `Bearer ${import.meta.env.VITE_RESEND_CONTACT_API_KEY || import.meta.env.VITE_RESEND_API_KEY}`;
+        payload = {
+          from: 'JKSH Website <onboarding@resend.dev>',
+        to: ['jkshunitedpvtltd@gmail.com'], // Resend requires sending to your verified email until you add a custom domain (jkshunitedpvtltd@gmail.com requires domain verification)
+        subject: `Enquiry: ${formData.subject || "Website Contact"}`,
+          html: `
+            <h3>New Contact Form Submission</h3>
+            <p><strong>Name:</strong> ${formData.name}</p>
+            <p><strong>Email:</strong> ${formData.email}</p>
+            <p><strong>Subject:</strong> ${formData.subject}</p>
+            <p><strong>Message:</strong><br/>${formData.message}</p>
+          `
+        };
+      } else {
+        // Prod: Vercel Serverless Function expects the raw form data
+        payload = formData;
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
       });
 
-      if (error) {
-        throw new Error(error.message);
-      }
-      
-      const response = { ok: true };
+      const responseData = await response.json().catch(() => ({}));
 
-      if (response.ok) {
-        setStatus("success");
-        setFormData({ name: "", email: "", subject: "", message: "" });
-        setTimeout(() => setStatus("idle"), 4000);
-      } else {
-        setStatus("error");
-        setTimeout(() => setStatus("idle"), 4000);
+      if (!response.ok) {
+        throw new Error(responseData.message || 'Failed to send email');
       }
+
+      setStatus("success");
+      setFormData({ name: "", email: "", subject: "", message: "" });
+      setTimeout(() => setStatus("idle"), 4000);
     } catch (error) {
       console.error("Email Error:", error);
       setStatus("error");
