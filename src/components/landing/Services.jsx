@@ -69,7 +69,7 @@ const Services = () => {
                 {service.icon}
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-3 flex items-center gap-2">
-                {service.title} <span className="text-2xl" aria-hidden="true">{service.emoji}</span>
+                {service.title}
               </h3>
               <p className="text-gray-600 leading-relaxed">
                 {service.description}

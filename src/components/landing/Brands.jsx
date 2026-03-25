@@ -27,6 +27,8 @@ const Brands = () => {
                 src="/t_vanamm_logo.png" 
                 alt="T Vanamm Logo" 
                 className="max-w-full max-h-full object-contain"
+                loading="lazy"
+                decoding="async"
                 onError={(e) => { e.target.src = '/vite.svg'; e.target.alt = 'Logo missing' }}
               />
             </div>
@@ -34,12 +36,12 @@ const Brands = () => {
             <span className="text-sm font-bold text-emerald-600 tracking-widest uppercase mb-1">Flagship Brand</span>
             <span className="text-md font-semibold text-gray-700 mb-4">India's Modern Tea Café</span>
             <p className="text-gray-600 mb-6 flex-grow">
-              A modern tea café concept operating across 150+ franchise locations in India. Offering 120+ beverages including flavored teas, milk teas, herbal teas, iced teas, specialty drinks, and café-style quick bites.
+              A modern tea café concept operating across 250+ franchise locations in India. Offering 120+ beverages including flavored teas, milk teas, herbal teas, iced teas, specialty drinks, and café-style quick bites.
             </p>
             
             <div className="flex gap-4 mb-8 w-full justify-center">
               <div className="bg-white px-4 py-3 rounded-xl border border-gray-100 shadow-sm w-32">
-                <span className="block font-bold text-emerald-600 text-2xl mb-1">150+</span>
+                <span className="block font-bold text-emerald-600 text-2xl mb-1">250+</span>
                 <span className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold">Outlets</span>
               </div>
               <div className="bg-white px-4 py-3 rounded-xl border border-gray-100 shadow-sm w-32">
@@ -60,6 +62,8 @@ const Brands = () => {
                 src="/t_leaf_logo.png" 
                 alt="T Leaf Logo" 
                 className="max-w-full max-h-full object-contain"
+                loading="lazy"
+                decoding="async"
                 onError={(e) => { e.target.src = '/vite.svg'; e.target.alt = 'Logo missing' }}
               />
             </div>

@@ -61,7 +61,7 @@ const Values = () => {
                 {val.icon}
               </div>
               <h3 className="text-2xl font-bold text-gray-900 mb-3 flex items-center gap-2">
-                {val.title} <span className="text-xl" aria-hidden="true">{val.emoji}</span>
+                {val.title}
               </h3>
               <p className="text-gray-600 leading-relaxed">
                 {val.description}
