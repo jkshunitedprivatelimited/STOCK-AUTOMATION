@@ -115,8 +115,11 @@ function CentralProfiles() {
       return matchesSearch && matchesCompany;
     });
 
-    const roleOrder = { central: 1, stock: 2, franchise: 3 };
-    return filtered.sort((a, b) => (roleOrder[a.role] || 4) - (roleOrder[b.role] || 4));
+    return filtered.sort((a, b) => {
+      const fA = a.franchise_id || "";
+      const fB = b.franchise_id || "";
+      return fA.localeCompare(fB, undefined, { numeric: true, sensitivity: 'base' });
+    });
   }, [profiles, searchQuery, companyFilter]);
 
   const confirmDelete = (profile) => {
