@@ -10,6 +10,8 @@ const Hero = () => {
           src="/tea-estate.jpg"
           alt="Tea Pickers Working in Kerala"
           className="w-full h-full object-cover object-center scale-105"
+          fetchPriority="high"
+          decoding="async"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-green-950/95 via-green-950/70 to-green-900/40"></div>
       </div>
@@ -27,7 +29,7 @@ const Hero = () => {
           </p>
           <p className="text-sm sm:text-base md:text-lg text-white/80 mb-8 sm:mb-10 leading-relaxed max-w-2xl">
             A growth-oriented consumer brand company building scalable, experience-driven businesses across India.
-            Home to <strong className="text-white font-semibold">T Vanamm</strong> — India's modern tea café brand with 150+ franchise outlets nationwide.
+            Home to <strong className="text-white font-semibold">T Vanamm</strong> — India's modern tea café brand with 250+ franchise outlets nationwide.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full">

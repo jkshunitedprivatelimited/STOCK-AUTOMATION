@@ -11,6 +11,7 @@ const VisionMission = () => {
           alt="Tea Farm Background"
           className="w-full h-full object-cover object-center"
           loading="lazy"
+          decoding="async"
         />
         <div className="absolute inset-0 bg-green-950/85"></div>
       </div>
@@ -31,7 +32,7 @@ const VisionMission = () => {
                 <Telescope size={28} className="text-white" />
               </div>
               <h3 className="text-2xl md:text-3xl font-bold text-white">
-                Our Vision <span aria-hidden="true">🔭</span>
+                Our Vision
               </h3>
             </div>
             <p className="text-green-50/85 text-lg leading-relaxed font-light">
@@ -46,7 +47,7 @@ const VisionMission = () => {
                 <Target size={28} className="text-white" />
               </div>
               <h3 className="text-2xl md:text-3xl font-bold text-white">
-                Our Mission <span aria-hidden="true">🎯</span>
+                Our Mission
               </h3>
             </div>
             <p className="text-green-50/85 text-lg leading-relaxed font-light">

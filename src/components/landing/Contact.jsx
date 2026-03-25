@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Mail, Phone, MapPin, Clock } from "lucide-react";
+import { supabase } from "../../frontend_supabase/supabaseClient";
 
 const Contact = () => {
   const [formData, setFormData] = useState({ name: "", email: "", subject: "", message: "" });
@@ -10,25 +11,15 @@ const Contact = () => {
     setStatus("loading");
     
     try {
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${import.meta.env.VITE_RESEND_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          from: "JKSH Website <onboarding@resend.dev>",
-          to: ["jkshunitedpvtltd@gmail.com"],
-          subject: `Enquiry: ${formData.subject || "Website Contact"}`,
-          html: `
-            <h3>New Contact Form Submission</h3>
-            <p><strong>Name:</strong> ${formData.name}</p>
-            <p><strong>Email:</strong> ${formData.email}</p>
-            <p><strong>Subject:</strong> ${formData.subject}</p>
-            <p><strong>Message:</strong><br/>${formData.message}</p>
-          `
-        })
+      const { data, error } = await supabase.functions.invoke('send-enquiry-email', {
+        body: formData
       });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+      
+      const response = { ok: true };
 
       if (response.ok) {
         setStatus("success");
