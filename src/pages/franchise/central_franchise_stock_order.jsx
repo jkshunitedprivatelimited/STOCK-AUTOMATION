@@ -69,6 +69,27 @@ const loadRazorpayScript = () => {
   });
 };
 
+// Helper to load an image URL as base64 data URL (bypasses CORS for html2canvas)
+const loadImageAsBase64 = (url) => {
+  return new Promise((resolve) => {
+    if (!url) return resolve(null);
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      } catch { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+};
+
 
 
 const getEmailStyles = () => `
@@ -114,10 +135,10 @@ const StockSkeleton = () => (
   </div>
 );
 
-const FullPageInvoice = ({ data, profile, orderId, companyDetails, pageIndex, totalPages, itemsChunk }) => {
+const FullPageInvoice = ({ data, profile, orderId, companyDetails, pageIndex, totalPages, itemsChunk, logoBase64 }) => {
   if (!data) return null;
   const companyName = companyDetails?.company_name || "";
-  const currentLogo = companyDetails?.logo_url || null;
+  const currentLogo = logoBase64 || companyDetails?.logo_url || null;
 
   const invDate = new Date().toLocaleDateString('en-GB');
   const taxableAmount = data.subtotal || 0;
@@ -266,6 +287,7 @@ function StockOrder() {
   const [qtyInput, setQtyInput] = useState(() => getSessionData("stock_qty_input", {}));
   const [selectedUnit, setSelectedUnit] = useState(() => getSessionData("stock_selected_unit", {}));
   const [printData, setPrintData] = useState(() => getSessionData("stock_print_data", null));
+  const [cachedLogoBase64, setCachedLogoBase64] = useState(null);
   const [lastOrderId, setLastOrderId] = useState(() => getSessionData("stock_last_order_id", null));
   const [orderSuccess, setOrderSuccess] = useState(() => getSessionData("stock_order_success", false));
 
@@ -847,7 +869,9 @@ function StockOrder() {
           // Fix 5: DB succeeded — clear pending payment
           try { localStorage.removeItem('pendingPaymentId'); } catch { /* non-critical */ }
 
-          // --- Invoice PDF generation (unchanged) ---
+          // --- Invoice PDF generation (with pre-loaded base64 logo) ---
+          const logoB64 = await loadImageAsBase64(companyDetails?.logo_url);
+          setCachedLogoBase64(logoB64);
           const currentPrintChunks = [];
           for (let i = 0; i < calculations.items.length; i += ITEMS_PER_INVOICE_PAGE) {
             currentPrintChunks.push(calculations.items.slice(i, i + ITEMS_PER_INVOICE_PAGE));
@@ -862,6 +886,7 @@ function StockOrder() {
                 itemsChunk={chunk}
                 pageIndex={index}
                 totalPages={currentPrintChunks.length}
+                logoBase64={logoB64}
               />
             );
           }).join("");
@@ -1003,7 +1028,7 @@ function StockOrder() {
       <ToastContainer toasts={toasts} removeToast={removeToast} />
       <div className="print-only hidden print:block bg-white">
         {orderSuccess && printData && printChunks.map((chunk, index) => (
-          <FullPageInvoice key={index} data={printData} profile={profile} orderId={lastOrderId} companyDetails={companyDetails} itemsChunk={chunk} pageIndex={index} totalPages={printChunks.length} />
+          <FullPageInvoice key={index} data={printData} profile={profile} orderId={lastOrderId} companyDetails={companyDetails} itemsChunk={chunk} pageIndex={index} totalPages={printChunks.length} logoBase64={cachedLogoBase64} />
         ))}
       </div>
       <div className="min-h-[100dvh] bg-[#F3F4F6] pb-24 font-sans text-black relative print:hidden">
