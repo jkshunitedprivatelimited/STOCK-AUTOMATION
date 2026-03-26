@@ -24,6 +24,8 @@ function FranchiseMenu() {
     return sessionStorage.getItem("franchise_menu_category") || "ALL";
   });
 
+  const [selectedItems, setSelectedItems] = useState([]);
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -52,6 +54,7 @@ function FranchiseMenu() {
 
   useEffect(() => {
     sessionStorage.setItem("franchise_menu_category", selectedCategory);
+    setSelectedItems([]); // Clear selections when category changes
   }, [selectedCategory]);
 
   // --- Handlers ---
@@ -125,6 +128,75 @@ function FranchiseMenu() {
       await supabase.from("menus").delete().eq("id", id);
       fetchMenu();
     }
+  };
+
+  const handleDeleteCategory = async () => {
+    if (!franchiseId || selectedCategory === "ALL") return;
+    if (window.confirm(`Are you sure you want to delete all items in category "${selectedCategory}"? This cannot be undone.`)) {
+      try {
+        await supabase.from("menus").delete().eq("franchise_id", franchiseId).eq("category", selectedCategory);
+        setSelectedCategory("ALL");
+        fetchMenu();
+      } catch (err) {
+        alert("Error deleting category: " + err.message);
+      }
+    }
+  };
+
+  const handleDeleteWholeMenu = async () => {
+    if (!franchiseId) return;
+    if (window.confirm("Are you sure you want to delete the ENTIRE menu? This action cannot be undone and will remove all items.")) {
+      try {
+        await supabase.from("menus").delete().eq("franchise_id", franchiseId);
+        setSelectedCategory("ALL");
+        setSelectedItems([]);
+        fetchMenu();
+      } catch (err) {
+        alert("Error deleting whole menu: " + err.message);
+      }
+    }
+  };
+
+  const handleRenameCategory = async () => {
+    if (!franchiseId || selectedCategory === "ALL") return;
+    const newName = window.prompt(`Enter new name for category "${selectedCategory}":`, selectedCategory);
+    if (newName && newName.trim() !== "" && newName.trim().toUpperCase() !== selectedCategory) {
+      const finalName = newName.trim().toUpperCase();
+      try {
+        await supabase.from("menus").update({ category: finalName }).eq("franchise_id", franchiseId).eq("category", selectedCategory);
+        setSelectedCategory(finalName);
+        fetchMenu();
+      } catch (err) {
+        alert("Error renaming category: " + err.message);
+      }
+    }
+  };
+
+  const handleDeleteSelectedItems = async () => {
+    if (selectedItems.length === 0) return;
+    if (window.confirm("these items are getting deleted do you want to proceed okay?")) {
+      try {
+        await supabase.from("menus").delete().in("id", selectedItems);
+        setSelectedItems([]);
+        fetchMenu();
+      } catch (err) {
+        alert("Error deleting selected items: " + err.message);
+      }
+    }
+  };
+  
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedItems(filteredItems.map(item => item.id));
+    } else {
+      setSelectedItems([]);
+    }
+  };
+
+  const handleSelectItem = (id) => {
+    setSelectedItems(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
   };
 
   // Toggle function for mobile expansion
@@ -212,9 +284,33 @@ function FranchiseMenu() {
           </div>
         </div>
 
-        {/* --- TOTAL ITEMS CARD (Small & Right Aligned) --- */}
-        <div className="flex justify-end">
-          <div className="inline-flex items-center gap-3 bg-white border border-black/10 rounded-lg px-4 py-2 shadow-sm">
+        {/* --- ACTION BUTTONS & TOTAL ITEMS --- */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 w-full">
+          <div className="flex flex-wrap gap-3">
+            {selectedCategory === 'ALL' ? (
+              filteredItems.length > 0 && (
+                <button onClick={handleDeleteWholeMenu} className="px-4 py-2 bg-red-50 text-red-600 rounded-lg font-bold text-xs uppercase tracking-wider border border-red-100 hover:bg-red-100 transition-colors">
+                  Delete Whole Menu
+                </button>
+              )
+            ) : (
+              <>
+                <button onClick={handleDeleteCategory} className="px-4 py-2 bg-red-50 text-red-600 rounded-lg font-bold text-xs uppercase tracking-wider border border-red-100 hover:bg-red-100 transition-colors">
+                  Delete Category
+                </button>
+                <button onClick={handleRenameCategory} className="px-4 py-2 bg-blue-50 text-blue-600 rounded-lg font-bold text-xs uppercase tracking-wider border border-blue-100 hover:bg-blue-100 transition-colors">
+                  Rename Category
+                </button>
+              </>
+            )}
+            {selectedItems.length > 0 && (
+              <button onClick={handleDeleteSelectedItems} className="px-4 py-2 bg-red-600 text-white rounded-lg font-bold text-xs uppercase tracking-wider hover:bg-red-700 transition-colors shadow-sm">
+                Delete items selected
+              </button>
+            )}
+          </div>
+
+          <div className="inline-flex items-center gap-3 bg-white border border-black/10 rounded-lg px-4 py-2 shadow-sm whitespace-nowrap">
             <span className="text-[10px] font-black text-black/50 uppercase tracking-widest">
               {selectedCategory === 'ALL' ? 'Total Inventory' : `${selectedCategory}`}
             </span>
@@ -233,6 +329,14 @@ function FranchiseMenu() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="text-white" style={{ backgroundColor: brandGreen }}>
+                  <th className="px-4 py-4 w-12 text-center border-r border-white/10">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded border-white/20 text-emerald-600 focus:ring-emerald-600 cursor-pointer"
+                      checked={filteredItems.length > 0 && selectedItems.length === filteredItems.length}
+                      onChange={handleSelectAll}
+                    />
+                  </th>
                   <th className="px-6 py-4 text-xs font-black uppercase tracking-[0.2em] w-24 text-center border-r border-white/10">S/N</th>
                   <th className="px-6 py-4 text-xs font-black uppercase tracking-[0.2em] border-r border-white/10">Item Description</th>
                   <th className="px-6 py-4 text-xs font-black uppercase tracking-[0.2em] w-48 border-r border-white/10">Price (₹)</th>
@@ -241,10 +345,18 @@ function FranchiseMenu() {
               </thead>
               <tbody className="divide-y divide-black/5">
                 {loading ? (
-                  <tr><td colSpan="4" className="py-20 text-center text-black font-medium animate-pulse uppercase tracking-widest">Loading...</td></tr>
+                  <tr><td colSpan="5" className="py-20 text-center text-black font-medium animate-pulse uppercase tracking-widest">Loading...</td></tr>
                 ) : filteredItems.length > 0 ? (
                   filteredItems.map((item, index) => (
                     <tr key={item.id} className="group hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-5 text-center border-r border-black/5">
+                        <input 
+                          type="checkbox" 
+                          className="w-4 h-4 rounded border-black/20 text-emerald-600 focus:ring-emerald-600 cursor-pointer"
+                          checked={selectedItems.includes(item.id)}
+                          onChange={() => handleSelectItem(item.id)}
+                        />
+                      </td>
                       <td className="px-6 py-5 text-sm font-bold text-black text-center border-r border-black/5">{(index + 1).toString().padStart(2, '0')}</td>
                       <td className="px-6 py-5 border-r border-black/5">
                         <div className="flex flex-col">
@@ -263,7 +375,7 @@ function FranchiseMenu() {
                     </tr>
                   ))
                 ) : (
-                  <tr><td colSpan="4" className="py-24 text-center text-black font-bold uppercase tracking-widest opacity-50">No Items Found</td></tr>
+                  <tr><td colSpan="5" className="py-24 text-center text-black font-bold uppercase tracking-widest opacity-50">No Items Found</td></tr>
                 )}
               </tbody>
             </table>
@@ -286,6 +398,16 @@ function FranchiseMenu() {
                     {/* Header Row (Always Visible) */}
                     <div className="p-4 flex items-center justify-between">
                       <div className="flex items-center gap-3">
+                        {/* Checkbox */}
+                        <div className="flex items-center justify-center mr-1" onClick={(e) => e.stopPropagation()}>
+                          <input 
+                            type="checkbox" 
+                            className="w-5 h-5 rounded border-black/20 text-emerald-600 focus:ring-emerald-600 cursor-pointer"
+                            checked={selectedItems.includes(item.id)}
+                            onChange={() => handleSelectItem(item.id)}
+                          />
+                        </div>
+
                         {/* S/N Badge */}
                         <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-black/5 text-[10px] font-black text-black/60">
                           {(index + 1).toString().padStart(2, '0')}

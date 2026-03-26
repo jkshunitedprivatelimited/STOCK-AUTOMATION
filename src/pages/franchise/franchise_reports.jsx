@@ -4,7 +4,7 @@ import { supabase } from "../../frontend_supabase/supabaseClient";
 import {
   ArrowLeft, Calendar, ChevronRight, ChevronDown,
   Hash, Clock, Download, AlertTriangle, AlertOctagon, CheckCircle2, RefreshCw,
-  ArrowUp, ArrowDown, ArrowUpDown
+  ArrowUp, ArrowDown, ArrowUpDown, Trash2
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -54,6 +54,11 @@ function FranchiseAnalytics() {
   const [topItems, setTopItems] = useState([]);
   const [bills, setBills] = useState([]);
   const [expandedBill, setExpandedBill] = useState(null);
+
+  // --- DELETE STATE ---
+  const [billToDelete, setBillToDelete] = useState(null); // bill object for full deletion confirm
+  const [itemDeleteContext, setItemDeleteContext] = useState(null); // { bill, item, items } for discount re-eval
+  const [deleting, setDeleting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
 
@@ -61,6 +66,8 @@ function FranchiseAnalytics() {
 
   const [oldestRecordDate, setOldestRecordDate] = useState(null);
   const [daysUntilDeletion, setDaysUntilDeletion] = useState(null);
+
+  const [feature1Enabled, setFeature1Enabled] = useState(false);
 
   // --- DATA FETCHING (defined before effects that use them) ---
   const fetchFranchiseProfile = useCallback(async () => {
@@ -178,6 +185,137 @@ function FranchiseAnalytics() {
   const handleRefresh = useCallback(() => {
     fetchData(true);
   }, [fetchData]);
+
+  // --- CACHE INVALIDATION HELPER ---
+  const clearAnalyticsCaches = useCallback(() => {
+    const keysToRemove = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && (k.startsWith(ANALYTICS_STORAGE_PREFIX) || k.startsWith("bill_items_"))) keysToRemove.push(k);
+    }
+    keysToRemove.forEach(k => sessionStorage.removeItem(k));
+  }, []);
+
+  // --- DELETE ENTIRE BILL ---
+  const handleDeleteBill = useCallback(async (bill) => {
+    setDeleting(true);
+    try {
+      // Delete child items first
+      const { error: itemsError } = await supabase
+        .from("bills_items_generated")
+        .delete()
+        .eq("bill_id", bill.id);
+      if (itemsError) throw itemsError;
+
+      // Delete the bill itself
+      const { error: billError } = await supabase
+        .from("bills_generated")
+        .delete()
+        .eq("id", bill.id);
+      if (billError) throw billError;
+
+      // Update local state
+      setBills(prev => prev.filter(b => b.id !== bill.id));
+      if (expandedBill === bill.id) setExpandedBill(null);
+      setBillToDelete(null);
+      clearAnalyticsCaches();
+    } catch (err) {
+      console.error("Delete bill error:", err);
+      alert("Failed to delete bill. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
+  }, [expandedBill, clearAnalyticsCaches]);
+
+  // --- DELETE SINGLE ITEM (no discount or zero discount) ---
+  const handleDeleteItemDirect = useCallback(async (bill, item, allItems) => {
+    // If it's the last item, delete the entire bill
+    if (allItems.length <= 1) {
+      setBillToDelete(bill);
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      // Delete the item
+      const { error: delError } = await supabase
+        .from("bills_items_generated")
+        .delete()
+        .eq("id", item.id);
+      if (delError) throw delError;
+
+      // Recalculate bill totals
+      const itemTotal = item.total ? Number(item.total) : (Number(item.qty ?? 0) * Number(item.price ?? 0));
+      const newSubtotal = Number(bill.subtotal ?? 0) - itemTotal;
+      const newTotal = newSubtotal - Number(bill.discount ?? 0);
+
+      const { error: updateError } = await supabase
+        .from("bills_generated")
+        .update({ subtotal: newSubtotal, total: newTotal })
+        .eq("id", bill.id);
+      if (updateError) throw updateError;
+
+      // Update local bills state
+      setBills(prev => prev.map(b => b.id === bill.id ? { ...b, subtotal: newSubtotal, total: newTotal } : b));
+      clearAnalyticsCaches();
+    } catch (err) {
+      console.error("Delete item error:", err);
+      alert("Failed to delete item. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
+  }, [clearAnalyticsCaches]);
+
+  // --- ITEM DELETE ENTRY POINT (decides modal vs direct) ---
+  const handleItemDeleteRequest = useCallback((bill, item, allItems) => {
+    // Last item -> confirm full bill deletion
+    if (allItems.length <= 1) {
+      setBillToDelete(bill);
+      return;
+    }
+    // Bill has discount -> show discount re-evaluation modal
+    if (Number(bill.discount ?? 0) > 0) {
+      setItemDeleteContext({ bill, item, items: allItems });
+      return;
+    }
+    // No discount -> delete directly
+    handleDeleteItemDirect(bill, item, allItems);
+  }, [handleDeleteItemDirect]);
+
+  // --- CONFIRM ITEM DELETE WITH NEW DISCOUNT ---
+  const handleConfirmItemDeleteWithDiscount = useCallback(async (newDiscount) => {
+    if (!itemDeleteContext) return;
+    const { bill, item } = itemDeleteContext;
+
+    setDeleting(true);
+    try {
+      const { error: delError } = await supabase
+        .from("bills_items_generated")
+        .delete()
+        .eq("id", item.id);
+      if (delError) throw delError;
+
+      const itemTotal = item.total ? Number(item.total) : (Number(item.qty ?? 0) * Number(item.price ?? 0));
+      const newSubtotal = Number(bill.subtotal ?? 0) - itemTotal;
+      const finalDiscount = Math.min(newDiscount, newSubtotal);
+      const newTotal = newSubtotal - finalDiscount;
+
+      const { error: updateError } = await supabase
+        .from("bills_generated")
+        .update({ subtotal: newSubtotal, discount: finalDiscount, total: newTotal })
+        .eq("id", bill.id);
+      if (updateError) throw updateError;
+
+      setBills(prev => prev.map(b => b.id === bill.id ? { ...b, subtotal: newSubtotal, discount: finalDiscount, total: newTotal } : b));
+      setItemDeleteContext(null);
+      clearAnalyticsCaches();
+    } catch (err) {
+      console.error("Delete item with discount error:", err);
+      alert("Failed to delete item. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
+  }, [itemDeleteContext, clearAnalyticsCaches]);
 
   // --- EFFECTS ---
   useEffect(() => {
@@ -551,6 +689,59 @@ function FranchiseAnalytics() {
               )}
             </div>
 
+            {/* FEATURE 1 TOGGLE - Only for store sales */}
+            {activeTab === "store" && (
+              <div className="toggle-card" style={{
+                background: '#fff',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                padding: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+              }}>
+                <div>
+                  <h4 style={{ margin: 0, color: '#1e293b', fontSize: '15px', fontWeight: '600', marginBottom: '4px' }}>Store Access for Bill Edits</h4>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
+                    Enabling this toggle will allow the staff/owner to perform exchange or delete bills from the store login dashboard.
+                  </p>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px', position: 'relative' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '500', color: feature1Enabled ? '#10b981' : '#94a3b8' }}>
+                    {feature1Enabled ? 'Yes' : 'No'}
+                  </span>
+                  <div style={{
+                    position: 'relative',
+                    width: '40px',
+                    height: '24px',
+                    background: feature1Enabled ? '#10b981' : '#cbd5e1',
+                    borderRadius: '12px',
+                    transition: 'background 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '2px'
+                  }}>
+                    <input 
+                      type="checkbox" 
+                      style={{ opacity: 0, position: 'absolute', width: '100%', height: '100%', cursor: 'pointer', margin: 0, zIndex: 2 }}
+                      checked={feature1Enabled}
+                      onChange={(e) => setFeature1Enabled(e.target.checked)}
+                    />
+                    <div style={{
+                      width: '20px',
+                      height: '20px',
+                      background: '#fff',
+                      borderRadius: '50%',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                      transform: feature1Enabled ? 'translateX(16px)' : 'translateX(0)',
+                      transition: 'transform 0.2s'
+                    }} />
+                  </div>
+                </label>
+              </div>
+            )}
+
             <div className="card list-area">
               <div className="card-header">
                 <h3>{activeTab === "store" ? "Transactions" : "Invoices"}</h3>
@@ -563,6 +754,8 @@ function FranchiseAnalytics() {
                 <span className="th-date th-sortable" onClick={() => handleSort('created_at')}>Date & Time <SortIcon columnKey="created_at" /></span>
                 {activeTab === "store" && <span className="th-mode th-sortable" onClick={() => handleSort('payment_mode')}>Mode <SortIcon columnKey="payment_mode" /></span>}
                 <span className="th-amt th-sortable" onClick={() => handleSort('amount')}>Amount <SortIcon columnKey="amount" /></span>
+                <span className="th-disc th-sortable" onClick={() => handleSort('discount')}>Discount <SortIcon columnKey="discount" /></span>
+                {activeTab === "store" && <span className="th-action">Action</span>}
                 <span className="th-icon"></span>
               </div>
 
@@ -586,21 +779,62 @@ function FranchiseAnalytics() {
                         </div>
                       )}
                       <div className="col amt-col">₹{Number(bill.total ?? bill.total_amount ?? 0).toLocaleString('en-IN')}</div>
+                      <div className="col disc-col">
+                        {Number(bill.discount ?? 0) > 0 ? <span style={{color: '#ef4444'}}>-₹{Number(bill.discount).toLocaleString('en-IN')}</span> : <span style={{color: '#94a3b8'}}>₹0</span>}
+                      </div>
+                      {activeTab === "store" && (
+                        <div className="col action-col">
+                          <button
+                            className="delete-icon-btn"
+                            title="Delete this bill"
+                            onClick={(e) => { e.stopPropagation(); setBillToDelete(bill); }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      )}
                       <div className="col arrow-col">{expandedBill === bill.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</div>
                     </div>
 
                     {expandedBill === bill.id && (
                       <div className="item-details">
-                        <BillItems billId={bill.id} type={activeTab} />
+                        <BillItems
+                          billId={bill.id}
+                          type={activeTab}
+                          bill={bill}
+                          onDeleteItem={activeTab === "store" ? handleItemDeleteRequest : undefined}
+                        />
                       </div>
                     )}
                   </div>
                 ))}
               </div>
             </div>
+
           </div>
         )}
       </div>
+
+      {/* --- CONFIRMATION MODAL: Delete Entire Bill --- */}
+      {billToDelete && (
+        <ConfirmDeleteModal
+          title="Delete Bill"
+          message="This will permanently delete this bill and all its items. This action cannot be undone."
+          loading={deleting}
+          onConfirm={() => handleDeleteBill(billToDelete)}
+          onCancel={() => setBillToDelete(null)}
+        />
+      )}
+
+      {/* --- DISCOUNT RE-EVALUATION MODAL --- */}
+      {itemDeleteContext && (
+        <DiscountReEvalModal
+          context={itemDeleteContext}
+          loading={deleting}
+          onConfirm={handleConfirmItemDeleteWithDiscount}
+          onCancel={() => setItemDeleteContext(null)}
+        />
+      )}
 
       <style>{`
         :root { --primary: ${PRIMARY}; --excel: ${EXCEL_GREEN}; --bg: #f8fafc; --card-bg: #ffffff; --text-main: #0f172a; --text-sub: #64748b; --border: #e2e8f0; }
@@ -675,35 +909,42 @@ function FranchiseAnalytics() {
         .ti-row .ti-qty { font-size: 12px; color: var(--primary); }
         .ti-rank { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; font-size: 10px; font-weight: 800; }
         .ti-color-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .toggle-card { grid-column: 1 / -1; margin-bottom: 0; }
         .list-area { display: flex; flex-direction: column; height: 100%; min-height: 400px; }
-        .table-header-row { display: flex; padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid var(--border); }
-        .table-header-row span { font-size: 10px; font-weight: 700; color: var(--text-sub); text-transform: uppercase; }
+        .table-header-row { display: flex; align-items: center; padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid var(--border); min-width: 0; }
+        .table-header-row span { font-size: 10px; font-weight: 700; color: var(--text-sub); text-transform: uppercase; white-space: nowrap; }
         .th-sortable { cursor: pointer; display: flex; align-items: center; gap: 4px; user-select: none; transition: color 0.15s; }
         .th-sortable:hover { color: var(--text-main); }
-        .th-sno { width: 30px; text-align: center; }
-        .th-id { width: 60px; }
-        .th-date { flex: 1; justify-content: center; }
-        .th-mode { width: 60px; text-align: center; justify-content: center; }
-        .th-amt { width: 80px; text-align: right; justify-content: flex-end; }
-        .th-icon { width: 24px; }
-        .list-scroll { overflow-y: auto; max-height: 600px; }
+        .th-sno { width: 30px; display: none; justify-content: center; }
+        .th-id { width: 80px; display: none; }
+        .th-date { flex: 1; justify-content: flex-start; min-width: 0; }
+        .th-mode { width: auto; flex-shrink: 0; text-align: center; justify-content: center; }
+        .th-amt { width: auto; flex-shrink: 0; text-align: right; justify-content: flex-end; }
+        .th-disc { display: none; width: 70px; text-align: right; justify-content: flex-end; }
+        .th-icon { width: 24px; flex-shrink: 0; }
+        .th-action { width: 36px; flex-shrink: 0; display: flex; justify-content: center; }
+        .list-scroll { overflow-y: auto; max-height: 600px; overflow-x: hidden; }
         .list-item { border-bottom: 1px solid var(--border); transition: background 0.2s; }
         .list-item:active { background: #f8fafc; }
-        .item-summary { display: flex; padding: 14px 16px; align-items: center; cursor: pointer; }
-        .col { display: flex; align-items: center; }
-        .sno-col { width: 30px; justify-content: center; font-size: 11px; font-weight: 700; color: #94a3b8; }
-        .id-col { width: 60px; gap: 6px; }
+        .item-summary { display: flex; padding: 12px 12px; align-items: center; cursor: pointer; min-width: 0; }
+        .col { display: flex; align-items: center; min-width: 0; }
+        .sno-col { width: 30px; display: none; justify-content: center; font-size: 11px; font-weight: 700; color: #94a3b8; }
+        .id-col { width: 80px; gap: 6px; display: none; }
         .icon-box { display: none; }
         .id-text { font-size: 12px; font-weight: 700; color: var(--text-main); }
-        .date-col { flex: 1; flex-direction: column; align-items: center; justify-content: center; }
+        .date-col { flex: 1; flex-direction: column; align-items: flex-start; justify-content: center; min-width: 0; }
         .d-date { font-size: 12px; font-weight: 600; color: var(--text-main); }
         .d-time { font-size: 10px; color: var(--text-sub); display: flex; align-items: center; gap: 3px; }
-        .mode-col { width: 60px; justify-content: center; }
-        .mode-badge { font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 6px; text-transform: uppercase; }
+        .mode-col { width: auto; flex-shrink: 0; justify-content: center; margin: 0 4px; }
+        .mode-badge { font-size: 9px; font-weight: 800; padding: 3px 6px; border-radius: 6px; text-transform: uppercase; white-space: nowrap; }
         .mode-badge.upi { background: #eff6ff; color: #2563eb; }
         .mode-badge.cash { background: #f0fdf4; color: #059669; }
-        .amt-col { width: 80px; justify-content: flex-end; font-size: 13px; font-weight: 700; color: var(--primary); }
-        .arrow-col { width: 24px; justify-content: flex-end; color: #cbd5e1; }
+        .amt-col { width: auto; flex-shrink: 0; justify-content: flex-end; font-size: 13px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+        .disc-col { display: none; width: 70px; justify-content: flex-end; font-size: 12px; font-weight: 600; }
+        .action-col { width: 36px; flex-shrink: 0; display: flex; justify-content: center; }
+        .delete-icon-btn { display: flex; align-items: center; justify-content: center; background: none; border: 1px solid transparent; color: #ef4444; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .delete-icon-btn:hover { color: #dc2626; background: #fef2f2; border-color: #fecaca; }
+        .arrow-col { width: 24px; flex-shrink: 0; justify-content: flex-end; color: #cbd5e1; }
         .item-details { background: #f8fafc; padding: 12px 16px; border-top: 1px solid var(--border); }
         .no-data { text-align: center; padding: 20px; font-size: 12px; color: var(--text-sub); font-style: italic; }
         .loader-container { padding: 40px; text-align: center; color: var(--text-sub); font-weight: 500; font-size: 14px; }
@@ -725,16 +966,25 @@ function FranchiseAnalytics() {
           .controls-wrapper { flex-direction: row; justify-content: space-between; align-items: center; }
           .right-controls { flex-direction: row; align-items: center; }
           .tab-group, .date-group { width: auto; }
-          .dashboard-grid { grid-template-columns: 2fr 1fr; grid-template-rows: auto auto auto; }
+          .dashboard-grid { grid-template-columns: 2fr 1fr; grid-template-rows: auto auto auto auto; }
           .revenue-area { grid-column: 1 / 2; grid-row: 1 / 2; }
           .stats-row { grid-column: 1 / 2; grid-row: 2 / 3; }
           .pie-area { grid-column: 2 / 3; grid-row: 1 / 3; }
-          .list-area { grid-column: 1 / -1; grid-row: 3 / 4; }
+          .toggle-card { grid-column: 1 / -1; grid-row: 3 / 4; }
+          .list-area { grid-column: 1 / -1; }
           .icon-box { display: flex; align-items: center; justify-content: center; background: #e0f2fe; color: #0284c7; width: 24px; height: 24px; border-radius: 6px; }
-          .th-sno, .sno-col { width: 50px; font-size: 12px; }
-          .id-col { width: 120px; }
+          .th-sno { display: flex; width: 50px; }
+          .sno-col { display: flex; width: 50px; font-size: 12px; }
+          .th-id { display: flex; }
+          .id-col { display: flex; width: 120px; }
+          .th-disc { display: flex; }
+          .disc-col { display: flex; width: 80px; }
           .th-mode, .mode-col { width: 80px; }
-          .date-col { flex-direction: row; gap: 10px; }
+          .th-amt, .amt-col { width: 80px; }
+          .th-action, .action-col { width: 44px; }
+          .date-col { flex-direction: row; gap: 10px; align-items: center; }
+          .item-summary { padding: 14px 16px; }
+          .mode-badge { font-size: 10px; padding: 3px 8px; }
         }
         @media (min-width: 1024px) {
            .main-container { padding: 24px; }
@@ -742,39 +992,93 @@ function FranchiseAnalytics() {
            .chart-wrapper { height: 300px; }
            .pie-wrapper { height: 200px; }
         }
+
+        /* --- DELETE MODALS --- */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px); animation: fadeIn 0.15s ease; }
+        .modal-box { background: #fff; border-radius: 16px; padding: 24px; width: 90%; max-width: 400px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: slideUp 0.2s ease; }
+        .modal-title { margin: 0 0 8px; font-size: 16px; font-weight: 800; color: var(--text-main); }
+        .modal-msg { font-size: 13px; color: var(--text-sub); line-height: 1.6; margin: 0 0 20px; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+        .modal-btn { padding: 8px 18px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; border: none; transition: all 0.2s; }
+        .modal-btn.cancel { background: #f1f5f9; color: var(--text-sub); }
+        .modal-btn.cancel:hover { background: #e2e8f0; }
+        .modal-btn.danger { background: #ef4444; color: #fff; }
+        .modal-btn.danger:hover { background: #dc2626; }
+        .modal-btn.confirm { background: var(--primary); color: #fff; }
+        .modal-btn.confirm:hover { opacity: 0.9; }
+        .modal-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        /* --- DISCOUNT RE-EVAL MODAL --- */
+        .discount-modal-box { background: #fff; border-radius: 16px; padding: 24px; width: 90%; max-width: 440px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: slideUp 0.2s ease; }
+        .dm-item-info { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+        .dm-item-info .dm-trash-icon { color: #ef4444; }
+        .dm-item-info span { font-size: 12px; color: #991b1b; font-weight: 600; }
+        .dm-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 13px; }
+        .dm-label { color: var(--text-sub); font-weight: 600; }
+        .dm-value { font-weight: 700; color: var(--text-main); }
+        .dm-divider { height: 1px; background: var(--border); margin: 12px 0; }
+        .dm-discount-section { margin: 12px 0; }
+        .dm-discount-header { font-size: 12px; font-weight: 700; color: var(--text-main); margin-bottom: 8px; }
+        .dm-toggle-group { display: flex; background: #f1f5f9; padding: 2px; border-radius: 8px; margin-bottom: 10px; }
+        .dm-toggle-btn { flex: 1; border: none; background: none; padding: 6px; font-size: 11px; font-weight: 700; color: var(--text-sub); border-radius: 6px; cursor: pointer; transition: 0.2s; }
+        .dm-toggle-btn.active { background: #fff; color: var(--text-main); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .dm-input-row { display: flex; align-items: center; gap: 8px; }
+        .dm-input { flex: 1; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 14px; font-weight: 600; outline: none; transition: border-color 0.2s; }
+        .dm-input:focus { border-color: var(--primary); }
+        .dm-input-prefix { font-size: 14px; font-weight: 700; color: var(--text-sub); }
+        .dm-preview { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 12px; margin-top: 12px; }
+        .dm-preview-row { display: flex; justify-content: space-between; font-size: 13px; padding: 2px 0; }
+        .dm-preview-total { font-weight: 800; color: var(--primary); font-size: 15px; }
+        .dm-error { color: #ef4444; font-size: 11px; font-weight: 600; margin-top: 6px; }
+
+        /* --- BILL ITEMS DELETE BUTTON --- */
+        .bi-delete-btn { display: flex; align-items: center; justify-content: center; background: none; border: none; color: #cbd5e1; cursor: pointer; padding: 2px; border-radius: 4px; transition: all 0.2s; }
+        .bi-delete-btn:hover { color: #ef4444; background: #fef2f2; }
       `}</style>
     </div>
   );
 }
 
-function BillItems({ billId, type }) {
+function BillItems({ billId, type, bill, onDeleteItem }) {
   const [items, setItems] = useState([]);
+  const [fetchKey, setFetchKey] = useState(0);
 
   useEffect(() => {
     let mounted = true;
-    const fetch = async () => {
-      const cacheKey = `bill_items_${billId}`;
-      const cachedItems = sessionStorage.getItem(cacheKey);
-
-      if (cachedItems) {
-        if (mounted) setItems(JSON.parse(cachedItems));
-        return;
-      }
-
+    const doFetch = async () => {
       const table = type === "store" ? "bills_items_generated" : "invoice_items";
       const key = type === "store" ? "bill_id" : "invoice_id";
+
+      // Always fetch fresh if fetchKey > 0 (means item was deleted)
+      if (fetchKey === 0) {
+        const cacheKey = `bill_items_${billId}`;
+        const cachedItems = sessionStorage.getItem(cacheKey);
+        if (cachedItems) {
+          if (mounted) setItems(JSON.parse(cachedItems));
+          return;
+        }
+      }
 
       const { data } = await supabase.from(table).select("*").eq(key, billId);
 
       if (mounted) {
         const fetchedData = data || [];
         setItems(fetchedData);
-        safeSetSessionStorage(cacheKey, JSON.stringify(fetchedData));
+        safeSetSessionStorage(`bill_items_${billId}`, JSON.stringify(fetchedData));
       }
     };
-    fetch();
+    doFetch();
     return () => { mounted = false; };
-  }, [billId, type]);
+  }, [billId, type, fetchKey]);
+
+  // Re-fetch items when the bill's subtotal changes (means an item was deleted)
+  useEffect(() => {
+    if (bill) setFetchKey(k => k + 1);
+  }, [bill?.subtotal]);
+
+  const isStore = type === "store";
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '250px', overflowY: 'auto', paddingRight: '4px' }}>
@@ -782,6 +1086,7 @@ function BillItems({ billId, type }) {
         <span style={{ flex: 2 }}>Item Name</span>
         <span style={{ flex: 1, textAlign: 'center' }}>Qty</span>
         <span style={{ flex: 1, textAlign: 'right' }}>Subtotal</span>
+        {isStore && onDeleteItem && <span style={{ width: 28 }}></span>}
       </div>
       {items.map((i, idx) => {
         const qty = Number(i.qty ?? i.quantity ?? 0);
@@ -789,13 +1094,168 @@ function BillItems({ billId, type }) {
         const lineTotal = i.total ? Number(i.total) : (qty * price);
 
         return (
-          <div key={idx} style={{ display: 'flex', fontSize: '12px', alignItems: 'center', padding: '4px 0' }}>
+          <div key={i.id || idx} style={{ display: 'flex', fontSize: '12px', alignItems: 'center', padding: '4px 0' }}>
             <span style={{ flex: 2, fontWeight: 600, color: '#334155' }}>{i.item_name}</span>
             <span style={{ flex: 1, textAlign: 'center', color: '#64748b' }}>{qty}</span>
             <span style={{ flex: 1, textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>₹{lineTotal.toLocaleString('en-IN')}</span>
+            {isStore && onDeleteItem && (
+              <span style={{ width: 28, display: 'flex', justifyContent: 'center' }}>
+                <button
+                  className="bi-delete-btn"
+                  title="Delete this item"
+                  onClick={() => onDeleteItem(bill, i, items)}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </span>
+            )}
           </div>
         )
       })}
+
+      {/* --- BILL SUMMARY FOOTER --- */}
+      {bill && (
+        <div style={{
+          marginTop: '8px', 
+          paddingTop: '8px', 
+          borderTop: '1px dashed #cbd5e1', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '4px',
+          fontSize: '12px'
+        }}>
+          {Number(bill.discount || 0) > 0 ? (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
+                <span>Subtotal:</span>
+                <span style={{ fontWeight: 600 }}>₹{Number(bill.subtotal || 0).toLocaleString('en-IN')}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ef4444' }}>
+                <span>Discount:</span>
+                <span style={{ fontWeight: 600 }}>- ₹{Number(bill.discount || 0).toLocaleString('en-IN')}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontSize: '13px', paddingTop: '4px' }}>
+                <span style={{ fontWeight: 700 }}>Total:</span>
+                <span style={{ fontWeight: 800, color: PRIMARY }}>₹{Number(bill.total || 0).toLocaleString('en-IN')}</span>
+              </div>
+            </>
+          ) : (
+             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontSize: '13px' }}>
+               <span style={{ fontWeight: 700 }}>Total:</span>
+               <span style={{ fontWeight: 800, color: PRIMARY }}>₹{Number(bill.total || 0).toLocaleString('en-IN')}</span>
+             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- CONFIRM DELETE MODAL ---
+function ConfirmDeleteModal({ title, message, loading, onConfirm, onCancel }) {
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-box" onClick={e => e.stopPropagation()}>
+        <h3 className="modal-title">🗑️ {title}</h3>
+        <p className="modal-msg">{message}</p>
+        <div className="modal-actions">
+          <button className="modal-btn cancel" onClick={onCancel} disabled={loading}>Cancel</button>
+          <button className="modal-btn danger" onClick={onConfirm} disabled={loading}>
+            {loading ? "Deleting..." : "Yes, Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- DISCOUNT RE-EVALUATION MODAL ---
+function DiscountReEvalModal({ context, loading, onConfirm, onCancel }) {
+  const { bill, item } = context;
+  const itemTotal = item.total ? Number(item.total) : (Number(item.qty ?? 0) * Number(item.price ?? 0));
+  const newSubtotal = Number(bill.subtotal ?? 0) - itemTotal;
+  const oldDiscount = Number(bill.discount ?? 0);
+
+  const [discountType, setDiscountType] = useState('fixed'); // 'fixed' or 'percent'
+  const [discountInput, setDiscountInput] = useState(String(oldDiscount));
+
+  const computedDiscount = discountType === 'percent'
+    ? Math.round((Number(discountInput || 0) / 100) * newSubtotal * 100) / 100
+    : Number(discountInput || 0);
+
+  const isValid = computedDiscount >= 0 && computedDiscount <= newSubtotal;
+  const newTotal = isValid ? (newSubtotal - computedDiscount) : newSubtotal;
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="discount-modal-box" onClick={e => e.stopPropagation()}>
+        <h3 className="modal-title">Re-evaluate Discount</h3>
+
+        <div className="dm-item-info">
+          <Trash2 size={14} className="dm-trash-icon" />
+          <span>Deleting: <strong>{item.item_name}</strong> (₹{itemTotal.toLocaleString('en-IN')})</span>
+        </div>
+
+        <div className="dm-row">
+          <span className="dm-label">Old Subtotal</span>
+          <span className="dm-value">₹{Number(bill.subtotal ?? 0).toLocaleString('en-IN')}</span>
+        </div>
+        <div className="dm-row">
+          <span className="dm-label">New Subtotal</span>
+          <span className="dm-value" style={{ color: PRIMARY }}>₹{newSubtotal.toLocaleString('en-IN')}</span>
+        </div>
+        <div className="dm-row">
+          <span className="dm-label">Old Discount</span>
+          <span className="dm-value" style={{ color: '#ef4444' }}>₹{oldDiscount.toLocaleString('en-IN')}</span>
+        </div>
+
+        <div className="dm-divider" />
+
+        <div className="dm-discount-section">
+          <div className="dm-discount-header">Set New Discount</div>
+          <div className="dm-toggle-group">
+            <button className={`dm-toggle-btn ${discountType === 'fixed' ? 'active' : ''}`} onClick={() => { setDiscountType('fixed'); setDiscountInput(String(oldDiscount)); }}>₹ Fixed</button>
+            <button className={`dm-toggle-btn ${discountType === 'percent' ? 'active' : ''}`} onClick={() => { setDiscountType('percent'); setDiscountInput(''); }}>% Percent</button>
+          </div>
+          <div className="dm-input-row">
+            <span className="dm-input-prefix">{discountType === 'fixed' ? '₹' : '%'}</span>
+            <input
+              className="dm-input"
+              type="number"
+              min="0"
+              max={discountType === 'percent' ? 100 : newSubtotal}
+              value={discountInput}
+              onChange={e => setDiscountInput(e.target.value)}
+              placeholder={discountType === 'fixed' ? 'Enter amount' : 'Enter percentage'}
+            />
+          </div>
+          {!isValid && discountInput !== '' && (
+            <div className="dm-error">Discount cannot exceed the new subtotal (₹{newSubtotal.toLocaleString('en-IN')})</div>
+          )}
+        </div>
+
+        <div className="dm-preview">
+          <div className="dm-preview-row">
+            <span className="dm-label">New Subtotal</span>
+            <span className="dm-value">₹{newSubtotal.toLocaleString('en-IN')}</span>
+          </div>
+          <div className="dm-preview-row">
+            <span className="dm-label">New Discount</span>
+            <span className="dm-value" style={{ color: '#ef4444' }}>- ₹{(isValid ? computedDiscount : 0).toLocaleString('en-IN')}</span>
+          </div>
+          <div className="dm-preview-row" style={{ marginTop: 4, borderTop: '1px dashed #bbf7d0', paddingTop: 6 }}>
+            <span className="dm-label" style={{ fontWeight: 800 }}>New Total</span>
+            <span className="dm-preview-total">₹{newTotal.toLocaleString('en-IN')}</span>
+          </div>
+        </div>
+
+        <div className="modal-actions" style={{ marginTop: 16 }}>
+          <button className="modal-btn cancel" onClick={onCancel} disabled={loading}>Cancel</button>
+          <button className="modal-btn danger" onClick={() => onConfirm(computedDiscount)} disabled={loading || !isValid}>
+            {loading ? "Deleting..." : "Delete & Update"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
