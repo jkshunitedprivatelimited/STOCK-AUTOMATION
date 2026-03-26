@@ -164,6 +164,11 @@ function Store() {
       const { error: itemsError } = await supabase.from("bills_items_generated").insert(billItems);
       if (itemsError) throw new Error(`Items Error: ${itemsError.message}`);
 
+      // Invalidate analytics caches
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.startsWith("analyticsCache_")) sessionStorage.removeItem(key);
+      });
+
       setCart([]);
       setDiscountValue(0);
       setShowPaymentModal(false);

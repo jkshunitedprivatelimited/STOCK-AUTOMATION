@@ -280,6 +280,12 @@ function BillingHistory() {
     try {
       await supabase.from("bills_generated").delete().eq("id", billToDelete);
       setHistory(prev => prev.filter(b => b.id !== billToDelete));
+      
+      // Invalidate analytics caches
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.startsWith("analyticsCache_")) sessionStorage.removeItem(key);
+      });
+      
       setBillToDelete(null);
       setSelectedBill(null);
     } catch { alert("Error deleting."); }
