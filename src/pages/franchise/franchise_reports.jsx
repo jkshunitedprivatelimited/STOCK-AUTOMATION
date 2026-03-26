@@ -752,10 +752,14 @@ function FranchiseAnalytics() {
                 <span className="th-sno">#</span>
                 <span className="th-id">ID</span>
                 <span className="th-date th-sortable" onClick={() => handleSort('created_at')}>Date & Time <SortIcon columnKey="created_at" /></span>
-                {activeTab === "store" && <span className="th-mode th-sortable" onClick={() => handleSort('payment_mode')}>Mode <SortIcon columnKey="payment_mode" /></span>}
+                {activeTab === "store" && (
+                  <span className="th-mode th-sortable" onClick={() => handleSort('payment_mode')}>Mode <SortIcon columnKey="payment_mode" /></span>
+                )}
                 <span className="th-amt th-sortable" onClick={() => handleSort('amount')}>Amount <SortIcon columnKey="amount" /></span>
                 <span className="th-disc th-sortable" onClick={() => handleSort('discount')}>Discount <SortIcon columnKey="discount" /></span>
-                {activeTab === "store" && <span className="th-action">Action</span>}
+                {activeTab === "store" && (
+                  <span className="th-action">Action</span>
+                )}
                 <span className="th-icon"></span>
               </div>
 
@@ -911,40 +915,46 @@ function FranchiseAnalytics() {
         .ti-color-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
         .toggle-card { grid-column: 1 / -1; margin-bottom: 0; }
         .list-area { display: flex; flex-direction: column; height: 100%; min-height: 400px; }
-        .table-header-row { display: flex; align-items: center; padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid var(--border); min-width: 0; }
+        /* === TABLE HEADER & ROW LAYOUT === */
+        .table-header-row { display: flex; align-items: center; padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid var(--border); gap: 8px; }
         .table-header-row span { font-size: 10px; font-weight: 700; color: var(--text-sub); text-transform: uppercase; white-space: nowrap; }
         .th-sortable { cursor: pointer; display: flex; align-items: center; gap: 4px; user-select: none; transition: color 0.15s; }
         .th-sortable:hover { color: var(--text-main); }
-        .th-sno { width: 30px; display: none; justify-content: center; }
-        .th-id { width: 80px; display: none; }
-        .th-date { flex: 1; justify-content: flex-start; min-width: 0; }
-        .th-mode { width: auto; flex-shrink: 0; text-align: center; justify-content: center; }
-        .th-amt { width: auto; flex-shrink: 0; text-align: right; justify-content: flex-end; }
-        .th-disc { display: none; width: 70px; text-align: right; justify-content: flex-end; }
-        .th-icon { width: 24px; flex-shrink: 0; }
-        .th-action { width: 36px; flex-shrink: 0; display: flex; justify-content: center; }
         .list-scroll { overflow-y: auto; max-height: 600px; overflow-x: hidden; }
         .list-item { border-bottom: 1px solid var(--border); transition: background 0.2s; }
         .list-item:active { background: #f8fafc; }
-        .item-summary { display: flex; padding: 12px 12px; align-items: center; cursor: pointer; min-width: 0; }
+        .item-summary { display: flex; padding: 12px 16px; align-items: center; cursor: pointer; gap: 8px; }
         .col { display: flex; align-items: center; min-width: 0; }
-        .sno-col { width: 30px; display: none; justify-content: center; font-size: 11px; font-weight: 700; color: #94a3b8; }
-        .id-col { width: 80px; gap: 6px; display: none; }
+
+        /* === MOBILE DEFAULTS (hidden: #, ID, Discount) === */
+        .th-sno, .sno-col { display: none; }
+        .th-id, .id-col { display: none; }
         .icon-box { display: none; }
+        .th-disc, .disc-col { display: none; }
         .id-text { font-size: 12px; font-weight: 700; color: var(--text-main); }
+
+        /* Mobile visible columns */
+        .th-date { flex: 1; display: flex; justify-content: flex-start; }
         .date-col { flex: 1; flex-direction: column; align-items: flex-start; justify-content: center; min-width: 0; }
         .d-date { font-size: 12px; font-weight: 600; color: var(--text-main); }
         .d-time { font-size: 10px; color: var(--text-sub); display: flex; align-items: center; gap: 3px; }
-        .mode-col { width: auto; flex-shrink: 0; justify-content: center; margin: 0 4px; }
+
+        .th-mode { width: 60px; flex-shrink: 0; display: flex; justify-content: center; }
+        .mode-col { width: 60px; flex-shrink: 0; display: flex; justify-content: center; }
         .mode-badge { font-size: 9px; font-weight: 800; padding: 3px 6px; border-radius: 6px; text-transform: uppercase; white-space: nowrap; }
         .mode-badge.upi { background: #eff6ff; color: #2563eb; }
         .mode-badge.cash { background: #f0fdf4; color: #059669; }
-        .amt-col { width: auto; flex-shrink: 0; justify-content: flex-end; font-size: 13px; font-weight: 700; color: var(--primary); white-space: nowrap; }
-        .disc-col { display: none; width: 70px; justify-content: flex-end; font-size: 12px; font-weight: 600; }
-        .action-col { width: 36px; flex-shrink: 0; display: flex; justify-content: center; }
+
+        .th-amt { width: 60px; flex-shrink: 0; display: flex; justify-content: flex-end; }
+        .amt-col { width: 60px; flex-shrink: 0; display: flex; justify-content: flex-end; font-size: 13px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+
+        .th-action { width: 32px; flex-shrink: 0; display: flex; justify-content: center; }
+        .action-col { width: 32px; flex-shrink: 0; display: flex; justify-content: center; }
         .delete-icon-btn { display: flex; align-items: center; justify-content: center; background: none; border: 1px solid transparent; color: #ef4444; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
         .delete-icon-btn:hover { color: #dc2626; background: #fef2f2; border-color: #fecaca; }
-        .arrow-col { width: 24px; flex-shrink: 0; justify-content: flex-end; color: #cbd5e1; }
+
+        .th-icon { width: 24px; flex-shrink: 0; }
+        .arrow-col { width: 24px; flex-shrink: 0; display: flex; justify-content: center; color: #cbd5e1; }
         .item-details { background: #f8fafc; padding: 12px 16px; border-top: 1px solid var(--border); }
         .no-data { text-align: center; padding: 20px; font-size: 12px; color: var(--text-sub); font-style: italic; }
         .loader-container { padding: 40px; text-align: center; color: var(--text-sub); font-weight: 500; font-size: 14px; }
@@ -973,16 +983,20 @@ function FranchiseAnalytics() {
           .toggle-card { grid-column: 1 / -1; grid-row: 3 / 4; }
           .list-area { grid-column: 1 / -1; }
           .icon-box { display: flex; align-items: center; justify-content: center; background: #e0f2fe; color: #0284c7; width: 24px; height: 24px; border-radius: 6px; }
-          .th-sno { display: flex; width: 50px; }
-          .sno-col { display: flex; width: 50px; font-size: 12px; }
-          .th-id { display: flex; }
-          .id-col { display: flex; width: 120px; }
-          .th-disc { display: flex; }
-          .disc-col { display: flex; width: 80px; }
-          .th-mode, .mode-col { width: 80px; }
-          .th-amt, .amt-col { width: 80px; }
+
+          /* Show hidden columns on desktop */
+          .th-sno, .sno-col { display: flex; width: 36px; flex-shrink: 0; justify-content: center; font-size: 12px; font-weight: 700; color: #94a3b8; }
+          .th-id, .id-col { display: flex; width: 100px; flex-shrink: 0; gap: 6px; }
+          .th-disc, .disc-col { display: flex; flex: 1; justify-content: flex-end; font-size: 12px; font-weight: 600; }
+
+          /* Adjust proportions for desktop — fixed date, flex for rest */
+          .th-date, .date-col { width: 180px; flex: none; flex-shrink: 0; flex-direction: row; gap: 10px; align-items: center; justify-content: flex-start; }
+
+          .th-mode, .mode-col { flex: 1; width: auto; }
+          .th-amt, .amt-col { flex: 1; width: auto; }
           .th-action, .action-col { width: 44px; }
-          .date-col { flex-direction: row; gap: 10px; align-items: center; }
+          .th-icon, .arrow-col { width: 30px; }
+
           .item-summary { padding: 14px 16px; }
           .mode-badge { font-size: 10px; padding: 3px 8px; }
         }
@@ -1086,7 +1100,7 @@ function BillItems({ billId, type, bill, onDeleteItem }) {
         <span style={{ flex: 2 }}>Item Name</span>
         <span style={{ flex: 1, textAlign: 'center' }}>Qty</span>
         <span style={{ flex: 1, textAlign: 'right' }}>Subtotal</span>
-        {isStore && onDeleteItem && <span style={{ width: 28 }}></span>}
+        <span style={{ width: 28 }}></span>
       </div>
       {items.map((i, idx) => {
         const qty = Number(i.qty ?? i.quantity ?? 0);
@@ -1098,7 +1112,7 @@ function BillItems({ billId, type, bill, onDeleteItem }) {
             <span style={{ flex: 2, fontWeight: 600, color: '#334155' }}>{i.item_name}</span>
             <span style={{ flex: 1, textAlign: 'center', color: '#64748b' }}>{qty}</span>
             <span style={{ flex: 1, textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>₹{lineTotal.toLocaleString('en-IN')}</span>
-            {isStore && onDeleteItem && (
+            {isStore && onDeleteItem ? (
               <span style={{ width: 28, display: 'flex', justifyContent: 'center' }}>
                 <button
                   className="bi-delete-btn"
@@ -1108,6 +1122,8 @@ function BillItems({ billId, type, bill, onDeleteItem }) {
                   <Trash2 size={12} />
                 </button>
               </span>
+            ) : (
+              <span style={{ width: 28 }}></span>
             )}
           </div>
         )
