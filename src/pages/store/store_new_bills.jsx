@@ -90,8 +90,12 @@ function Store() {
           .eq("is_active", true);
         if (error) throw error;
         if (data) {
-          setMenuItems(data);
-          setCategories(["All", ...new Set(data.map(item => item.category).filter(Boolean))]);
+          const normalizedData = data.map(item => ({
+            ...item,
+            category: item.category ? item.category.trim().toUpperCase() : "UNCATEGORIZED"
+          }));
+          setMenuItems(normalizedData);
+          setCategories(["All", ...new Set(normalizedData.map(item => item.category))]);
         }
       } catch (err) {
         console.error("Menu Load Error:", err.message);

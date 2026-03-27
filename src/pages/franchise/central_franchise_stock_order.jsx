@@ -479,7 +479,10 @@ function StockOrder() {
   }, [stocks]);
 
   const sortedCategories = useMemo(() => {
-    const uniqueCats = [...new Set(stocks.map(s => s.category).filter(Boolean))].sort();
+    const formattedCats = stocks
+      .map(s => s.category ? s.category.trim().toUpperCase() : null)
+      .filter(Boolean);
+    const uniqueCats = [...new Set(formattedCats)].sort();
     return ["All", ...uniqueCats];
   }, [stocks]);
 
@@ -510,7 +513,8 @@ function StockOrder() {
     const baseList = stocks.filter(item => {
       const query = debouncedSearch.toLowerCase();
       const matchesSearch = item.item_name.toLowerCase().includes(query) || item.item_code?.toLowerCase().includes(query);
-      const matchesCategory = selectedCategory === "All" || item.category === selectedCategory;
+      const categoryName = item.category ? item.category.trim().toUpperCase() : '';
+      const matchesCategory = selectedCategory === "All" || categoryName === selectedCategory;
       const matchesAvailability = showOnlyAvailable ? Number(item.quantity) > 0 : true;
       return matchesSearch && matchesCategory && matchesAvailability;
     });

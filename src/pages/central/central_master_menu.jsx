@@ -292,18 +292,25 @@ function PosManagement() {
     }
   };
 
-  const filteredMenus = menus.filter(m =>
-    (selectedCategory === "All" || m.category === selectedCategory) &&
-    m.item_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredMenus = menus.filter(m => {
+    const dbCat = m.category?.trim().toUpperCase() || "UNCATEGORIZED";
+    const selectedCat = selectedCategory?.trim().toUpperCase() || "ALL";
+    const catMatch = selectedCat === "ALL" || dbCat === selectedCat;
+    const searchMatch = (m.item_name || "").toLowerCase().includes(searchQuery.toLowerCase());
+    return catMatch && searchMatch;
+  });
 
   const groupedMenu = filteredMenus.reduce((acc, i) => {
-    acc[i.category] = acc[i.category] || [];
-    acc[i.category].push(i);
+    const cat = i.category?.trim().toUpperCase() || "UNCATEGORIZED";
+    acc[cat] = acc[cat] || [];
+    acc[cat].push(i);
     return acc;
   }, {});
 
-  const categories = useMemo(() => ["All", ...new Set(menus.map(m => m.category))], [menus]);
+  const categories = useMemo(() => {
+    const rawCats = menus.map(m => m.category?.trim().toUpperCase() || "UNCATEGORIZED");
+    return ["All", ...new Set(rawCats)];
+  }, [menus]);
 
   return (
     <div style={styles.page}>

@@ -31,7 +31,7 @@ const CancelTimerButton = ({ createdAt, onCancel }) => {
   useEffect(() => {
     const calculateTimeLeft = () => {
       const createdTime = new Date(createdAt).getTime();
-      const fiveMinutesLater = createdTime + (5 * 60 * 1000);
+      const fiveMinutesLater = createdTime + (25 * 60 * 1000);
       const now = new Date().getTime();
       const diff = fiveMinutesLater - now;
       if (diff <= 0) {

@@ -689,58 +689,6 @@ function FranchiseAnalytics() {
               )}
             </div>
 
-            {/* FEATURE 1 TOGGLE - Only for store sales */}
-            {activeTab === "store" && (
-              <div className="toggle-card" style={{
-                background: '#fff',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                padding: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-              }}>
-                <div>
-                  <h4 style={{ margin: 0, color: '#1e293b', fontSize: '15px', fontWeight: '600', marginBottom: '4px' }}>Store Access for Bill Edits</h4>
-                  <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
-                    Enabling this toggle will allow the staff/owner to perform exchange or delete bills from the store login dashboard.
-                  </p>
-                </div>
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px', position: 'relative' }}>
-                  <span style={{ fontSize: '13px', fontWeight: '500', color: feature1Enabled ? '#10b981' : '#94a3b8' }}>
-                    {feature1Enabled ? 'Yes' : 'No'}
-                  </span>
-                  <div style={{
-                    position: 'relative',
-                    width: '40px',
-                    height: '24px',
-                    background: feature1Enabled ? '#10b981' : '#cbd5e1',
-                    borderRadius: '12px',
-                    transition: 'background 0.2s',
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '2px'
-                  }}>
-                    <input 
-                      type="checkbox" 
-                      style={{ opacity: 0, position: 'absolute', width: '100%', height: '100%', cursor: 'pointer', margin: 0, zIndex: 2 }}
-                      checked={feature1Enabled}
-                      onChange={(e) => setFeature1Enabled(e.target.checked)}
-                    />
-                    <div style={{
-                      width: '20px',
-                      height: '20px',
-                      background: '#fff',
-                      borderRadius: '50%',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                      transform: feature1Enabled ? 'translateX(16px)' : 'translateX(0)',
-                      transition: 'transform 0.2s'
-                    }} />
-                  </div>
-                </label>
-              </div>
-            )}
 
             <div className="card list-area">
               <div className="card-header">

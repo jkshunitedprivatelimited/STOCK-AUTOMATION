@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "../../frontend_supabase/supabaseClient";
+import { supabase, fetchWithRetry } from "../../frontend_supabase/supabaseClient";
 import {
   ArrowLeft, Plus, Trash2, Edit2,
-  Search, Calendar, X, Filter, ChevronDown, ChevronUp
+  Search, Calendar, X, Filter, ChevronDown, ChevronUp, CheckCircle, XCircle, MoreVertical, RefreshCw, Layers, Trash, RotateCcw
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -36,6 +36,19 @@ function FranchiseMenu() {
     is_active: true
   });
 
+  // Custom Confirm/Prompt Modal State (replaces window.confirm/window.prompt)
+  const [confirmState, setConfirmState] = useState({ open: false, message: "", onConfirm: null });
+  const [promptState, setPromptState] = useState({ open: false, message: "", defaultValue: "", onSubmit: null });
+  const [promptValue, setPromptValue] = useState("");
+
+  const showConfirm = (message) => new Promise((resolve) => {
+    setConfirmState({ open: true, message, onConfirm: resolve });
+  });
+  const showPrompt = (message, defaultValue = "") => new Promise((resolve) => {
+    setPromptValue(defaultValue);
+    setPromptState({ open: true, message, defaultValue, onSubmit: resolve });
+  });
+
   // Derived & Sorted Categories
   const dynamicCategories = ["ALL", ...[...new Set(menuItems.map(item => item.category.toUpperCase()))].sort()];
 
@@ -61,9 +74,14 @@ function FranchiseMenu() {
 
   const fetchMenu = async () => {
     setLoading(true);
+    console.log("[fetchMenu] Starting fetch...");
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const { data: profile } = await supabase.from("profiles").select("franchise_id").eq("id", user.id).single();
+      console.log("[fetchMenu] Auth User ID:", user?.id);
+      
+      const { data: profile, error: profileError } = await supabase.from("profiles").select("franchise_id").eq("id", user.id).single();
+      if (profileError) console.error("[fetchMenu] Profile fetch error:", profileError);
+      console.log("[fetchMenu] Profile found:", profile);
 
       if (profile?.franchise_id) {
         setFranchiseId(profile.franchise_id);
@@ -73,11 +91,17 @@ function FranchiseMenu() {
           .eq("franchise_id", profile.franchise_id)
           .order("created_at", { ascending: false });
 
-        if (error) throw error;
+        if (error) {
+          console.error("[fetchMenu] Menu fetch error:", error);
+          throw error;
+        }
+        console.log("[fetchMenu] Menu items fetched:", data?.length || 0);
         setMenuItems(data || []);
+      } else {
+        console.warn("[fetchMenu] No franchise_id found in profile.");
       }
     } catch (err) {
-      console.error("Fetch error:", err);
+      console.error("[fetchMenu] Catch block error:", err);
     } finally {
       setLoading(false);
     }
@@ -101,6 +125,7 @@ function FranchiseMenu() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log("[handleSubmit] Starting submission. editingId:", editingId);
     try {
       const payload = {
         item_name: formData.item_name,
@@ -109,79 +134,247 @@ function FranchiseMenu() {
         is_active: formData.is_active,
         franchise_id: franchiseId
       };
+      console.log("[handleSubmit] Payload:", payload);
 
       if (editingId) {
-        await supabase.from("menus").update(payload).eq("id", editingId);
+        const { data, error } = await fetchWithRetry(() => 
+          supabase.from("menus").update(payload).eq("id", editingId).select()
+        );
+        console.log("[handleSubmit] Update response - Data:", data, "Error:", error);
+        if (error) throw error;
+        if (!data || data.length === 0) {
+          alert("Update failed: Action blocked by RLS policies. Your role may not have permission to update this item.");
+        }
       } else {
-        await supabase.from("menus").insert([payload]);
+        const { data, error } = await fetchWithRetry(() => 
+          supabase.from("menus").insert([payload]).select()
+        );
+        console.log("[handleSubmit] Insert response - Data:", data, "Error:", error);
+        if (error) throw error;
+        if (!data || data.length === 0) {
+          alert("Insert failed: Action blocked by RLS policies. Your role may not have permission to create items.");
+        }
       }
 
       setIsModalOpen(false);
       fetchMenu();
     } catch (err) {
+      console.error("[handleSubmit] Catch block error:", err);
       alert("Error saving: " + err.message);
     }
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this item? This cannot be undone.")) {
-      await supabase.from("menus").delete().eq("id", id);
-      fetchMenu();
+    console.log("[handleDelete] Attempting to delete item ID:", id);
+    const shouldConfirm = await showConfirm("Are you sure you want to delete this item? This cannot be undone.");
+    console.log("[handleDelete] User confirmed:", shouldConfirm);
+    
+    if (!shouldConfirm) return;
+
+    try {
+      console.log("[handleDelete] Calling supabase.delete()...");
+      const { data, error, status, statusText } = await supabase
+        .from("menus")
+        .delete()
+        .eq("id", id)
+        .select();
+
+      console.log("[handleDelete] Response - status:", status, statusText, "Data:", data, "Error:", error);
+
+      if (error) {
+        console.error("[handleDelete] Supabase Error:", error);
+        alert("Error deleting item: " + (error.message || JSON.stringify(error)));
+        return;
+      }
+      
+      if (!data || data.length === 0) {
+        console.warn("[handleDelete] Delete returned no data. status:", status);
+        alert("Delete failed: The server returned no data. This usually means a Row Level Security (RLS) policy is blocking the delete. Check Supabase RLS policies for the 'menus' table.");
+        return;
+      }
+
+      console.log("[handleDelete] Successfully deleted:", data);
+      setMenuItems(prev => prev.filter(item => item.id !== id));
+    } catch (err) {
+      console.error("[handleDelete] Unexpected error:", err);
+      alert("Unexpected error deleting item: " + (err?.message || String(err)));
     }
   };
 
   const handleDeleteCategory = async () => {
-    if (!franchiseId || selectedCategory === "ALL") return;
-    if (window.confirm(`Are you sure you want to delete all items in category "${selectedCategory}"? This cannot be undone.`)) {
-      try {
-        await supabase.from("menus").delete().eq("franchise_id", franchiseId).eq("category", selectedCategory);
-        setSelectedCategory("ALL");
-        fetchMenu();
-      } catch (err) {
-        alert("Error deleting category: " + err.message);
+    console.log("[handleDeleteCategory] Clicked. franchiseId:", franchiseId, "selectedCategory:", selectedCategory);
+    if (!franchiseId || selectedCategory === "ALL") {
+      console.warn("[handleDeleteCategory] Early return: missing franchiseId or ALL selected.");
+      return;
+    }
+    const confirmed = await showConfirm(`Are you sure you want to delete all items in category "${selectedCategory}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      const searchCat = selectedCategory.trim().toUpperCase();
+      const itemsToDelete = menuItems.filter(item => 
+        (item.category || "").trim().toUpperCase() === searchCat
+      );
+      const itemIds = itemsToDelete.map(item => item.id);
+      console.log(`[handleDeleteCategory] Deleting category "${selectedCategory}". Matching items:`, itemsToDelete.length, "IDs:", itemIds);
+      
+      if (itemIds.length === 0) {
+        alert(`No items matched the category "${selectedCategory}".`);
+        console.warn(`[handleDeleteCategory] No items found for category: ${selectedCategory}`);
+        return;
       }
+
+      const { data, error, status } = await supabase
+        .from("menus")
+        .delete()
+        .in("id", itemIds)
+        .select();
+
+      console.log("[handleDeleteCategory] Response - status:", status, "Data:", data, "Error:", error);
+
+      if (error) {
+        console.error("[handleDeleteCategory] Supabase Error:", error);
+        alert("Error deleting category: " + (error.message || JSON.stringify(error)));
+        return;
+      }
+      
+      if (!data || data.length === 0) {
+        alert("Delete failed: Blocked by RLS. Check Supabase RLS policies for DELETE on the 'menus' table.");
+        return;
+      }
+
+      console.log("[handleDeleteCategory] Successfully deleted items:", data.length);
+      alert(`Success! Deleted ${data.length} items in category "${selectedCategory}".`);
+      setSelectedCategory("ALL");
+      fetchMenu();
+    } catch (err) {
+      console.error("[handleDeleteCategory] Catch block error:", err);
+      alert("Unexpected error deleting category: " + (err?.message || String(err)));
     }
   };
 
   const handleDeleteWholeMenu = async () => {
-    if (!franchiseId) return;
-    if (window.confirm("Are you sure you want to delete the ENTIRE menu? This action cannot be undone and will remove all items.")) {
-      try {
-        await supabase.from("menus").delete().eq("franchise_id", franchiseId);
-        setSelectedCategory("ALL");
-        setSelectedItems([]);
-        fetchMenu();
-      } catch (err) {
-        alert("Error deleting whole menu: " + err.message);
+    console.log("[handleDeleteWholeMenu] Clicked. franchiseId:", franchiseId);
+    if (!franchiseId || franchiseId === "Loading...") {
+      console.warn("[handleDeleteWholeMenu] Early return: franchiseId is missing or loading.");
+      return;
+    }
+    const confirmed = await showConfirm("Are you sure you want to delete the ENTIRE menu? This action cannot be undone and will remove all items.");
+    if (!confirmed) return;
+
+    try {
+      const { data, error, status } = await supabase
+        .from("menus")
+        .delete()
+        .eq("franchise_id", franchiseId)
+        .select();
+
+      console.log("[handleDeleteWholeMenu] Response - status:", status, "Data:", data, "Error:", error);
+
+      if (error) {
+        console.error("[handleDeleteWholeMenu] Error:", error);
+        alert("Error deleting whole menu: " + (error.message || JSON.stringify(error)));
+        return;
       }
+      
+      if (!data || data.length === 0) {
+        alert("Delete failed: Blocked by RLS. Check Supabase RLS policies for DELETE on the 'menus' table.");
+        return;
+      }
+
+      alert(`Successfully deleted ${data.length} menu items.`);
+      setSelectedCategory("ALL");
+      setSelectedItems([]);
+      fetchMenu();
+    } catch (err) {
+      console.error("[handleDeleteWholeMenu] Catch block error:", err);
+      alert("Error deleting whole menu: " + (err?.message || String(err)));
     }
   };
 
   const handleRenameCategory = async () => {
-    if (!franchiseId || selectedCategory === "ALL") return;
-    const newName = window.prompt(`Enter new name for category "${selectedCategory}":`, selectedCategory);
-    if (newName && newName.trim() !== "" && newName.trim().toUpperCase() !== selectedCategory) {
-      const finalName = newName.trim().toUpperCase();
-      try {
-        await supabase.from("menus").update({ category: finalName }).eq("franchise_id", franchiseId).eq("category", selectedCategory);
-        setSelectedCategory(finalName);
-        fetchMenu();
-      } catch (err) {
-        alert("Error renaming category: " + err.message);
+    console.log("[handleRenameCategory] Clicked. franchiseId:", franchiseId, "selectedCategory:", selectedCategory);
+    if (!franchiseId || selectedCategory === "ALL") {
+      console.warn("[handleRenameCategory] Early return: missing franchiseId or ALL selected.");
+      return;
+    }
+    const newName = await showPrompt(`Enter new name for category "${selectedCategory}":`, selectedCategory);
+    if (!newName || newName.trim() === "" || newName.trim().toUpperCase() === selectedCategory?.trim().toUpperCase()) return;
+
+    const finalName = newName.trim().toUpperCase();
+    try {
+      const itemsToRename = menuItems.filter(item => 
+        (item.category || "").trim().toUpperCase() === selectedCategory.trim().toUpperCase()
+      );
+      const itemIds = itemsToRename.map(item => item.id);
+      console.log(`[handleRenameCategory] Renaming from "${selectedCategory}" to "${finalName}". Items found:`, itemsToRename.length);
+      
+      if (itemIds.length === 0) {
+        alert(`No items found in category "${selectedCategory}" to rename.`);
+        console.warn(`[handleRenameCategory] No items found for category: ${selectedCategory}`);
+        return;
       }
+
+      const { data, error, status } = await supabase
+        .from("menus")
+        .update({ category: finalName })
+        .in("id", itemIds)
+        .select();
+
+      console.log("[handleRenameCategory] Response - status:", status, "Data:", data, "Error:", error);
+
+      if (error) {
+        console.error("[handleRenameCategory] Supabase Error:", error);
+        alert("Error renaming category: " + (error.message || JSON.stringify(error)));
+        return;
+      }
+      
+      if (!data || data.length === 0) {
+        alert("Rename failed: Blocked by RLS. Check Supabase RLS policies for UPDATE on the 'menus' table.");
+        return;
+      }
+
+      alert(`Success! Renamed ${data.length} items from "${selectedCategory}" to "${finalName}".`);
+      setSelectedCategory(finalName);
+      fetchMenu();
+    } catch (err) {
+      console.error("[handleRenameCategory] Catch block error:", err);
+      alert("Unexpected error renaming category: " + (err?.message || String(err)));
     }
   };
 
   const handleDeleteSelectedItems = async () => {
     if (selectedItems.length === 0) return;
-    if (window.confirm("these items are getting deleted do you want to proceed okay?")) {
-      try {
-        await supabase.from("menus").delete().in("id", selectedItems);
-        setSelectedItems([]);
-        fetchMenu();
-      } catch (err) {
-        alert("Error deleting selected items: " + err.message);
+    console.log("[handleDeleteSelectedItems] IDs to delete:", selectedItems);
+    const confirmed = await showConfirm(`Are you sure you want to delete ${selectedItems.length} selected items? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      const { data, error, status } = await supabase
+        .from("menus")
+        .delete()
+        .in("id", selectedItems)
+        .select();
+
+      console.log("[handleDeleteSelectedItems] Response - status:", status, "Data:", data, "Error:", error);
+
+      if (error) {
+        console.error("[handleDeleteSelectedItems] Supabase Error:", error);
+        alert("Error deleting selected items: " + (error.message || JSON.stringify(error)));
+        return;
       }
+      
+      if (!data || data.length === 0) {
+        alert("Delete failed: Blocked by RLS. Check Supabase RLS policies for DELETE on the 'menus' table.");
+        return;
+      }
+
+      alert(`Successfully deleted ${data.length} items.`);
+      setSelectedItems([]);
+      fetchMenu();
+    } catch (err) {
+      console.error("[handleDeleteSelectedItems] Catch block error:", err);
+      alert("Error deleting selected items: " + (err?.message || String(err)));
     }
   };
   
@@ -495,6 +688,64 @@ function FranchiseMenu() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- CUSTOM CONFIRM MODAL (replaces window.confirm) --- */}
+      {confirmState.open && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-black/10 overflow-hidden">
+            <div className="px-6 py-5 border-b border-black/10">
+              <h3 className="text-base font-black uppercase tracking-wider text-black">Confirm Action</h3>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-sm text-black/80 font-medium">{confirmState.message}</p>
+            </div>
+            <div className="px-6 py-4 border-t border-black/10 flex gap-3 justify-end">
+              <button
+                onClick={() => { setConfirmState({ open: false, message: "", onConfirm: null }); confirmState.onConfirm?.(false); }}
+                className="px-5 py-2.5 rounded-xl bg-gray-100 text-black font-bold text-xs uppercase tracking-wider hover:bg-gray-200 transition-colors"
+              >Cancel</button>
+              <button
+                onClick={() => { setConfirmState({ open: false, message: "", onConfirm: null }); confirmState.onConfirm?.(true); }}
+                className="px-5 py-2.5 rounded-xl text-white font-bold text-xs uppercase tracking-wider hover:brightness-110 transition-all"
+                style={{ backgroundColor: '#dc2626' }}
+              >Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- CUSTOM PROMPT MODAL (replaces window.prompt) --- */}
+      {promptState.open && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-black/10 overflow-hidden">
+            <div className="px-6 py-5 border-b border-black/10">
+              <h3 className="text-base font-black uppercase tracking-wider text-black">Enter Value</h3>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <p className="text-sm text-black/80 font-medium">{promptState.message}</p>
+              <input
+                type="text"
+                value={promptValue}
+                onChange={(e) => setPromptValue(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-black/10 focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 outline-none font-bold text-black uppercase"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter') { setPromptState({ open: false, message: "", defaultValue: "", onSubmit: null }); promptState.onSubmit?.(promptValue); } }}
+              />
+            </div>
+            <div className="px-6 py-4 border-t border-black/10 flex gap-3 justify-end">
+              <button
+                onClick={() => { setPromptState({ open: false, message: "", defaultValue: "", onSubmit: null }); promptState.onSubmit?.(null); }}
+                className="px-5 py-2.5 rounded-xl bg-gray-100 text-black font-bold text-xs uppercase tracking-wider hover:bg-gray-200 transition-colors"
+              >Cancel</button>
+              <button
+                onClick={() => { setPromptState({ open: false, message: "", defaultValue: "", onSubmit: null }); promptState.onSubmit?.(promptValue); }}
+                className="px-5 py-2.5 rounded-xl text-white font-bold text-xs uppercase tracking-wider hover:brightness-110 transition-all"
+                style={{ backgroundColor: brandGreen }}
+              >Submit</button>
+            </div>
           </div>
         </div>
       )}

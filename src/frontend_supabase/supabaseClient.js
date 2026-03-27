@@ -13,7 +13,7 @@ const supabaseUrl = supabaseDirectUrl;
 // In production, rewrites supabase.co HTTP URLs through the Vercel proxy
 // to bypass carrier DNS blocking (e.g., Jio in India).
 
-const MAX_RETRIES = 1;
+const MAX_RETRIES = 3;
 const BASE_DELAY = 1000;
 const REQUEST_TIMEOUT = 15000;
 
@@ -27,6 +27,8 @@ export function getProxiedUrl(url) {
   // the strict Authorization Bearer JWT headers required by Deno.
   if (url.includes(SUPABASE_DOMAIN) && !url.includes('/functions/v1/')) {
     const proxied = url.replace(`https://${SUPABASE_DOMAIN}`, window.location.origin + '/sb-proxy');
+    console.log(`🔀 [PROXY_DEBUG] Original: ${url.substring(0, 100)}...`);
+    console.log(`🔀 [PROXY_DEBUG] Proxied: ${proxied.substring(0, 100)}...`);
     devLog(`🔀 [PROXY] ${url.substring(0, 60)}... → ${proxied.substring(0, 60)}...`);
     return proxied;
   }
@@ -44,6 +46,7 @@ async function resilientFetch(url, options = {}) {
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
+      console.log(`🌐 [NET_DEBUG] Attempt ${attempt + 1}: Fetching ${proxiedUrl.substring(0, 100)}... Method: ${cleanOptions.method || 'GET'}`);
       const response = await Promise.race([
         fetch(proxiedUrl, cleanOptions),
         new Promise((_, reject) =>
@@ -132,7 +135,7 @@ export function isNetworkError(error) {
  *     supabase.from('table').select('*')
  *   );
  */
-export async function fetchWithRetry(operation, maxRetries = 1, baseDelay = 1000) {
+export async function fetchWithRetry(operation, maxRetries = 3, baseDelay = 1000) {
   let lastError = null;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {

@@ -9,7 +9,7 @@ import {
     ArrowLeft, Search, Calendar, Download,
     RotateCcw, Building2, Layers,
     X, TrendingUp, MapPin, ShoppingBag, ChevronDown, ChevronUp,
-    AlertTriangle, AlertOctagon, CheckCircle2
+    AlertTriangle, AlertOctagon, CheckCircle2, Trash2, Eye
 } from "lucide-react";
 
 // --- CONFIGURATION ---
@@ -38,6 +38,15 @@ const safeSetCache = (key, value) => {
     }
 };
 
+const clearReportsCaches = () => {
+    const keysToRemove = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && (k.startsWith("reports_") || k.startsWith("bill_items_"))) keysToRemove.push(k);
+    }
+    keysToRemove.forEach(k => sessionStorage.removeItem(k));
+};
+
 const COLORS = [
     PRIMARY, "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6",
     "#ec4899", "#06b6d4", "#f97316", "#6366f1", "#14b8a6"
@@ -53,6 +62,11 @@ function Reports() {
     const [selectedBill, setSelectedBill] = useState(null);
     const [currentBillItems, setCurrentBillItems] = useState([]);
     const [modalLoading, setModalLoading] = useState(false);
+
+    // --- DELETE STATE ---
+    const [billToDelete, setBillToDelete] = useState(null);
+    const [itemDeleteContext, setItemDeleteContext] = useState(null);
+    const [deleting, setDeleting] = useState(false);
 
     // --- BILL ITEMS CACHE (in-memory + sessionStorage) ---
     const billItemsCache = useRef({});
@@ -77,6 +91,15 @@ function Reports() {
     // --- SORT STATE ---
     const [sortKey, setSortKey] = useState(null); // null | 'company' | 'owner' | 'date' | 'mode' | 'amount'
     const [sortDir, setSortDir] = useState("asc"); // 'asc' | 'desc'
+
+    // --- PAGINATION STATE ---
+    const [page, setPage] = useState(1);
+    const itemsPerPage = 50;
+
+    // Reset page to 1 on filter changes
+    useEffect(() => {
+        setPage(1);
+    }, [activeTab, search, selectedCompany, selectedFranchise, startDate, endDate, dateMode, sortKey, sortDir]);
 
     // --- DB DROPDOWN FETCHING (with sessionStorage cache) ---
     useEffect(() => {
@@ -426,6 +449,153 @@ function Reports() {
         }
     };
 
+    // --- DELETE ENTIRE BILL ---
+    const handleDeleteBill = useCallback(async (bill) => {
+        setDeleting(true);
+        try {
+            const { data, error } = await supabase.rpc('admin_delete_bill', { target_bill_id: bill.id });
+            if (error) throw error;
+
+            if (data && data.success === false) {
+                alert(data.error || "Database deletion blocked (likely due to RLS). Please contact support or provide correct permissions.");
+                setDeleting(false);
+                return;
+            }
+
+            if (!data || data.deleted_bill === 0) {
+                alert("Database deletion blocked (likely due to RLS). Please contact support or provide correct permissions.");
+                setDeleting(false);
+                return;
+            }
+
+            setRawData(prev => ({
+                ...prev,
+                store: prev.store.filter(b => b.id !== bill.id),
+                billItems: prev.billItems.filter(bi => bi.bill_id !== bill.id)
+            }));
+            if (selectedBill?.id === bill.id) setSelectedBill(null);
+            setBillToDelete(null);
+            clearReportsCaches();
+            alert("Bill deleted successfully!");
+        } catch (err) {
+            console.error("Delete bill error:", err);
+            alert("Failed to delete bill. Please try again.");
+        } finally {
+            setDeleting(false);
+        }
+    }, [selectedBill]);
+
+    // --- DELETE SINGLE ITEM (no discount or zero discount) ---
+    const handleDeleteItemDirect = useCallback(async (bill, item, allItems) => {
+        if (allItems.length <= 1) {
+            setBillToDelete(bill);
+            return;
+        }
+        setDeleting(true);
+        try {
+            const itemTotal = item.total ? Number(item.total) : (Number(item.qty ?? 0) * Number(item.price ?? 0));
+            const newSubtotal = Number(bill.subtotal ?? 0) - itemTotal;
+            const newTotal = newSubtotal - Number(bill.discount ?? 0);
+
+            const { data, error } = await supabase.rpc('admin_delete_bill_item', {
+                target_item_id: item.id,
+                target_bill_id: bill.id,
+                new_subtotal: newSubtotal,
+                new_total: newTotal,
+                new_discount: Number(bill.discount ?? 0)
+            });
+            if (error) throw error;
+
+            if (data && data.success === false) {
+                alert(data.error || "Database deletion blocked (likely due to RLS). Please contact support or provide correct permissions.");
+                setDeleting(false);
+                return;
+            }
+
+            if (!data || data.deleted_items === 0) {
+                alert("Database deletion blocked (likely due to RLS). Please contact support or provide correct permissions.");
+                setDeleting(false);
+                return;
+            }
+
+            setRawData(prev => ({
+                ...prev,
+                store: prev.store.map(b => b.id === bill.id ? { ...b, subtotal: newSubtotal, total: newTotal } : b)
+            }));
+            setCurrentBillItems(prev => prev.filter(i => i.id !== item.id));
+            if (selectedBill?.id === bill.id) setSelectedBill(prev => ({ ...prev, subtotal: newSubtotal, total: newTotal }));
+            clearReportsCaches();
+            alert("Item deleted successfully!");
+        } catch (err) {
+            console.error("Delete item error:", err);
+            alert("Failed to delete item. Please try again.");
+        } finally {
+            setDeleting(false);
+        }
+    }, [selectedBill]);
+
+    // --- ITEM DELETE ENTRY POINT ---
+    const handleItemDeleteRequest = useCallback((bill, item, allItems) => {
+        if (allItems.length <= 1) {
+            setBillToDelete(bill);
+            return;
+        }
+        if (Number(bill.discount ?? 0) > 0) {
+            setItemDeleteContext({ bill, item, items: allItems });
+            return;
+        }
+        handleDeleteItemDirect(bill, item, allItems);
+    }, [handleDeleteItemDirect]);
+
+    // --- CONFIRM ITEM DELETE WITH NEW DISCOUNT ---
+    const handleConfirmItemDeleteWithDiscount = useCallback(async (newDiscount) => {
+        if (!itemDeleteContext) return;
+        const { bill, item } = itemDeleteContext;
+        setDeleting(true);
+        try {
+            const itemTotal = item.total ? Number(item.total) : (Number(item.qty ?? 0) * Number(item.price ?? 0));
+            const newSubtotal = Number(bill.subtotal ?? 0) - itemTotal;
+            const finalDiscount = Math.min(newDiscount, newSubtotal);
+            const newTotal = newSubtotal - finalDiscount;
+
+            const { data, error } = await supabase.rpc('admin_delete_bill_item', {
+                target_item_id: item.id,
+                target_bill_id: bill.id,
+                new_subtotal: newSubtotal,
+                new_total: newTotal,
+                new_discount: finalDiscount
+            });
+            if (error) throw error;
+
+            if (data && data.success === false) {
+                alert(data.error || "Database deletion blocked (likely due to RLS). Please contact support or provide correct permissions.");
+                setDeleting(false);
+                return;
+            }
+
+            if (!data || data.deleted_items === 0) {
+                alert("Database deletion blocked (likely due to RLS). Please contact support or provide correct permissions.");
+                setDeleting(false);
+                return;
+            }
+
+            setRawData(prev => ({
+                ...prev,
+                store: prev.store.map(b => b.id === bill.id ? { ...b, subtotal: newSubtotal, discount: finalDiscount, total: newTotal } : b)
+            }));
+            setCurrentBillItems(prev => prev.filter(i => i.id !== item.id));
+            if (selectedBill?.id === bill.id) setSelectedBill(prev => ({ ...prev, subtotal: newSubtotal, discount: finalDiscount, total: newTotal }));
+            setItemDeleteContext(null);
+            clearReportsCaches();
+            alert("Item deleted successfully!");
+        } catch (err) {
+            console.error("Delete item with discount error:", err);
+            alert("Failed to delete item. Please try again.");
+        } finally {
+            setDeleting(false);
+        }
+    }, [itemDeleteContext, selectedBill]);
+
     // --- DATA FILTERING LOGIC ---
     const filteredData = useMemo(() => {
         const dataSet = activeTab === "store" ? rawData.store : rawData.invoices;
@@ -486,6 +656,14 @@ function Reports() {
         });
         return sortDir === 'desc' ? sorted.reverse() : sorted;
     }, [filteredData, sortKey, sortDir]);
+
+    // --- PAGINATION ---
+    const paginatedData = useMemo(() => {
+        const startIndex = (page - 1) * itemsPerPage;
+        return sortedData.slice(startIndex, startIndex + itemsPerPage);
+    }, [sortedData, page]);
+
+    const totalPages = Math.ceil(sortedData.length / itemsPerPage);
 
     const itemPieData = useMemo(() => {
         const validIds = new Set(filteredData.map(b => b.id));
@@ -867,14 +1045,15 @@ function Reports() {
                                     <th className="p-5 tracking-widest bg-white cursor-pointer select-none hover:text-black/70 transition-colors" onClick={() => handleSort('date')}>Date<SortIcon columnKey="date" /></th>
                                     {activeTab === "store" && <th className="p-5 tracking-widest bg-white text-center cursor-pointer select-none hover:text-black/70 transition-colors" onClick={() => handleSort('mode')}>Mode<SortIcon columnKey="mode" /></th>}
                                     <th className="p-5 tracking-widest text-right bg-white cursor-pointer select-none hover:text-black/70 transition-colors" onClick={() => handleSort('amount')}>Amount<SortIcon columnKey="amount" /></th>
+                                    <th className="p-5 tracking-widest bg-white text-center w-24">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-black/5 text-sm font-bold text-black">
-                                {sortedData.length === 0 ? (
+                                {paginatedData.length === 0 ? (
                                     <tr><td colSpan="7" className="p-10 text-center text-black/40">No records found.</td></tr>
-                                ) : sortedData.map((item, index) => (
+                                ) : paginatedData.map((item, index) => (
                                     <tr key={item.id} onClick={() => openDetails(item)} className="hover:bg-black/5 cursor-pointer transition-colors">
-                                        <td className="p-5 text-black/40">{index + 1}</td>
+                                        <td className="p-5 text-black/40">{(page - 1) * itemsPerPage + index + 1}</td>
                                         <td className="p-5">
                                             <span className="bg-black/5 text-black px-2 py-1 rounded-md text-[10px]">#{item.id.toString().slice(-8)}</span>
                                             <div className="text-[10px] text-black/40 mt-1">{item.franchise_id}</div>
@@ -890,6 +1069,26 @@ function Reports() {
                                             </td>
                                         )}
                                         <td className="p-5 text-right font-black" style={{ color: PRIMARY }}>₹{(item.total || item.total_amount || 0).toFixed(2)}</td>
+                                        <td className="p-5 text-center">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); openDetails(item); }}
+                                                    className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                                                    title="View Details"
+                                                >
+                                                    <Eye size={14} />
+                                                </button>
+                                                {activeTab === "store" && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setBillToDelete(item); }}
+                                                        className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+                                                        title="Delete Bill"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -897,14 +1096,14 @@ function Reports() {
                     </div>
 
                     <div className="lg:hidden flex flex-col gap-4 p-4 bg-white overflow-y-auto custom-scrollbar flex-1">
-                        {filteredData.length === 0 ? (
+                        {paginatedData.length === 0 ? (
                             <div className="p-10 text-center text-black/40 text-xs font-bold uppercase">No records found.</div>
-                        ) : filteredData.map((item, index) => (
+                        ) : paginatedData.map((item, index) => (
                             <div key={item.id} onClick={() => openDetails(item)} className="bg-white p-5 rounded-3xl border border-black/10 shadow-sm active:scale-95 transition-transform shrink-0">
                                 <div className="flex justify-between items-start mb-3">
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-[10px] font-black text-black/30">#{index + 1}</span>
+                                            <span className="text-[10px] font-black text-black/30">#{(page - 1) * itemsPerPage + index + 1}</span>
                                             <span className="bg-black/5 text-black/60 px-2 py-1 rounded-md text-[10px] font-black uppercase inline-block">#{item.id.toString().slice(-8)}</span>
                                         </div>
                                         <h3 className="text-sm font-black text-black uppercase">{item.owner_name || item.mapped_location || "N/A"}</h3>
@@ -921,12 +1120,46 @@ function Reports() {
                                 </div>
                                 <div className="flex justify-between items-center text-[10px] font-bold text-black/40 uppercase border-t border-black/5 pt-3">
                                     <span>{new Date(item.created_at).toLocaleDateString()}</span>
-                                    <span>Tap for details &rarr;</span>
+                                    <div className="flex items-center gap-3">
+                                        {activeTab === "store" && (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setBillToDelete(item); }}
+                                                className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+                                                title="Delete Bill"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
+                                        <span>Tap for details &rarr;</span>
+                                    </div>
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-between bg-white p-4 rounded-[2rem] border border-black/10 shadow-sm mb-10 shrink-0">
+                        <button 
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={page === 1}
+                            className="px-6 py-3 bg-black/5 hover:bg-black/10 active:scale-95 transition-all rounded-xl font-black text-sm uppercase tracking-widest disabled:opacity-50 disabled:active:scale-100 disabled:hover:bg-black/5"
+                        >
+                            Previous
+                        </button>
+                        <span className="text-sm font-black text-black/60 uppercase tracking-widest">
+                            Page {page} of {totalPages}
+                        </span>
+                        <button 
+                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                            disabled={page === totalPages}
+                            className="px-6 py-3 bg-black/5 hover:bg-black/10 active:scale-95 transition-all rounded-xl font-black text-sm uppercase tracking-widest disabled:opacity-50 disabled:active:scale-100 disabled:hover:bg-black/5"
+                        >
+                            Next
+                        </button>
+                    </div>
+                )}
 
             </div>
 
@@ -975,16 +1208,29 @@ function Reports() {
                                             <th className="p-3">Item</th>
                                             <th className="p-3 text-center">Qty</th>
                                             <th className="p-3 text-right">Price</th>
+                                            {activeTab === "store" && <th className="p-3 text-center w-10"></th>}
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-black/5 text-xs font-bold text-black">
                                         {modalLoading ? (
-                                            <tr><td colSpan="3" className="p-6 text-center text-black/40">Loading...</td></tr>
+                                            <tr><td colSpan={activeTab === "store" ? 4 : 3} className="p-6 text-center text-black/40">Loading...</td></tr>
                                         ) : currentBillItems.map((i, idx) => (
                                             <tr key={idx}>
                                                 <td className="p-3">{i.item_name}</td>
                                                 <td className="p-3 text-center">{i.qty || i.quantity}</td>
                                                 <td className="p-3 text-right">₹{((i.qty || i.quantity) * i.price).toFixed(2)}</td>
+                                                {activeTab === "store" && (
+                                                    <td className="p-3 text-center">
+                                                        <button
+                                                            onClick={() => handleItemDeleteRequest(selectedBill, i, currentBillItems)}
+                                                            className="p-1 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+                                                            disabled={deleting}
+                                                            title="Delete Item"
+                                                        >
+                                                            <Trash2 size={12} />
+                                                        </button>
+                                                    </td>
+                                                )}
                                             </tr>
                                         ))}
                                     </tbody>
@@ -993,10 +1239,18 @@ function Reports() {
                         </div>
 
                         <div className="p-6 border-t border-black/10 bg-white md:rounded-b-[2.5rem]">
-                            <div className="flex justify-between items-center text-white p-5 rounded-2xl shadow-lg" style={{ backgroundColor: PRIMARY }}>
+                            <div className="flex justify-between items-center text-white p-5 rounded-2xl shadow-lg mb-3" style={{ backgroundColor: PRIMARY }}>
                                 <span className="text-xs font-black uppercase tracking-widest text-white/60">Grand Total</span>
                                 <span className="text-xl font-black">₹{Number(selectedBill.total || selectedBill.total_amount).toFixed(2)}</span>
                             </div>
+                            {activeTab === "store" && (
+                                <button
+                                    onClick={() => setBillToDelete(selectedBill)}
+                                    className="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-red-50 text-red-500 hover:bg-red-100 border border-red-100 text-xs font-black uppercase tracking-widest transition-colors"
+                                >
+                                    <Trash2 size={14} /> Delete This Bill
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1030,7 +1284,140 @@ function Reports() {
         .deletion-banner-urgent .deletion-banner-text { color: #991b1b; }
         .deletion-banner-urgent .deletion-banner-text strong { color: #7f1d1d; }
         .deletion-banner-urgent .deletion-date-highlight { background: #fee2e2; }
+
+        /* --- Confirm Delete Modal --- */
+        .confirm-modal-overlay { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+        .confirm-modal-box { background: white; border-radius: 24px; padding: 32px; max-width: 400px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); text-align: center; }
+        .confirm-modal-box h3 { font-size: 16px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px; }
+        .confirm-modal-box p { font-size: 13px; color: #666; margin-bottom: 24px; line-height: 1.5; }
+        .confirm-modal-actions { display: flex; gap: 12px; }
+        .confirm-modal-actions button { flex: 1; padding: 12px; border-radius: 14px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; cursor: pointer; border: none; transition: all 0.2s; }
+        .confirm-cancel-btn { background: #f1f5f9; color: #475569; }
+        .confirm-cancel-btn:hover { background: #e2e8f0; }
+        .confirm-delete-btn { background: #ef4444; color: white; }
+        .confirm-delete-btn:hover { background: #dc2626; }
+        .confirm-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* --- Discount Re-Eval Modal --- */
+        .discount-modal-overlay { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+        .discount-modal-box { background: white; border-radius: 24px; padding: 32px; max-width: 420px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
+        .discount-modal-box h3 { font-size: 16px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; text-align: center; }
+        .discount-modal-box .hint { font-size: 12px; color: #888; text-align: center; margin-bottom: 20px; }
+        .discount-modal-box .info-row { display: flex; justify-content: space-between; font-size: 12px; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
+        .discount-modal-box .info-row span:first-child { color: #888; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
+        .discount-modal-box .info-row span:last-child { font-weight: 800; }
+        .discount-modal-box .discount-input-row { display: flex; align-items: center; gap: 10px; margin: 20px 0; }
+        .discount-modal-box .discount-input-row label { font-size: 11px; font-weight: 800; text-transform: uppercase; color: #555; white-space: nowrap; }
+        .discount-modal-box .discount-input-row input { flex: 1; padding: 10px 14px; border-radius: 12px; border: 1px solid #e2e8f0; font-weight: 800; font-size: 14px; outline: none; text-align: right; }
+        .discount-modal-box .discount-input-row input:focus { border-color: ${PRIMARY}; box-shadow: 0 0 0 3px ${PRIMARY}22; }
       `}</style>
+
+            {/* --- CONFIRM DELETE MODAL --- */}
+            {billToDelete && (
+                <div className="confirm-modal-overlay" onClick={() => !deleting && setBillToDelete(null)}>
+                    <div className="confirm-modal-box" onClick={(e) => e.stopPropagation()}>
+                        <h3>Delete Bill?</h3>
+                        <p>This will permanently delete bill <strong>#{billToDelete.id.toString().slice(-8)}</strong> and all its items. This action cannot be undone.</p>
+                        <div className="confirm-modal-actions">
+                            <button className="confirm-cancel-btn" onClick={() => setBillToDelete(null)} disabled={deleting}>Cancel</button>
+                            <button className="confirm-delete-btn" onClick={() => handleDeleteBill(billToDelete)} disabled={deleting}>
+                                {deleting ? "Deleting..." : "Yes, Delete"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- DISCOUNT RE-EVAL MODAL --- */}
+            {itemDeleteContext && (
+                <DiscountReEvalModal
+                    context={itemDeleteContext}
+                    deleting={deleting}
+                    onCancel={() => setItemDeleteContext(null)}
+                    onConfirm={handleConfirmItemDeleteWithDiscount}
+                />
+            )}
+        </div>
+    );
+}
+
+function DiscountReEvalModal({ context, deleting, onConfirm, onCancel }) {
+    const { bill, item } = context;
+    const itemTotal = item.total ? Number(item.total) : (Number(item.qty ?? 0) * Number(item.price ?? 0));
+    const newSubtotal = Number(bill.subtotal ?? 0) - itemTotal;
+    const oldDiscount = Number(bill.discount ?? 0);
+
+    const [discountType, setDiscountType] = useState('fixed');
+    const [discountInput, setDiscountInput] = useState(String(oldDiscount));
+
+    const computedDiscount = discountType === 'percent'
+        ? Math.round((Number(discountInput || 0) / 100) * newSubtotal * 100) / 100
+        : Number(discountInput || 0);
+
+    const isValid = computedDiscount >= 0 && computedDiscount <= newSubtotal;
+    const newTotal = isValid ? (newSubtotal - computedDiscount) : newSubtotal;
+
+    return (
+        <div className="discount-modal-overlay" onClick={onCancel}>
+            <div className="discount-modal-box" onClick={e => e.stopPropagation()}>
+                <h3>Re-evaluate Discount</h3>
+                <p className="hint">You're deleting an item from a bill that has a discount. Please set the new discount.</p>
+
+                <div className="info-row">
+                    <span>Deleting</span>
+                    <span style={{ color: '#ef4444' }}>{item.item_name} (₹{itemTotal.toLocaleString('en-IN')})</span>
+                </div>
+                <div className="info-row">
+                    <span>Old Subtotal</span>
+                    <span>₹{Number(bill.subtotal ?? 0).toLocaleString('en-IN')}</span>
+                </div>
+                <div className="info-row">
+                    <span>New Subtotal</span>
+                    <span style={{ color: PRIMARY }}>₹{newSubtotal.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="info-row">
+                    <span>Old Discount</span>
+                    <span style={{ color: '#ef4444' }}>₹{oldDiscount.toLocaleString('en-IN')}</span>
+                </div>
+
+                <div className="discount-input-row">
+                    <label>New Discount ({discountType === 'fixed' ? '₹' : '%'})</label>
+                    <input
+                        type="number"
+                        min="0"
+                        max={discountType === 'percent' ? 100 : newSubtotal}
+                        value={discountInput}
+                        onChange={e => setDiscountInput(e.target.value)}
+                        placeholder={discountType === 'fixed' ? 'Enter amount' : 'Enter percentage'}
+                    />
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                    <button
+                        onClick={() => { setDiscountType('fixed'); setDiscountInput(String(oldDiscount)); }}
+                        style={{ flex: 1, padding: '8px', borderRadius: 10, border: discountType === 'fixed' ? `2px solid ${PRIMARY}` : '1px solid #e2e8f0', background: discountType === 'fixed' ? '#ecfdf5' : '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}
+                    >₹ Fixed</button>
+                    <button
+                        onClick={() => { setDiscountType('percent'); setDiscountInput(''); }}
+                        style={{ flex: 1, padding: '8px', borderRadius: 10, border: discountType === 'percent' ? `2px solid ${PRIMARY}` : '1px solid #e2e8f0', background: discountType === 'percent' ? '#ecfdf5' : '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}
+                    >% Percent</button>
+                </div>
+
+                {!isValid && discountInput !== '' && (
+                    <p style={{ color: '#ef4444', fontSize: 11, fontWeight: 700, marginBottom: 12 }}>Discount cannot exceed the new subtotal (₹{newSubtotal.toLocaleString('en-IN')})</p>
+                )}
+
+                <div className="info-row" style={{ borderTop: '2px dashed #e2e8f0', paddingTop: 12, marginTop: 8 }}>
+                    <span style={{ fontWeight: 900 }}>New Total</span>
+                    <span style={{ fontWeight: 900, fontSize: 16, color: PRIMARY }}>₹{newTotal.toLocaleString('en-IN')}</span>
+                </div>
+
+                <div className="confirm-modal-actions" style={{ marginTop: 20 }}>
+                    <button className="confirm-cancel-btn" onClick={onCancel} disabled={deleting}>Cancel</button>
+                    <button className="confirm-delete-btn" onClick={() => onConfirm(computedDiscount)} disabled={deleting || !isValid}>
+                        {deleting ? "Deleting..." : "Delete & Update"}
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }
