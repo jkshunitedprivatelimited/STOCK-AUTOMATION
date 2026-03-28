@@ -15,7 +15,7 @@ import {
 // --- CONFIGURATION ---
 const PRIMARY = "rgb(0, 100, 55)";
 const PRIMARY_LIGHT = "rgba(0, 100, 55, 0.1)";
-const CACHE_KEY = "reports_data_cache";
+const CACHE_KEY = "reports_data_cache_v2";
 const CACHE_COMPANIES_KEY = "reports_companies_cache";
 const CACHE_DURATION = 5 * 60 * 1000; // 5 Minutes
 
@@ -51,6 +51,22 @@ const COLORS = [
     PRIMARY, "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6",
     "#ec4899", "#06b6d4", "#f97316", "#6366f1", "#14b8a6"
 ];
+
+// --- EDGE FUNCTION CALLER (bypasses RLS via service_role key) ---
+async function callAdminDeleteBillItem({ target_item_id, target_bill_id, new_subtotal, new_total, new_discount }) {
+    console.log('[EDGE-FN] Calling admin-delete-bill-item:', { target_item_id, target_bill_id, new_subtotal, new_total, new_discount });
+
+    const { data, error } = await supabase.functions.invoke('admin-delete-bill-item', {
+        body: { target_item_id, target_bill_id, new_subtotal, new_total, new_discount }
+    });
+
+    console.log('[EDGE-FN] Response:', { data, error });
+
+    if (error) throw new Error(error.message || 'Edge Function call failed');
+    if (data && data.success === false) throw new Error(data.error || 'Item deletion failed');
+
+    return data;
+}
 
 function Reports() {
     const navigate = useNavigate();
@@ -202,9 +218,9 @@ function Reports() {
             // Fetch Data in Parallel
             const [billsReq, bItemsReq, invReq, iItemsReq, profilesReq] = await Promise.all([
                 supabase.from("bills_generated").select("*").order("created_at", { ascending: false }),
-                supabase.from("bills_items_generated").select("bill_id, item_name, qty, price"),
+                supabase.from("bills_items_generated").select("id, bill_id, item_name, qty, price"),
                 supabase.from("invoices").select("*").order("created_at", { ascending: false }),
-                supabase.from("invoice_items").select("invoice_id, item_name, quantity, price"),
+                supabase.from("invoice_items").select("id, invoice_id, item_name, quantity, price"),
                 supabase.from("profiles").select("id, franchise_id, branch_location, address, company, name")
             ]);
 
@@ -414,28 +430,38 @@ function Reports() {
         setSelectedBill(bill);
         const isStore = activeTab === "store";
         const cacheKey = `${isStore ? "bill" : "inv"}_${bill.id}`;
+        const foreignKey = isStore ? "bill_id" : "invoice_id";
+        const itemsPool = isStore ? rawData.billItems : rawData.invoiceItems;
 
-        // Check in-memory cache first
-        if (billItemsCache.current[cacheKey]) {
+        // ── Step 1: Use already-fetched rawData items (fastest, most reliable) ──
+        const fromRawData = itemsPool.filter(i => i[foreignKey] === bill.id);
+        if (fromRawData.length > 0 && fromRawData[0].id) {
+            billItemsCache.current[cacheKey] = fromRawData;
+            setCurrentBillItems(fromRawData);
+            return;
+        }
+
+        // ── Step 2: In-memory cache ──
+        if (billItemsCache.current[cacheKey] !== undefined && billItemsCache.current[cacheKey][0]?.id) {
             setCurrentBillItems(billItemsCache.current[cacheKey]);
             return;
         }
 
-        // Check sessionStorage cache
+        // ── Step 3: sessionStorage cache ──
         const sessionCached = safeGetCache(`reports_items_${cacheKey}`);
-        if (sessionCached) {
+        if (sessionCached && sessionCached.length > 0 && sessionCached[0].id) {
             billItemsCache.current[cacheKey] = sessionCached;
             setCurrentBillItems(sessionCached);
             return;
         }
 
-        // Network fetch as last resort
+        // ── Step 4: Network fetch as final fallback ──
         setModalLoading(true);
         try {
             const { data, error } = await supabase
                 .from(isStore ? "bills_items_generated" : "invoice_items")
                 .select("*")
-                .eq(isStore ? "bill_id" : "invoice_id", bill.id);
+                .eq(foreignKey, bill.id);
             if (error) throw error;
             const items = data || [];
             billItemsCache.current[cacheKey] = items;
@@ -494,45 +520,37 @@ function Reports() {
         setDeleting(true);
         try {
             const itemTotal = item.total ? Number(item.total) : (Number(item.qty ?? 0) * Number(item.price ?? 0));
-            const newSubtotal = Number(bill.subtotal ?? 0) - itemTotal;
-            const newTotal = newSubtotal - Number(bill.discount ?? 0);
+            const newSubtotal = Math.max(0, Number(bill.subtotal ?? 0) - itemTotal);
+            const newTotal = Math.max(0, newSubtotal - Number(bill.discount ?? 0));
 
-            const { data, error } = await supabase.rpc('admin_delete_bill_item', {
+            console.log('[DELETE-ITEM] Starting Edge Function delete:', { itemId: item.id, billId: bill.id, itemTotal, newSubtotal, newTotal });
+
+            await callAdminDeleteBillItem({
                 target_item_id: item.id,
                 target_bill_id: bill.id,
                 new_subtotal: newSubtotal,
-                new_total: newTotal,
-                new_discount: Number(bill.discount ?? 0)
+                new_total: newTotal
             });
-            if (error) throw error;
 
-            if (data && data.success === false) {
-                alert(data.error || "Database deletion blocked (likely due to RLS). Please contact support or provide correct permissions.");
-                setDeleting(false);
-                return;
-            }
-
-            if (!data || data.deleted_items === 0) {
-                alert("Database deletion blocked (likely due to RLS). Please contact support or provide correct permissions.");
-                setDeleting(false);
-                return;
-            }
-
+            // Update local state
             setRawData(prev => ({
                 ...prev,
-                store: prev.store.map(b => b.id === bill.id ? { ...b, subtotal: newSubtotal, total: newTotal } : b)
+                store: prev.store.map(b => b.id === bill.id ? { ...b, subtotal: newSubtotal, total: newTotal } : b),
+                billItems: prev.billItems.filter(bi => bi.id !== item.id)
             }));
             setCurrentBillItems(prev => prev.filter(i => i.id !== item.id));
             if (selectedBill?.id === bill.id) setSelectedBill(prev => ({ ...prev, subtotal: newSubtotal, total: newTotal }));
             clearReportsCaches();
-            alert("Item deleted successfully!");
+
+            // Force fresh re-fetch so charts/pie update
+            setTimeout(() => fetchData(true), 300);
         } catch (err) {
-            console.error("Delete item error:", err);
-            alert("Failed to delete item. Please try again.");
+            console.error('Delete item error:', err);
+            alert('Failed to delete item: ' + (err.message || 'Unknown error'));
         } finally {
             setDeleting(false);
         }
-    }, [selectedBill]);
+    }, [selectedBill, clearReportsCaches, fetchData]);
 
     // --- ITEM DELETE ENTRY POINT ---
     const handleItemDeleteRequest = useCallback((bill, item, allItems) => {
@@ -554,47 +572,41 @@ function Reports() {
         setDeleting(true);
         try {
             const itemTotal = item.total ? Number(item.total) : (Number(item.qty ?? 0) * Number(item.price ?? 0));
-            const newSubtotal = Number(bill.subtotal ?? 0) - itemTotal;
+            const newSubtotal = Math.max(0, Number(bill.subtotal ?? 0) - itemTotal);
             const finalDiscount = Math.min(newDiscount, newSubtotal);
-            const newTotal = newSubtotal - finalDiscount;
+            const newTotal = Math.max(0, newSubtotal - finalDiscount);
 
-            const { data, error } = await supabase.rpc('admin_delete_bill_item', {
+            console.log('[DELETE-ITEM-DISCOUNT] Starting Edge Function delete:', { itemId: item.id, billId: bill.id, itemTotal, newSubtotal, finalDiscount, newTotal });
+
+            // Edge Function handles delete + update (including discount) in one shot
+            await callAdminDeleteBillItem({
                 target_item_id: item.id,
                 target_bill_id: bill.id,
                 new_subtotal: newSubtotal,
                 new_total: newTotal,
                 new_discount: finalDiscount
             });
-            if (error) throw error;
 
-            if (data && data.success === false) {
-                alert(data.error || "Database deletion blocked (likely due to RLS). Please contact support or provide correct permissions.");
-                setDeleting(false);
-                return;
-            }
-
-            if (!data || data.deleted_items === 0) {
-                alert("Database deletion blocked (likely due to RLS). Please contact support or provide correct permissions.");
-                setDeleting(false);
-                return;
-            }
-
+            // Update local state
             setRawData(prev => ({
                 ...prev,
-                store: prev.store.map(b => b.id === bill.id ? { ...b, subtotal: newSubtotal, discount: finalDiscount, total: newTotal } : b)
+                store: prev.store.map(b => b.id === bill.id ? { ...b, subtotal: newSubtotal, discount: finalDiscount, total: newTotal } : b),
+                billItems: prev.billItems.filter(bi => bi.id !== item.id)
             }));
             setCurrentBillItems(prev => prev.filter(i => i.id !== item.id));
             if (selectedBill?.id === bill.id) setSelectedBill(prev => ({ ...prev, subtotal: newSubtotal, discount: finalDiscount, total: newTotal }));
             setItemDeleteContext(null);
             clearReportsCaches();
-            alert("Item deleted successfully!");
+
+            // Force fresh re-fetch so charts/pie update
+            setTimeout(() => fetchData(true), 300);
         } catch (err) {
-            console.error("Delete item with discount error:", err);
-            alert("Failed to delete item. Please try again.");
+            console.error('Delete item with discount error:', err);
+            alert('Failed to delete item: ' + (err.message || 'Unknown error'));
         } finally {
             setDeleting(false);
         }
-    }, [itemDeleteContext, selectedBill]);
+    }, [itemDeleteContext, selectedBill, clearReportsCaches, fetchData]);
 
     // --- DATA FILTERING LOGIC ---
     const filteredData = useMemo(() => {
@@ -1213,12 +1225,14 @@ function Reports() {
                                     </thead>
                                     <tbody className="divide-y divide-black/5 text-xs font-bold text-black">
                                         {modalLoading ? (
-                                            <tr><td colSpan={activeTab === "store" ? 4 : 3} className="p-6 text-center text-black/40">Loading...</td></tr>
+                                            <tr><td colSpan={activeTab === "store" ? 4 : 3} className="p-6 text-center text-black/40">Loading items...</td></tr>
+                                        ) : currentBillItems.length === 0 ? (
+                                            <tr><td colSpan={activeTab === "store" ? 4 : 3} className="p-6 text-center text-black/40 text-xs font-bold uppercase">No items found for this bill</td></tr>
                                         ) : currentBillItems.map((i, idx) => (
                                             <tr key={idx}>
                                                 <td className="p-3">{i.item_name}</td>
-                                                <td className="p-3 text-center">{i.qty || i.quantity}</td>
-                                                <td className="p-3 text-right">₹{((i.qty || i.quantity) * i.price).toFixed(2)}</td>
+                                                <td className="p-3 text-center">{i.qty ?? i.quantity ?? 0}</td>
+                                                <td className="p-3 text-right">₹{(Number(i.qty ?? i.quantity ?? 0) * Number(i.price ?? 0)).toFixed(2)}</td>
                                                 {activeTab === "store" && (
                                                     <td className="p-3 text-center">
                                                         <button
@@ -1239,9 +1253,21 @@ function Reports() {
                         </div>
 
                         <div className="p-6 border-t border-black/10 bg-white md:rounded-b-[2.5rem]">
+                            {activeTab === "store" && Number(selectedBill.discount || 0) > 0 && (
+                                <div className="flex flex-col gap-2 mb-4 px-2">
+                                    <div className="flex justify-between text-xs font-bold text-black/60 uppercase tracking-wider">
+                                        <span>Subtotal</span>
+                                        <span>₹{Number(selectedBill.subtotal || (Number(selectedBill.total || 0) + Number(selectedBill.discount || 0))).toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs font-bold text-red-500 uppercase tracking-wider">
+                                        <span>Discount Applied</span>
+                                        <span>-₹{Number(selectedBill.discount || 0).toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            )}
                             <div className="flex justify-between items-center text-white p-5 rounded-2xl shadow-lg mb-3" style={{ backgroundColor: PRIMARY }}>
                                 <span className="text-xs font-black uppercase tracking-widest text-white/60">Grand Total</span>
-                                <span className="text-xl font-black">₹{Number(selectedBill.total || selectedBill.total_amount).toFixed(2)}</span>
+                                <span className="text-xl font-black">₹{Number(selectedBill.total || selectedBill.total_amount || 0).toFixed(2)}</span>
                             </div>
                             {activeTab === "store" && (
                                 <button

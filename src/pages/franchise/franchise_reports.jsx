@@ -47,8 +47,10 @@ function FranchiseAnalytics() {
   // --- STATE ---
   const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem("analytics_activeTab") || "store");
   const [dateRangeMode, setDateRangeMode] = useState(() => sessionStorage.getItem("analytics_dateRangeMode") || "single");
-  const [startDate, setStartDate] = useState(() => sessionStorage.getItem("analytics_startDate") || new Date().toISOString().split("T")[0]);
-  const [endDate, setEndDate] = useState(() => sessionStorage.getItem("analytics_endDate") || new Date().toISOString().split("T")[0]);
+  // Always default to TODAY — never restore stale dates from sessionStorage
+  const TODAY = new Date().toISOString().split("T")[0];
+  const [startDate, setStartDate] = useState(TODAY);
+  const [endDate, setEndDate] = useState(TODAY);
 
   const [graphData, setGraphData] = useState([]);
   const [topItems, setTopItems] = useState([]);
@@ -128,17 +130,22 @@ function FranchiseAnalytics() {
   }, [franchiseId]);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
+    if (!franchiseId) return;
+
+    // Cache key includes the date so yesterday's cached data is NEVER served today
     const cacheKey = `analytics_data_${franchiseId}_${activeTab}_${dateRangeMode}_${startDate}_${endDate}`;
 
-    // Check cache only if we are NOT forcing a refresh
+    // Serve from cache unless forcing a refresh
     if (!forceRefresh) {
       const cachedData = sessionStorage.getItem(cacheKey);
       if (cachedData) {
-        const parsed = JSON.parse(cachedData);
-        setBills(parsed.bills);
-        setGraphData(parsed.graphData);
-        setTopItems(parsed.topItems);
-        return;
+        try {
+          const parsed = JSON.parse(cachedData);
+          setBills(parsed.bills || []);
+          setGraphData(parsed.graphData || []);
+          setTopItems(parsed.topItems || []);
+          return;
+        } catch { /* bad cache — fall through to network */ }
       }
     }
 
@@ -152,10 +159,14 @@ function FranchiseAnalytics() {
         : supabase.from(table).select("*, profiles:created_by(franchise_id)");
 
       if (dateRangeMode === "single") {
-        query = query.gte("created_at", `${startDate}T00:00:00`).lte("created_at", `${startDate}T23:59:59`);
+        query = query
+          .gte("created_at", `${startDate}T00:00:00`)
+          .lte("created_at", `${startDate}T23:59:59`);
       } else {
         const finalEndDate = endDate || startDate;
-        query = query.gte("created_at", `${startDate}T00:00:00`).lte("created_at", `${finalEndDate}T23:59:59`);
+        query = query
+          .gte("created_at", `${startDate}T00:00:00`)
+          .lte("created_at", `${finalEndDate}T23:59:59`);
       }
 
       const { data, error } = await query.order("created_at", { ascending: false });
@@ -163,7 +174,6 @@ function FranchiseAnalytics() {
 
       const fetchedBills = data || [];
       const generatedGraph = processChartData(fetchedBills);
-
       const ids = fetchedBills.map(d => d.id);
       const generatedTopItems = ids.length > 0 ? await fetchTopItems(ids) : [];
 
@@ -180,8 +190,9 @@ function FranchiseAnalytics() {
     } catch (err) {
       console.error("Fetch Error:", err.message);
       alert("Failed to load data. Please check your connection.");
+    } finally {
+      setLoading(false);
     }
-    finally { setLoading(false); }
   }, [franchiseId, activeTab, dateRangeMode, startDate, endDate]);
 
   // --- NEW: FORCE REFRESH FUNCTION ---
@@ -202,35 +213,37 @@ function FranchiseAnalytics() {
 
   // --- DELETE ENTIRE BILL ---
   const handleDeleteBill = useCallback(async (bill) => {
+    // Optimistic UI: remove from list immediately
+    setBills(prev => prev.filter(b => b.id !== bill.id));
+    if (expandedBill === bill.id) setExpandedBill(null);
+    setBillToDelete(null);
+
     setDeleting(true);
     try {
-      // Delete child items first
+      // Delete child items first, then the bill itself
       const { error: itemsError } = await supabase
         .from("bills_items_generated")
         .delete()
         .eq("bill_id", bill.id);
       if (itemsError) throw itemsError;
 
-      // Delete the bill itself
       const { error: billError } = await supabase
         .from("bills_generated")
         .delete()
         .eq("id", bill.id);
       if (billError) throw billError;
 
-      // Update local state
-      setBills(prev => prev.filter(b => b.id !== bill.id));
-      if (expandedBill === bill.id) setExpandedBill(null);
-      setBillToDelete(null);
       clearAnalyticsCaches();
       fetchOldestRecord(true);
     } catch (err) {
       console.error("Delete bill error:", err);
-      alert("Failed to delete bill. Please try again.");
+      // Rollback: re-fetch to restore the bill if DB delete failed
+      fetchData(true);
+      alert("Failed to delete bill from database. Please try again.");
     } finally {
       setDeleting(false);
     }
-  }, [expandedBill, clearAnalyticsCaches, fetchOldestRecord]);
+  }, [expandedBill, clearAnalyticsCaches, fetchOldestRecord, fetchData]);
 
   // --- DELETE SINGLE ITEM (no discount or zero discount) ---
   const handleDeleteItemDirect = useCallback(async (bill, item, allItems) => {
@@ -326,11 +339,10 @@ function FranchiseAnalytics() {
 
   // --- EFFECTS ---
   useEffect(() => {
+    // Only persist tab and date mode — never persist dates (always reset to today on load)
     safeSetSessionStorage("analytics_activeTab", activeTab);
     safeSetSessionStorage("analytics_dateRangeMode", dateRangeMode);
-    safeSetSessionStorage("analytics_startDate", startDate);
-    safeSetSessionStorage("analytics_endDate", endDate);
-  }, [activeTab, dateRangeMode, startDate, endDate]);
+  }, [activeTab, dateRangeMode]);
 
   useEffect(() => {
     if (!franchiseId) fetchFranchiseProfile();
@@ -340,6 +352,7 @@ function FranchiseAnalytics() {
     if (franchiseId) fetchOldestRecord();
   }, [franchiseId, fetchOldestRecord]);
 
+  // Fetch data only when franchiseId is ready AND any filter changes
   useEffect(() => {
     if (franchiseId) fetchData();
   }, [activeTab, startDate, endDate, dateRangeMode, franchiseId, fetchData]);
