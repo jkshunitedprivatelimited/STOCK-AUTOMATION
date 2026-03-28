@@ -20,6 +20,7 @@ function PosManagement() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [myFranchiseId, setMyFranchiseId] = useState("");
+  const [selectedItems, setSelectedItems] = useState([]);
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
@@ -27,6 +28,19 @@ function PosManagement() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [newItem, setNewItem] = useState({ item_name: "", price: "", category: "" });
   const [editingItem, setEditingItem] = useState(null);
+
+  // Custom Confirm/Prompt Modal State
+  const [confirmState, setConfirmState] = useState({ open: false, message: "", onConfirm: null });
+  const [promptState, setPromptState] = useState({ open: false, message: "", defaultValue: "", onSubmit: null });
+  const [promptValue, setPromptValue] = useState("");
+
+  const showConfirm = (message) => new Promise((resolve) => {
+    setConfirmState({ open: true, message, onConfirm: resolve });
+  });
+  const showPrompt = (message, defaultValue = "") => new Promise((resolve) => {
+    setPromptValue(defaultValue);
+    setPromptState({ open: true, message, defaultValue, onSubmit: resolve });
+  });
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -55,6 +69,10 @@ function PosManagement() {
       }
     }
   }, [selectedCompany, allCompanyRecords, viewFranchise]);
+
+  useEffect(() => {
+    setSelectedItems([]);
+  }, [selectedCategory]);
 
   const fetchCurrentUser = async () => {
     try {
@@ -225,16 +243,100 @@ function PosManagement() {
   };
 
   const deleteItem = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this item?")) return;
+    const confirmed = await showConfirm("Are you sure you want to delete this item?");
+    if (!confirmed) return;
     try {
-      const { error } = await supabase.from("menus").delete().eq("id", id);
+      const { data, error } = await supabase.from("menus").delete().eq("id", id).select();
       if (error) throw error;
+      if (!data || data.length === 0) return showToast("Delete blocked by RLS policy", "error");
 
       showToast("Item removed successfully");
       refreshMenuCache(viewFranchise);
     } catch (err) {
       showToast(err.message, "error");
     }
+  };
+
+  const handleDeleteCategory = async () => {
+    if (!viewFranchise || selectedCategory === "All") return;
+    const confirmed = await showConfirm(`Delete all items in category "${selectedCategory}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      const searchCat = selectedCategory.trim().toUpperCase();
+      const itemIds = menus
+        .filter(item => (item.category || "").trim().toUpperCase() === searchCat)
+        .map(item => item.id);
+
+      if (itemIds.length === 0) return showToast(`No items in category "${selectedCategory}"`, "error");
+
+      const { data, error } = await supabase.from("menus").delete().in("id", itemIds).select();
+      if (error) throw error;
+      if (!data || data.length === 0) return showToast("Delete blocked by RLS policy", "error");
+
+      showToast(`Deleted ${data.length} items in "${selectedCategory}"`);
+      setSelectedCategory("All");
+      refreshMenuCache(viewFranchise);
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  };
+
+  const handleRenameCategory = async () => {
+    if (!viewFranchise || selectedCategory === "All") return;
+    const newName = await showPrompt(`Enter new name for category "${selectedCategory}":`, selectedCategory);
+    if (!newName || newName.trim() === "" || newName.trim().toUpperCase() === selectedCategory.trim().toUpperCase()) return;
+
+    const finalName = newName.trim().toUpperCase();
+    try {
+      const itemIds = menus
+        .filter(item => (item.category || "").trim().toUpperCase() === selectedCategory.trim().toUpperCase())
+        .map(item => item.id);
+
+      if (itemIds.length === 0) return showToast(`No items found in "${selectedCategory}"`, "error");
+
+      const { data, error } = await supabase.from("menus").update({ category: finalName }).in("id", itemIds).select();
+      if (error) throw error;
+      if (!data || data.length === 0) return showToast("Rename blocked by RLS policy", "error");
+
+      showToast(`Renamed "${selectedCategory}" → "${finalName}" (${data.length} items)`);
+      setSelectedCategory(finalName);
+      refreshMenuCache(viewFranchise);
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  };
+
+  const handleDeleteSelectedItems = async () => {
+    if (selectedItems.length === 0) return;
+    const confirmed = await showConfirm(`Delete ${selectedItems.length} selected item(s)? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      const { data, error } = await supabase.from("menus").delete().in("id", selectedItems).select();
+      if (error) throw error;
+      if (!data || data.length === 0) return showToast("Delete blocked by RLS policy", "error");
+
+      showToast(`Deleted ${data.length} item(s)`);
+      setSelectedItems([]);
+      refreshMenuCache(viewFranchise);
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  };
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedItems(filteredMenus.map(item => item.id));
+    } else {
+      setSelectedItems([]);
+    }
+  };
+
+  const handleSelectItem = (id) => {
+    setSelectedItems(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
   };
 
   const addItem = async () => {
@@ -483,6 +585,48 @@ function PosManagement() {
             </div>
           )}
 
+          {/* Action Bar: Category Actions + Bulk Delete */}
+          {menus.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '16px', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                {selectedCategory === 'All' ? (
+                  filteredMenus.length > 0 && (
+                    <button
+                      onClick={async () => {
+                        const confirmed = await showConfirm(`Delete the ENTIRE menu for ${viewFranchise}? This cannot be undone.`);
+                        if (!confirmed) return;
+                        setLoading(true);
+                        try {
+                          const { data, error } = await supabase.from("menus").delete().eq("franchise_id", viewFranchise).select();
+                          if (error) throw error;
+                          if (!data || data.length === 0) return showToast("Delete blocked by RLS policy", "error");
+                          showToast(`Wiped ${data.length} items from ${viewFranchise}`);
+                          setMenus([]);
+                          setSelectedItems([]);
+                        } catch (err) {
+                          showToast(err.message, "error");
+                        } finally { setLoading(false); }
+                      }}
+                      style={styles.actionBtnDanger}
+                    >
+                      🗑 Delete Whole Menu
+                    </button>
+                  )
+                ) : (
+                  <>
+                    <button onClick={handleDeleteCategory} style={styles.actionBtnDanger}>🗑 Delete Category</button>
+                    <button onClick={handleRenameCategory} style={styles.actionBtnBlue}>✏️ Rename Category</button>
+                  </>
+                )}
+                {selectedItems.length > 0 && (
+                  <button onClick={handleDeleteSelectedItems} style={styles.actionBtnSolidDanger}>
+                    Delete {selectedItems.length} Selected
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Table / List Body */}
           <div style={styles.listContainer}>
             {loading ? (
@@ -497,10 +641,18 @@ function PosManagement() {
                   <div style={styles.itemsWrapper}>
                     {groupedMenu[cat].map(item => (
                       <div key={item.id} style={styles.premiumItemRow}>
-                        <div style={styles.itemLead}>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={styles.itemNameText}>{item.item_name}</span>
-                            <span style={styles.itemPriceText}>₹{item.price}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, overflow: 'hidden' }}>
+                          <input
+                            type="checkbox"
+                            style={{ width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0, accentColor: GREEN }}
+                            checked={selectedItems.includes(item.id)}
+                            onChange={() => handleSelectItem(item.id)}
+                          />
+                          <div style={styles.itemLead}>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={styles.itemNameText}>{item.item_name}</span>
+                              <span style={styles.itemPriceText}>₹{item.price}</span>
+                            </div>
                           </div>
                         </div>
                         <div style={styles.itemActions}>
@@ -568,6 +720,59 @@ function PosManagement() {
           </div>
         </div>
       )}
+      {/* Custom Confirm Modal */}
+      {confirmState.open && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modal, width: isMobile ? '90%' : '420px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#1e293b', marginBottom: '12px', marginTop: 0 }}>Confirm Action</h3>
+            <p style={{ fontSize: '14px', color: '#475569', marginBottom: '20px', lineHeight: 1.6 }}>{confirmState.message}</p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => { setConfirmState({ open: false, message: '', onConfirm: null }); confirmState.onConfirm?.(false); }}
+                style={styles.cancelBtn}
+              >Cancel</button>
+              <button
+                onClick={() => { setConfirmState({ open: false, message: '', onConfirm: null }); confirmState.onConfirm?.(true); }}
+                style={{ ...styles.cancelBtn, background: DANGER, color: '#fff', border: 'none' }}
+              >Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Prompt Modal */}
+      {promptState.open && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modal, width: isMobile ? '90%' : '420px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#1e293b', marginBottom: '12px', marginTop: 0 }}>Enter Value</h3>
+            <p style={{ fontSize: '14px', color: '#475569', marginBottom: '12px' }}>{promptState.message}</p>
+            <input
+              type="text"
+              value={promptValue}
+              onChange={e => setPromptValue(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  setPromptState({ open: false, message: '', defaultValue: '', onSubmit: null });
+                  promptState.onSubmit?.(promptValue);
+                }
+              }}
+              autoFocus
+              style={{ ...styles.modalInput, textTransform: 'uppercase', fontWeight: '700' }}
+              placeholder="Type new name..."
+            />
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => { setPromptState({ open: false, message: '', defaultValue: '', onSubmit: null }); promptState.onSubmit?.(null); }}
+                style={styles.cancelBtn}
+              >Cancel</button>
+              <button
+                onClick={() => { setPromptState({ open: false, message: '', defaultValue: '', onSubmit: null }); promptState.onSubmit?.(promptValue); }}
+                style={{ ...styles.primaryBtn, height: '44px', padding: '0 20px' }}
+              >Submit</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -615,6 +820,10 @@ const styles = {
   categoryGroup: { borderBottom: "1px solid #eee", paddingBottom: "10px" },
   categoryHeaderContainer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' },
   categoryHeader: { fontSize: "12px", color: GREEN, fontWeight: "900", letterSpacing: "1px", textTransform: "uppercase", margin: 0, display: "inline-block", background: LIGHT_GREEN, padding: "4px 10px", borderRadius: "6px" },
+
+  actionBtnDanger: { padding: '7px 14px', background: '#fff1f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', fontWeight: '700', fontSize: '12px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' },
+  actionBtnBlue: { padding: '7px 14px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '8px', fontWeight: '700', fontSize: '12px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' },
+  actionBtnSolidDanger: { padding: '7px 14px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '12px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' },
 
   premiumItemRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px", borderRadius: "12px", background: "#fff", marginBottom: "10px", border: '1px solid #f0f0f0' },
   itemLead: { display: "flex", alignItems: "center", flex: 1, overflow: 'hidden' },

@@ -83,15 +83,18 @@ function FranchiseAnalytics() {
     } catch (e) { console.error("Profile Fetch Error", e); }
   }, []);
 
-  const fetchOldestRecord = useCallback(async () => {
+  const fetchOldestRecord = useCallback(async (forceRefresh = false) => {
     const cacheKey = `analytics_oldest_${franchiseId}`;
-    const cachedData = sessionStorage.getItem(cacheKey);
 
-    if (cachedData) {
-      const parsed = JSON.parse(cachedData);
-      setOldestRecordDate(parsed.date ? new Date(parsed.date) : null);
-      setDaysUntilDeletion(parsed.days);
-      return;
+    if (!forceRefresh) {
+      const cachedData = sessionStorage.getItem(cacheKey);
+
+      if (cachedData) {
+        const parsed = JSON.parse(cachedData);
+        setOldestRecordDate(parsed.date ? new Date(parsed.date) : null);
+        setDaysUntilDeletion(parsed.days);
+        return;
+      }
     }
 
     try {
@@ -184,7 +187,8 @@ function FranchiseAnalytics() {
   // --- NEW: FORCE REFRESH FUNCTION ---
   const handleRefresh = useCallback(() => {
     fetchData(true);
-  }, [fetchData]);
+    fetchOldestRecord(true);
+  }, [fetchData, fetchOldestRecord]);
 
   // --- CACHE INVALIDATION HELPER ---
   const clearAnalyticsCaches = useCallback(() => {
@@ -219,13 +223,14 @@ function FranchiseAnalytics() {
       if (expandedBill === bill.id) setExpandedBill(null);
       setBillToDelete(null);
       clearAnalyticsCaches();
+      fetchOldestRecord(true);
     } catch (err) {
       console.error("Delete bill error:", err);
       alert("Failed to delete bill. Please try again.");
     } finally {
       setDeleting(false);
     }
-  }, [expandedBill, clearAnalyticsCaches]);
+  }, [expandedBill, clearAnalyticsCaches, fetchOldestRecord]);
 
   // --- DELETE SINGLE ITEM (no discount or zero discount) ---
   const handleDeleteItemDirect = useCallback(async (bill, item, allItems) => {
@@ -258,13 +263,14 @@ function FranchiseAnalytics() {
       // Update local bills state
       setBills(prev => prev.map(b => b.id === bill.id ? { ...b, subtotal: newSubtotal, total: newTotal } : b));
       clearAnalyticsCaches();
+      fetchOldestRecord(true);
     } catch (err) {
       console.error("Delete item error:", err);
       alert("Failed to delete item. Please try again.");
     } finally {
       setDeleting(false);
     }
-  }, [clearAnalyticsCaches]);
+  }, [clearAnalyticsCaches, fetchOldestRecord]);
 
   // --- ITEM DELETE ENTRY POINT (decides modal vs direct) ---
   const handleItemDeleteRequest = useCallback((bill, item, allItems) => {
@@ -309,13 +315,14 @@ function FranchiseAnalytics() {
       setBills(prev => prev.map(b => b.id === bill.id ? { ...b, subtotal: newSubtotal, discount: finalDiscount, total: newTotal } : b));
       setItemDeleteContext(null);
       clearAnalyticsCaches();
+      fetchOldestRecord(true);
     } catch (err) {
       console.error("Delete item with discount error:", err);
       alert("Failed to delete item. Please try again.");
     } finally {
       setDeleting(false);
     }
-  }, [itemDeleteContext, clearAnalyticsCaches]);
+  }, [itemDeleteContext, clearAnalyticsCaches, fetchOldestRecord]);
 
   // --- EFFECTS ---
   useEffect(() => {

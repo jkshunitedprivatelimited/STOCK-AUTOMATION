@@ -6,7 +6,7 @@ import {
     Edit3, Trash2, X, Plus, Search,
     Calendar, ArrowLeft, AlertTriangle, Globe, EyeOff, Info,
     ChevronUp, ChevronDown, CheckCircle, Package, Tag, Hash,
-    ShoppingCart
+    ShoppingCart, Edit2
 } from "lucide-react";
 
 // --- HELPER COMPONENTS ---
@@ -129,6 +129,22 @@ function CentralStockMaster() {
     const [profile, setProfile] = useState({ franchise_id: "Loading..." });
     const [editingId, setEditingId] = useState(null);
     const companyDropdownRef = useRef(null);
+
+    // Checkbox selection state
+    const [selectedItems, setSelectedItems] = useState([]);
+
+    // Custom Confirm/Prompt Modal State (replaces window.confirm/window.prompt)
+    const [confirmState, setConfirmState] = useState({ open: false, message: "", onConfirm: null });
+    const [promptState, setPromptState] = useState({ open: false, message: "", defaultValue: "", onSubmit: null });
+    const [promptValue, setPromptValue] = useState("");
+
+    const showConfirm = (message) => new Promise((resolve) => {
+        setConfirmState({ open: true, message, onConfirm: resolve });
+    });
+    const showPrompt = (message, defaultValue = "") => new Promise((resolve) => {
+        setPromptValue(defaultValue);
+        setPromptState({ open: true, message, defaultValue, onSubmit: resolve });
+    });
 
     // Close company filter dropdown when clicking outside
     useEffect(() => {
@@ -257,6 +273,11 @@ function CentralStockMaster() {
     useEffect(() => {
         setVisibleCount(50);
     }, [filteredItems]);
+
+    // Clear selections when category changes
+    useEffect(() => {
+        setSelectedItems([]);
+    }, [selectedCategory]);
 
     const requestSort = (key) => {
         let direction = 'ascending';
@@ -390,9 +411,88 @@ function CentralStockMaster() {
     };
 
     const deleteItem = async (id) => {
-        if (!window.confirm("Delete item permanently?")) return;
-        await supabase.from("stocks").delete().eq("id", id);
-        fetchItems();
+        const confirmed = await showConfirm("Delete item permanently? This cannot be undone.");
+        if (!confirmed) return;
+        try {
+            const { data, error } = await supabase.from("stocks").delete().eq("id", id).select();
+            if (error) { alert("Error deleting item: " + error.message); return; }
+            if (!data || data.length === 0) { alert("Delete failed: Blocked by RLS policy."); return; }
+            setSelectedItems(prev => prev.filter(i => i !== id));
+            fetchItems();
+        } catch (err) {
+            alert("Unexpected error: " + (err?.message || String(err)));
+        }
+    };
+
+    // --- CATEGORY & BULK ACTIONS ---
+    const handleDeleteCategory = async () => {
+        if (selectedCategory === "All") return;
+        const confirmed = await showConfirm(`Delete ALL items in category "${selectedCategory}"? This cannot be undone.`);
+        if (!confirmed) return;
+        try {
+            const itemsInCat = items.filter(item => (item.category || "Uncategorized") === selectedCategory);
+            const ids = itemsInCat.map(item => item.id);
+            if (ids.length === 0) { alert(`No items found in category "${selectedCategory}".`); return; }
+            const { data, error } = await supabase.from("stocks").delete().in("id", ids).select();
+            if (error) { alert("Error deleting category: " + error.message); return; }
+            if (!data || data.length === 0) { alert("Delete failed: Blocked by RLS policy."); return; }
+            alert(`Deleted ${data.length} items from "${selectedCategory}".`);
+            setSelectedCategory("All");
+            setSelectedItems([]);
+            fetchItems();
+        } catch (err) {
+            alert("Error: " + (err?.message || String(err)));
+        }
+    };
+
+    const handleRenameCategory = async () => {
+        if (selectedCategory === "All") return;
+        const newName = await showPrompt(`Enter new name for category "${selectedCategory}":`, selectedCategory);
+        if (!newName || newName.trim() === "" || newName.trim() === selectedCategory) return;
+        const finalName = newName.trim();
+        try {
+            const itemsInCat = items.filter(item => (item.category || "Uncategorized") === selectedCategory);
+            const ids = itemsInCat.map(item => item.id);
+            if (ids.length === 0) { alert(`No items found in category "${selectedCategory}".`); return; }
+            const { data, error } = await supabase.from("stocks").update({ category: finalName }).in("id", ids).select();
+            if (error) { alert("Error renaming category: " + error.message); return; }
+            if (!data || data.length === 0) { alert("Rename failed: Blocked by RLS policy."); return; }
+            alert(`Renamed ${data.length} items from "${selectedCategory}" to "${finalName}".`);
+            setSelectedCategory(finalName);
+            fetchItems();
+        } catch (err) {
+            alert("Error: " + (err?.message || String(err)));
+        }
+    };
+
+    const handleDeleteSelectedItems = async () => {
+        if (selectedItems.length === 0) return;
+        const confirmed = await showConfirm(`Delete ${selectedItems.length} selected items? This cannot be undone.`);
+        if (!confirmed) return;
+        try {
+            const { data, error } = await supabase.from("stocks").delete().in("id", selectedItems).select();
+            if (error) { alert("Error deleting selected items: " + error.message); return; }
+            if (!data || data.length === 0) { alert("Delete failed: Blocked by RLS policy."); return; }
+            alert(`Deleted ${data.length} items.`);
+            setSelectedItems([]);
+            fetchItems();
+        } catch (err) {
+            alert("Error: " + (err?.message || String(err)));
+        }
+    };
+
+    const handleSelectAll = (e) => {
+        if (e.target.checked) {
+            setSelectedItems(filteredItems.slice(0, visibleCount).map(item => item.id));
+        } else {
+            setSelectedItems([]);
+        }
+    };
+
+    const handleSelectItem = (id) => {
+        setSelectedItems(prev =>
+            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        );
     };
 
     const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -514,6 +614,36 @@ function CentralStockMaster() {
                             <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-bold border transition-all whitespace-nowrap flex-shrink-0 ${selectedCategory === cat ? "text-white shadow-md" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`} style={selectedCategory === cat ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> {cat} </button>
                         ))}
                     </div>
+
+                    {/* --- CATEGORY ACTION BUTTONS --- */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3">
+                        <div className="flex flex-wrap gap-2">
+                            {selectedCategory !== "All" && (
+                                <>
+                                    <button onClick={handleDeleteCategory} className="px-4 py-2 bg-red-50 text-red-600 rounded-lg font-bold text-xs uppercase tracking-wider border border-red-100 hover:bg-red-100 transition-colors flex items-center gap-1.5">
+                                        <Trash2 size={14} /> Delete Category
+                                    </button>
+                                    <button onClick={handleRenameCategory} className="px-4 py-2 bg-blue-50 text-blue-600 rounded-lg font-bold text-xs uppercase tracking-wider border border-blue-100 hover:bg-blue-100 transition-colors flex items-center gap-1.5">
+                                        <Edit2 size={14} /> Rename Category
+                                    </button>
+                                </>
+                            )}
+                            {selectedItems.length > 0 && (
+                                <button onClick={handleDeleteSelectedItems} className="px-4 py-2 bg-red-600 text-white rounded-lg font-bold text-xs uppercase tracking-wider hover:bg-red-700 transition-colors shadow-sm flex items-center gap-1.5">
+                                    <Trash2 size={14} /> Delete {selectedItems.length} Selected
+                                </button>
+                            )}
+                        </div>
+                        <div className="inline-flex items-center gap-3 bg-white border border-slate-200 rounded-lg px-4 py-2 shadow-sm whitespace-nowrap">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                {selectedCategory === 'All' ? 'Total Items' : selectedCategory}
+                            </span>
+                            <div className="w-px h-3 bg-slate-200"></div>
+                            <span className="font-mono text-sm font-black text-black">
+                                {filteredItems.length.toString().padStart(2, '0')}
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -526,12 +656,20 @@ function CentralStockMaster() {
                         {filteredItems.slice(0, visibleCount).map((item) => {
                             const isLowStock = (Number(item.quantity) || 0) <= (Number(item.threshold) || 0);
                             return (
-                                <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col gap-3">
+                                <div key={item.id} className={`bg-white p-4 rounded-xl shadow-sm border flex flex-col gap-3 transition-all ${selectedItems.includes(item.id) ? 'border-[rgb(0,100,55)] ring-1 ring-[rgb(0,100,55)]/20' : 'border-slate-200'}`}>
                                     <div className="flex justify-between items-start">
-                                        <div className="flex-1 min-w-0 pr-2">
-                                            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1"> <Tag size={10} /> {item.category} • <CompanyBadge value={item.company_availability} /> </div>
-                                            <div className="font-black text-base text-black leading-tight mb-1 break-words">{item.item_name}</div>
-                                            <div className="text-[10px] bg-slate-100 inline-block px-2 py-0.5 rounded text-slate-500 font-mono"> {item.item_code || 'NO SKU'} </div>
+                                        <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
+                                            <input
+                                                type="checkbox"
+                                                className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 cursor-pointer mt-1 flex-shrink-0"
+                                                checked={selectedItems.includes(item.id)}
+                                                onChange={() => handleSelectItem(item.id)}
+                                            />
+                                            <div className="min-w-0">
+                                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1"> <Tag size={10} /> {item.category} • <CompanyBadge value={item.company_availability} /> </div>
+                                                <div className="font-black text-base text-black leading-tight mb-1 break-words">{item.item_name}</div>
+                                                <div className="text-[10px] bg-slate-100 inline-block px-2 py-0.5 rounded text-slate-500 font-mono"> {item.item_code || 'NO SKU'} </div>
+                                            </div>
                                         </div>
                                         <div className="text-right flex-shrink-0">
                                             <div className="text-lg font-black" style={{ color: BRAND_COLOR }}>₹{item.price}</div>
@@ -556,6 +694,14 @@ function CentralStockMaster() {
                         <table className="w-full text-left border-separate border-spacing-0">
                             <thead className="sticky top-0 z-20 bg-slate-100 shadow-sm">
                                 <tr className="text-[10px] font-black text-black uppercase tracking-widest">
+                                    <th className="px-4 py-4 border-b border-slate-200 w-12 text-center">
+                                        <input
+                                            type="checkbox"
+                                            className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 cursor-pointer"
+                                            checked={filteredItems.slice(0, visibleCount).length > 0 && selectedItems.length === filteredItems.slice(0, visibleCount).length}
+                                            onChange={handleSelectAll}
+                                        />
+                                    </th>
                                     <th className="px-6 py-4 border-b border-slate-200 cursor-pointer hover:bg-slate-200 transition" onClick={() => requestSort('id')}><div className="flex items-center">S.No <SortArrows columnKey="id" sortConfig={sortConfig} brandColor={BRAND_COLOR} /></div></th>
                                     <th className="px-6 py-4 border-b border-slate-200 cursor-pointer hover:bg-slate-200 transition" onClick={() => requestSort('item_code')}><div className="flex items-center">Code <SortArrows columnKey="item_code" sortConfig={sortConfig} brandColor={BRAND_COLOR} /></div></th>
                                     <th className="px-6 py-4 border-b border-slate-200 cursor-pointer hover:bg-slate-200 transition" onClick={() => requestSort('item_name')}><div className="flex items-center">Item Name <SortArrows columnKey="item_name" sortConfig={sortConfig} brandColor={BRAND_COLOR} /></div></th>
@@ -567,8 +713,17 @@ function CentralStockMaster() {
                             <tbody className="divide-y divide-slate-100">
                                 {filteredItems.slice(0, visibleCount).map((item, index) => {
                                     const isLowStock = (Number(item.quantity) || 0) <= (Number(item.threshold) || 0);
+                                    const isSelected = selectedItems.includes(item.id);
                                     return (
-                                        <tr key={item.id} className="hover:bg-slate-50 transition-colors group">
+                                        <tr key={item.id} className={`hover:bg-slate-50 transition-colors group ${isSelected ? 'bg-emerald-50/50' : ''}`}>
+                                            <td className="px-4 py-4 text-center">
+                                                <input
+                                                    type="checkbox"
+                                                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 cursor-pointer"
+                                                    checked={isSelected}
+                                                    onChange={() => handleSelectItem(item.id)}
+                                                />
+                                            </td>
                                             <td className="px-6 py-4 text-xs font-bold text-black whitespace-nowrap">{(index + 1).toString().padStart(2, '0')}</td>
                                             <td className="px-6 py-4 font-bold text-xs text-black whitespace-nowrap">{item.item_code || '-'}</td>
                                             <td className="px-6 py-4">
@@ -837,6 +992,67 @@ function CentralStockMaster() {
                             <button onClick={saveItem} disabled={loading} className="flex-[2] py-3.5 md:py-4 text-white font-black uppercase tracking-widest text-xs rounded-xl shadow-lg transition-all active:scale-95 disabled:bg-slate-300 flex items-center justify-center gap-2" style={{ backgroundColor: BRAND_COLOR }}>
                                 {loading ? 'Saving...' : 'Finalize & Save'}
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- CUSTOM CONFIRM MODAL --- */}
+            {confirmState.open && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="px-6 py-5 border-b border-slate-100">
+                            <h3 className="text-base font-black uppercase tracking-wider text-black flex items-center gap-2">
+                                <AlertTriangle size={16} className="text-red-500" /> Confirm Action
+                            </h3>
+                        </div>
+                        <div className="px-6 py-5">
+                            <p className="text-sm text-black/80 font-medium">{confirmState.message}</p>
+                        </div>
+                        <div className="px-6 py-4 border-t border-slate-100 flex gap-3 justify-end">
+                            <button
+                                onClick={() => { setConfirmState({ open: false, message: "", onConfirm: null }); confirmState.onConfirm?.(false); }}
+                                className="px-5 py-2.5 rounded-xl bg-slate-100 text-black font-bold text-xs uppercase tracking-wider hover:bg-slate-200 transition-colors"
+                            >Cancel</button>
+                            <button
+                                onClick={() => { setConfirmState({ open: false, message: "", onConfirm: null }); confirmState.onConfirm?.(true); }}
+                                className="px-5 py-2.5 rounded-xl bg-red-600 text-white font-bold text-xs uppercase tracking-wider hover:bg-red-700 transition-all"
+                            >Confirm</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- CUSTOM PROMPT MODAL --- */}
+            {promptState.open && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="px-6 py-5 border-b border-slate-100">
+                            <h3 className="text-base font-black uppercase tracking-wider text-black flex items-center gap-2">
+                                <Edit2 size={16} style={{ color: BRAND_COLOR }} /> Enter Value
+                            </h3>
+                        </div>
+                        <div className="px-6 py-5 space-y-3">
+                            <p className="text-sm text-black/80 font-medium">{promptState.message}</p>
+                            <input
+                                type="text"
+                                value={promptValue}
+                                onChange={(e) => setPromptValue(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-[rgb(0,100,55)]/20 focus:border-[rgb(0,100,55)] outline-none font-bold text-black"
+                                autoFocus
+                                onKeyDown={(e) => { if (e.key === 'Enter') { setPromptState({ open: false, message: "", defaultValue: "", onSubmit: null }); promptState.onSubmit?.(promptValue); } }}
+                            />
+                        </div>
+                        <div className="px-6 py-4 border-t border-slate-100 flex gap-3 justify-end">
+                            <button
+                                onClick={() => { setPromptState({ open: false, message: "", defaultValue: "", onSubmit: null }); promptState.onSubmit?.(null); }}
+                                className="px-5 py-2.5 rounded-xl bg-slate-100 text-black font-bold text-xs uppercase tracking-wider hover:bg-slate-200 transition-colors"
+                            >Cancel</button>
+                            <button
+                                onClick={() => { setPromptState({ open: false, message: "", defaultValue: "", onSubmit: null }); promptState.onSubmit?.(promptValue); }}
+                                className="px-5 py-2.5 rounded-xl text-white font-bold text-xs uppercase tracking-wider hover:brightness-110 transition-all"
+                                style={{ backgroundColor: BRAND_COLOR }}
+                            >Submit</button>
                         </div>
                     </div>
                 </div>
