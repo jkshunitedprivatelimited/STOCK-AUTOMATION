@@ -40,7 +40,44 @@
     <meta property="og:type" content="website" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <style>
+        .initial-loader-wrapper {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100vh;
+          width: 100vw;
+          background-color: #f8fafc;
+          font-family: system-ui, -apple-system, sans-serif;
+        }
+        .initial-spinner {
+          height: 32px;
+          width: 32px;
+          border-radius: 50%;
+          border: 4px solid #e2e8f0;
+          border-top-color: rgb(0,100,55);
+          animation: initial-spin 1s linear infinite;
+          margin-bottom: 16px;
+        }
+        .initial-text {
+          font-size: 12px;
+          font-weight: 700;
+          color: #94a3b8;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+        }
+        @keyframes initial-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      </style>
+      <div class="initial-loader-wrapper">
+        <div class="initial-spinner"></div>
+        <div class="initial-text">Loading JKSH...</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

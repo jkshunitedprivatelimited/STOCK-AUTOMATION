@@ -8,12 +8,18 @@ const Careers = () => {
     window.scrollTo(0, 0);
   }, []);
 
-  const [formData, setFormData] = useState({ name: "", email: "", role: "", message: "" });
   const [status, setStatus] = useState("idle");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setStatus("loading");
+    
+    const form = e.target;
+    const data = new FormData(form);
+    const name = data.get("name");
+    const email = data.get("email");
+    const role = data.get("role");
+    const message = data.get("message");
     
     try {
       const isDev = import.meta.env.DEV;
@@ -27,21 +33,21 @@ const Careers = () => {
         payload = {
           from: 'JKSH Website <onboarding@resend.dev>',
           to: ['jkshunitedpvtltd@gmail.com'], // Resend sandbox restriction
-          subject: `Career Application: ${formData.role || "General Application"}`,
+          subject: `Career Application: ${role || "General Application"}`,
           html: `
             <h3>New Career Form Submission</h3>
-            <p><strong>Name:</strong> ${formData.name}</p>
-            <p><strong>Email:</strong> ${formData.email}</p>
-            <p><strong>Applying for:</strong> ${formData.role}</p>
-            <p><strong>Message/Cover Letter:</strong><br/>${formData.message}</p>
+            <p><strong>Name:</strong> ${name}</p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Applying for:</strong> ${role}</p>
+            <p><strong>Message/Cover Letter:</strong><br/>${message}</p>
           `
         };
       } else {
         payload = {
-          name: formData.name,
-          email: formData.email,
-          subject: `Career Application: ${formData.role || "General Application"}`,
-          message: `Applying for: ${formData.role}\n\n${formData.message}`
+          name: name,
+          email: email,
+          subject: `Career Application: ${role || "General Application"}`,
+          message: `Applying for: ${role}\n\n${message}`
         };
       }
 
@@ -57,7 +63,7 @@ const Careers = () => {
       }
 
       setStatus("success");
-      setFormData({ name: "", email: "", role: "", message: "" });
+      form.reset();
       setTimeout(() => setStatus("idle"), 4000);
     } catch (error) {
       console.error("Email Error:", error);
@@ -106,9 +112,8 @@ const Careers = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
                 <input
                   type="text"
+                  name="name"
                   required
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
                   className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors outline-none"
                   placeholder="Your full name"
                 />
@@ -117,9 +122,8 @@ const Careers = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                 <input
                   type="email"
+                  name="email"
                   required
-                  value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
                   className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors outline-none"
                   placeholder="name@company.com"
                 />
@@ -128,9 +132,8 @@ const Careers = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Role / Position</label>
                 <input
                   type="text"
+                  name="role"
                   required
-                  value={formData.role}
-                  onChange={(e) => setFormData({...formData, role: e.target.value})}
                   className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors outline-none"
                   placeholder="e.g. Area Manager, Store Staff, etc."
                 />
@@ -139,9 +142,8 @@ const Careers = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Cover Letter / Message</label>
                 <textarea
                   rows="4"
+                  name="message"
                   required
-                  value={formData.message}
-                  onChange={(e) => setFormData({...formData, message: e.target.value})}
                   className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors outline-none resize-none"
                   placeholder="Tell us why you are a great fit..."
                 ></textarea>

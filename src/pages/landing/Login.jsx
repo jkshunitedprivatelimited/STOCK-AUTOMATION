@@ -13,8 +13,9 @@ function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const emailRef = React.useRef(null);
+  const passwordRef = React.useRef(null);
+  
   const [loginType, setLoginType] = useState("store");
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -73,15 +74,19 @@ function Login() {
     };
   }, []);
 
-  const handleLogin = async () => {
+  const handleLogin = async (e) => {
+    if (e) e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
     setStatusMsg("");
     setIsLoading(true);
 
     try {
-      const cleanPassword = password.trim();
-      const cleanEmail = email.trim().toLowerCase();
+      const emailValue = emailRef.current?.value || "";
+      const passwordValue = passwordRef.current?.value || "";
+      
+      const cleanPassword = passwordValue.trim();
+      const cleanEmail = emailValue.trim().toLowerCase();
 
       if (!cleanEmail || !cleanPassword) {
         throw new Error("Email and Password are required.");
@@ -184,12 +189,13 @@ function Login() {
   };
 
   const handleForgotPassword = async () => {
-    if (!email) return setErrorMsg("Please enter your email first.");
+    const emailValue = emailRef.current?.value || "";
+    if (!emailValue) return setErrorMsg("Please enter your email first.");
 
     setErrorMsg("");
     setIsLoading(true);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    const { error } = await supabase.auth.resetPasswordForEmail(emailValue, {
       redirectTo: window.location.origin,
     });
 
@@ -202,17 +208,18 @@ function Login() {
   };
 
   const handleUpdatePassword = async () => {
-    if (!password) return setErrorMsg("Enter a new password.");
+    const passwordValue = passwordRef.current?.value || "";
+    if (!passwordValue) return setErrorMsg("Enter a new password.");
 
     setIsLoading(true);
-    const { error } = await supabase.auth.updateUser({ password: password });
+    const { error } = await supabase.auth.updateUser({ password: passwordValue });
 
     if (error) {
       setErrorMsg(error.message);
     } else {
       setSuccessMsg("Updated! You can now login.");
       setIsRecoveryMode(false);
-      setPassword("");
+      if (passwordRef.current) passwordRef.current.value = "";
     }
     setIsLoading(false);
   };
@@ -271,9 +278,9 @@ function Login() {
           </div>
         )}
         {successMsg && <div style={styles.successBox}>{successMsg}</div>}
-        <div style={styles.form}>
+        <form onSubmit={handleLogin} style={styles.form}>
           {!isRecoveryMode && (
-            <input style={styles.input} type="email" placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input style={styles.input} type="email" placeholder="Email Address" ref={emailRef} />
           )}
 
           <div style={styles.passwordWrapper}>
@@ -281,8 +288,7 @@ function Login() {
               style={styles.inputPassword}
               type={showPassword ? "text" : "password"}
               placeholder={isRecoveryMode ? "Enter New Password" : "Password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              ref={passwordRef}
             />
             <button type="button" style={styles.eyeBtn} onClick={() => setShowPassword(!showPassword)}>
               {showPassword ? <EyeOff size={18} color={BLACK} /> : <Eye size={18} color={BLACK} />}
@@ -290,7 +296,7 @@ function Login() {
           </div>
 
           {isRecoveryMode ? (
-            <button style={{ ...styles.button, opacity: isLoading ? 0.8 : 1 }} onClick={handleUpdatePassword} disabled={isLoading}>
+            <button type="button" style={{ ...styles.button, opacity: isLoading ? 0.8 : 1 }} onClick={handleUpdatePassword} disabled={isLoading}>
               {isLoading ? (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
                   <Loader2 className="animate-spin" size={16} />
@@ -300,7 +306,7 @@ function Login() {
             </button>
           ) : (
             <>
-              <button style={{ ...styles.button, opacity: isLoading ? 0.8 : 1 }} onClick={handleLogin} disabled={isLoading}>
+              <button type="submit" style={{ ...styles.button, opacity: isLoading ? 0.8 : 1 }} disabled={isLoading}>
                 {isLoading ? (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
                     <Loader2 className="animate-spin" size={16} />
@@ -314,7 +320,7 @@ function Login() {
               </button>
             </>
           )}
-        </div>
+        </form>
       </div>
     </div>
   );

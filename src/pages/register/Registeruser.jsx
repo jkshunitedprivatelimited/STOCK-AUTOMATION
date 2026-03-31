@@ -53,11 +53,8 @@ function RegisterUser() {
   const [jkshLogo, setJkshLogo] = useState(null);
   const [syncMenu, setSyncMenu] = useState(false);
 
-  const [formData, setFormData] = useState({
-    company: "", franchise_id: "", name: "", phone: "", email: "",
-    password: "", branch_location: "", role: "franchise", country: "India",
-    state: "", city: "", pincode: "", addressLine: "", nearestBusStop: ""
-  });
+  const [selectedCompany, setSelectedCompany] = useState("");
+  const [franchiseId, setFranchiseId] = useState("");
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -102,12 +99,12 @@ function RegisterUser() {
 
   useEffect(() => {
     const fetchNextId = async () => {
-      if (!formData.company) { setSuggestedId(""); return; }
-      const words = formData.company.trim().split(/\s+/);
-      let prefix = words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() + "-" : formData.company.substring(0, 2).toUpperCase() + "-";
+      if (!selectedCompany) { setSuggestedId(""); return; }
+      const words = selectedCompany.trim().split(/\s+/);
+      let prefix = words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() + "-" : selectedCompany.substring(0, 2).toUpperCase() + "-";
 
       try {
-        const { data } = await supabase.from('profiles').select('franchise_id').eq('company', formData.company);
+        const { data } = await supabase.from('profiles').select('franchise_id').eq('company', selectedCompany);
         let maxNum = 0;
         if (data) {
           data.forEach(item => {
@@ -122,51 +119,54 @@ function RegisterUser() {
       } catch (err) { console.error(err); }
     };
     fetchNextId();
-  }, [formData.company]);
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
-  };
+  }, [selectedCompany]);
 
   const applySuggestion = () => {
-    setFormData(prev => ({ ...prev, franchise_id: suggestedId }));
+    setFranchiseId(suggestedId);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const form = e.target;
+    const data = new FormData(form);
+    
+    // Extract standard native data
+    const companyStr = data.get("company") || selectedCompany;
+    const franchiseIdStr = data.get("franchise_id") || franchiseId;
+    const emailStr = data.get("email");
+    const passwordStr = data.get("password");
+
     // Strict Validation
-    if (!formData.company) return alert("Please select a Brand.");
-    if (!formData.franchise_id) return alert("Please confirm the Franchise ID.");
-    if (!formData.email) return alert("Email is required.");
-    if (!formData.password) return alert("Password is required.");
+    if (!companyStr) return alert("Please select a Brand.");
+    if (!franchiseIdStr) return alert("Please confirm the Franchise ID.");
+    if (!emailStr) return alert("Email is required.");
+    if (!passwordStr) return alert("Password is required.");
 
     setLoading(true);
     try {
       // 1. Build the payload exactly matching the SQL Trigger
       const metadataPayload = {
-        name: formData.name.trim() || "",
-        phone: formData.phone.trim() || "",
-        company: formData.company.trim() || "",
-        franchise_id: formData.franchise_id.trim().toUpperCase() || "",
-        branch_location: formData.branch_location.trim() || "",
-        address: formData.addressLine.trim() || "",
-        city: formData.city.trim().toUpperCase() || "",
-        state: formData.state || "",
-        pincode: formData.pincode.trim() || "",
-        nearest_bus_stop: formData.nearestBusStop.trim() || "",
+        name: (data.get("name") || "").trim(),
+        phone: (data.get("phone") || "").trim(),
+        company: companyStr.trim(),
+        franchise_id: franchiseIdStr.trim().toUpperCase(),
+        branch_location: (data.get("branch_location") || "").trim(),
+        address: (data.get("addressLine") || "").trim(),
+        city: (data.get("city") || "").trim().toUpperCase(),
+        state: data.get("state") || "",
+        pincode: (data.get("pincode") || "").trim(),
+        nearest_bus_stop: (data.get("nearestBusStop") || "").trim(),
         role: 'franchise'
       };
 
       // DEBUG: Verify the data is leaving React correctly
       console.log("🚀 SENDING PAYLOAD TO SUPABASE EDGE FUNCTION:", metadataPayload);
 
-      // 2. Call the secure Edge Function instead of exposing service role key in React
-      const { data, error } = await supabase.functions.invoke('register-user', {
+      const { data: resData, error } = await supabase.functions.invoke('register-user', {
         body: {
-          email: formData.email.trim().toLowerCase(),
-          password: formData.password,
+          email: emailStr.trim().toLowerCase(),
+          password: passwordStr,
           metadata: metadataPayload
         }
       });
@@ -183,15 +183,15 @@ function RegisterUser() {
       }
 
       // Check if the edge function returned its own internal error successfully parsed mapping
-      if (data?.error) {
-        throw new Error(data.error);
+      if (resData?.error) {
+        throw new Error(resData.error);
       }
 
       // --- Menu Sync: clone central menu to the new franchise if toggle is ON ---
       if (syncMenu) {
         try {
           const { error: syncError } = await supabase.rpc('clone_franchise_menu', {
-            target_id: formData.franchise_id.trim().toUpperCase(),
+            target_id: franchiseIdStr.trim().toUpperCase(),
             central_id: 'TV-1'
           });
           if (syncError) {
@@ -200,12 +200,12 @@ function RegisterUser() {
             navigate(-1);
             return;
           }
-          alert(`✅ Franchise Created & Menu Synced! A verification email has been sent to ${formData.email}.`);
+          alert(`✅ Franchise Created & Menu Synced! A verification email has been sent to ${emailStr}.`);
         } catch (syncErr) {
           alert(`✅ Franchise Created! But menu sync failed: ${syncErr.message}\nYou can sync manually from Menu Management.`);
         }
       } else {
-        alert(`✅ Franchise Created! A verification email has been sent to ${formData.email}.`);
+        alert(`✅ Franchise Created! A verification email has been sent to ${emailStr}.`);
       }
       navigate(-1);
 
@@ -242,7 +242,7 @@ function RegisterUser() {
 
             <div style={isMobile ? styles.flexColumn : styles.gridRowThree}>
               <InputGroup isFocused={focusedField === "company"} label="Select Brand *" isMobile={isMobile}>
-                <select name="company" required value={formData.company} onChange={handleChange} style={styles.selectInput}
+                <select name="company" required value={selectedCompany} onChange={(e) => setSelectedCompany(e.target.value)} style={styles.selectInput}
                   onFocus={() => setFocusedField("company")} onBlur={() => setFocusedField(null)}>
                   <option value="">Choose...</option>
                   {companiesList.map((compName, idx) => (
@@ -260,7 +260,7 @@ function RegisterUser() {
               </div>
 
               <InputGroup isFocused={focusedField === "franchise_id"} label="Confirm ID *" isMobile={isMobile}>
-                <input name="franchise_id" required value={formData.franchise_id} placeholder="e.g. TV-10" onChange={handleChange} style={styles.cleanInput}
+                <input name="franchise_id" required value={franchiseId} placeholder="e.g. TV-10" onChange={(e) => setFranchiseId(e.target.value)} style={styles.cleanInput}
                   onFocus={() => setFocusedField("franchise_id")} onBlur={() => setFocusedField(null)} />
               </InputGroup>
             </div>
@@ -274,22 +274,22 @@ function RegisterUser() {
 
             <div style={isMobile ? styles.flexColumn : styles.gridRowTwo}>
               <InputGroup icon={User} isFocused={focusedField === "name"} label="Full Name *" isMobile={isMobile}>
-                <input name="name" required value={formData.name} placeholder="Enter name" onChange={handleChange} style={styles.cleanInput}
+                <input name="name" required placeholder="Enter name" style={styles.cleanInput}
                   onFocus={() => setFocusedField("name")} onBlur={() => setFocusedField(null)} />
               </InputGroup>
               <InputGroup icon={Phone} isFocused={focusedField === "phone"} label="Phone *" isMobile={isMobile}>
-                <input name="phone" required value={formData.phone} placeholder="+91" type="tel" onChange={handleChange} style={styles.cleanInput}
+                <input name="phone" required placeholder="+91" type="tel" style={styles.cleanInput}
                   onFocus={() => setFocusedField("phone")} onBlur={() => setFocusedField(null)} />
               </InputGroup>
             </div>
 
             <div style={isMobile ? styles.flexColumn : styles.gridRowTwo}>
               <InputGroup icon={Mail} isFocused={focusedField === "email"} label="Email *" isMobile={isMobile}>
-                <input name="email" required value={formData.email} type="email" placeholder="email@domain.com" onChange={handleChange} style={styles.cleanInput}
+                <input name="email" required type="email" placeholder="email@domain.com" style={styles.cleanInput}
                   onFocus={() => setFocusedField("email")} onBlur={() => setFocusedField(null)} />
               </InputGroup>
               <InputGroup icon={KeyRound} isFocused={focusedField === "password"} label="Password *" isMobile={isMobile}>
-                <input name="password" required value={formData.password} type={showPassword ? "text" : "password"} placeholder="••••••••" onChange={handleChange} style={styles.cleanInput}
+                <input name="password" required type={showPassword ? "text" : "password"} placeholder="••••••••" style={styles.cleanInput}
                   onFocus={() => setFocusedField("password")} onBlur={() => setFocusedField(null)} />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -306,36 +306,36 @@ function RegisterUser() {
 
             <div style={isMobile ? styles.flexColumn : styles.gridRowTwo}>
               <InputGroup isFocused={focusedField === "branch_location"} label="Branch Name *" isMobile={isMobile}>
-                <input name="branch_location" required value={formData.branch_location} placeholder="e.g. Madhapur" onChange={handleChange} style={styles.cleanInput}
+                <input name="branch_location" required placeholder="e.g. Madhapur" style={styles.cleanInput}
                   onFocus={() => setFocusedField("branch_location")} onBlur={() => setFocusedField(null)} />
               </InputGroup>
               <InputGroup icon={Map} isFocused={focusedField === "addressLine"} label="Street Address *" isMobile={isMobile}>
-                <input name="addressLine" required value={formData.addressLine} placeholder="Door No, Street..." onChange={handleChange} style={styles.cleanInput}
+                <input name="addressLine" required placeholder="Door No, Street..." style={styles.cleanInput}
                   onFocus={() => setFocusedField("addressLine")} onBlur={() => setFocusedField(null)} />
               </InputGroup>
             </div>
 
             <div style={isMobile ? styles.flexColumn : styles.gridRowThree}>
               <InputGroup isFocused={focusedField === "city"} label="City *" isMobile={isMobile}>
-                <input name="city" required value={formData.city} placeholder="City" onChange={handleChange} style={styles.cleanInput}
+                <input name="city" required placeholder="City" style={styles.cleanInput}
                   onFocus={() => setFocusedField("city")} onBlur={() => setFocusedField(null)} />
               </InputGroup>
               <InputGroup isFocused={focusedField === "state"} label="State *" isMobile={isMobile}>
-                <select name="state" required value={formData.state} onChange={handleChange} style={styles.selectInput}
+                <select name="state" required style={styles.selectInput}
                   onFocus={() => setFocusedField("state")} onBlur={() => setFocusedField(null)}>
                   <option value="">Select...</option>
                   {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </InputGroup>
               <InputGroup isFocused={focusedField === "pincode"} label="Pincode *" isMobile={isMobile}>
-                <input name="pincode" required value={formData.pincode} placeholder="6 Digits" maxLength={6} type="number" onChange={handleChange} style={styles.cleanInput}
+                <input name="pincode" required placeholder="6 Digits" maxLength={6} type="number" style={styles.cleanInput}
                   onFocus={() => setFocusedField("pincode")} onBlur={() => setFocusedField(null)} />
               </InputGroup>
             </div>
 
             <div style={{ marginBottom: "24px" }}>
               <InputGroup icon={MapPin} isFocused={focusedField === "nearestBusStop"} label="Nearest Bus Stop *" isMobile={isMobile}>
-                <input name="nearestBusStop" required value={formData.nearestBusStop} placeholder="e.g. Jubilee Hills Checkpost" onChange={handleChange} style={styles.cleanInput}
+                <input name="nearestBusStop" required placeholder="e.g. Jubilee Hills Checkpost" style={styles.cleanInput}
                   onFocus={() => setFocusedField("nearestBusStop")} onBlur={() => setFocusedField(null)} />
               </InputGroup>
             </div>

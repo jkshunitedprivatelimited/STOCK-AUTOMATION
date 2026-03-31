@@ -585,7 +585,9 @@ function StockOrders() {
   }, [companies]);
 
   const handleSelectOrder = useCallback((order) => {
-    setSelectedOrder(order);
+    startTransition(() => {
+      setSelectedOrder(order);
+    });
   }, []);
 
   const handleTabChange = useCallback((tab) => {

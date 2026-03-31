@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useDeferredValue } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Search, Plus, Edit2, Trash2, X, UserPlus, Loader2, Eye, EyeOff, Clock, Building2, ChevronRight, User, Phone, ChevronDown, MapPin, Mail, ShieldCheck, Hash
@@ -303,10 +303,14 @@ const CentralStaffProfiles = () => {
     setFormData({ name: "", staff_id: "", email: "", password: "", phone: "", address: "" });
   };
 
-  const filteredProfiles = profiles.filter(p =>
-    p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.staff_id?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const deferredSearchTerm = useDeferredValue(searchTerm);
+
+  const filteredProfiles = useMemo(() => {
+    return profiles.filter(p =>
+      p.name?.toLowerCase().includes(deferredSearchTerm.toLowerCase()) ||
+      p.staff_id?.toLowerCase().includes(deferredSearchTerm.toLowerCase())
+    );
+  }, [profiles, deferredSearchTerm]);
 
   return (
     <div style={styles.page}>

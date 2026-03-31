@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useDeferredValue } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../frontend_supabase/supabaseClient";
 import {
@@ -116,8 +116,10 @@ function CentralProfiles() {
     }
   };
 
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+
   const sortedAndFilteredProfiles = useMemo(() => {
-    const query = searchQuery.toLowerCase();
+    const query = deferredSearchQuery.toLowerCase();
     let filtered = profiles.filter(p => {
       const matchesSearch =
         p.name?.toLowerCase().includes(query) ||
@@ -143,7 +145,7 @@ function CentralProfiles() {
     }
 
     return filtered;
-  }, [profiles, searchQuery, companyFilter, sortField, sortDirection]);
+  }, [profiles, deferredSearchQuery, companyFilter, sortField, sortDirection]);
 
   const confirmDelete = (profile) => {
     setProfileToDelete(profile);

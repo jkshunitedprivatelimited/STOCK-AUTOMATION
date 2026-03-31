@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useDeferredValue, startTransition } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../frontend_supabase/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
@@ -200,6 +200,7 @@ function InvoicesBilling() {
     const [currentTime, setCurrentTime] = useState(new Date());
 
     const [searchQuery, setSearchQuery] = useState("");
+    const deferredSearchQuery = useDeferredValue(searchQuery);
     const [selectedFranchiseId, setSelectedFranchiseId] = useState("Loading...");
 
     const [filterType, setFilterType] = useState("date");
@@ -271,7 +272,7 @@ function InvoicesBilling() {
 
     const filteredInvoices = useMemo(() => {
         return invoices.filter((inv) => {
-            const searchLower = searchQuery.toLowerCase();
+            const searchLower = deferredSearchQuery.toLowerCase();
             const matchesSearch = (inv.customer_name?.toLowerCase().includes(searchLower)) || (inv.franchise_id?.toLowerCase().includes(searchLower));
             const orderDate = new Date(inv.created_at).toLocaleDateString('sv-SE');
             let matchesDate = true;
@@ -412,7 +413,7 @@ function InvoicesBilling() {
 
                     <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-4 pb-10">
                         {filteredInvoices.map((inv) => (
-                            <div key={inv.id} onClick={() => setSelectedInvoice(inv)} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 cursor-pointer">
+                            <div key={inv.id} onClick={() => startTransition(() => setSelectedInvoice(inv))} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 cursor-pointer">
                                 <div className="flex justify-between items-start mb-4">
                                     <span className="px-3 py-1 rounded-md text-white font-black text-[9px] uppercase tracking-wider" style={{ backgroundColor: THEME_COLOR }}>{inv.franchise_id}</span>
                                     <span className="text-[10px] font-bold text-gray-400">{new Date(inv.created_at).toLocaleDateString('en-GB')}</span>
@@ -433,7 +434,7 @@ function InvoicesBilling() {
                             </thead>
                             <tbody className="divide-y divide-slate-50 font-bold text-xs">
                                 {loading ? (<tr><td colSpan="4" className="py-32 text-center text-gray-400 uppercase tracking-widest animate-pulse">Fetching Invoices...</td></tr>) : filteredInvoices.map((inv, idx) => (
-                                    <tr key={inv.id} onClick={() => setSelectedInvoice(inv)} className="group cursor-pointer hover:bg-gray-50 transition-colors">
+                                    <tr key={inv.id} onClick={() => startTransition(() => setSelectedInvoice(inv))} className="group cursor-pointer hover:bg-gray-50 transition-colors">
                                         <td className="px-8 py-6 opacity-60">{(idx + 1).toString().padStart(2, '0')}</td>
                                         <td className="px-8 py-6"><span className="px-3 py-1.5 rounded-lg text-white font-black tracking-wide text-[10px]" style={{ backgroundColor: THEME_COLOR }}>{inv.franchise_id}</span></td>
                                         <td className="px-8 py-6 text-gray-500 text-center max-w-xs truncate">{inv.customer_address || "N/A"}</td>
@@ -448,11 +449,11 @@ function InvoicesBilling() {
 
             {selectedInvoice && (
                 <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm preview-modal print:hidden">
-                    <div className="absolute inset-0" onClick={() => setSelectedInvoice(null)} />
+                    <div className="absolute inset-0" onClick={() => startTransition(() => setSelectedInvoice(null))} />
                     <div className="bg-white w-full max-w-5xl h-[95vh] sm:h-[80vh] overflow-hidden rounded-t-[2rem] sm:rounded-3xl shadow-2xl relative z-10 flex flex-col transition-all">
                         <div className="flex justify-between items-center p-5 border-b border-gray-100 shrink-0">
                             <div><h2 className="text-lg font-black uppercase tracking-widest text-black">Invoice Preview</h2><div className="text-[10px] text-gray-400 font-bold mt-0.5">REF: #{selectedInvoice.id.substring(0, 12)}</div></div>
-                            <button onClick={() => setSelectedInvoice(null)} className="p-3 bg-gray-50 rounded-xl text-black hover:bg-red-50 hover:text-red-500 transition-all"><FiX size={20} /></button>
+                            <button onClick={() => startTransition(() => setSelectedInvoice(null))} className="p-3 bg-gray-50 rounded-xl text-black hover:bg-red-50 hover:text-red-500 transition-all"><FiX size={20} /></button>
                         </div>
 
                         <div className="flex-1 overflow-hidden p-4 md:p-6 bg-[#F8F9FA]">

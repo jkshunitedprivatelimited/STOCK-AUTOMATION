@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, startTransition } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../frontend_supabase/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
@@ -303,7 +303,9 @@ function BillingHistory() {
   const handleSort = (key) => {
     let direction = "ascending";
     if (sortConfig.key === key && sortConfig.direction === "ascending") direction = "descending";
-    setSortConfig({ key, direction });
+    startTransition(() => {
+      setSortConfig({ key, direction });
+    });
   };
 
   const sortedHistory = useMemo(() => {
@@ -428,7 +430,7 @@ function BillingHistory() {
           {isMobile ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 15px 15px 15px' }}>
               {sortedHistory.map((bill, index) => (
-                <div key={bill.id} className="anim-card touch-active" style={{ ...styles.mobileCard, animationDelay: `${index * 0.05}s` }} onClick={() => setSelectedBill(bill)}>
+                <div key={bill.id} className="anim-card touch-active" style={{ ...styles.mobileCard, animationDelay: `${index * 0.05}s` }} onClick={() => startTransition(() => setSelectedBill(bill))}>
                   <div style={styles.mobileCardHeader}>
                     <div style={{ flex: 1 }}>
                       <div style={styles.idHash}>#{bill.id.toString().slice(-6).toUpperCase()}</div>
@@ -476,7 +478,7 @@ function BillingHistory() {
               </thead>
               <tbody>
                 {sortedHistory.map((bill, index) => (
-                  <tr key={bill.id} className="anim-row" style={{ ...styles.tr, animationDelay: `${index * 0.03}s` }} onClick={() => setSelectedBill(bill)}>
+                  <tr key={bill.id} className="anim-row" style={{ ...styles.tr, animationDelay: `${index * 0.03}s` }} onClick={() => startTransition(() => setSelectedBill(bill))}>
                     <td style={styles.td}>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontWeight: '700', fontSize: '14px' }}>{new Date(bill.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}</span>
@@ -492,7 +494,7 @@ function BillingHistory() {
                     </td>
                     <td style={{ ...styles.td, fontWeight: "900", fontSize: '16px' }}>₹{bill.total.toFixed(2)}</td>
                     <td style={styles.td}>
-                      <button style={styles.viewBtn} onClick={(e) => { e.stopPropagation(); setSelectedBill(bill); }}>VIEW</button>
+                      <button style={styles.viewBtn} onClick={(e) => { e.stopPropagation(); startTransition(() => setSelectedBill(bill)); }}>VIEW</button>
                     </td>
                   </tr>
                 ))}

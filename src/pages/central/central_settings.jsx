@@ -14,8 +14,8 @@ function CentralSettings() {
   const { logout, user: authUser } = useAuth();
 
   const [franchiseId, setFranchiseId] = useState("...");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const newPasswordRef = React.useRef(null);
+  const confirmPasswordRef = React.useRef(null);
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -40,6 +40,9 @@ function CentralSettings() {
 
   const handleChangePassword = async () => {
     setMsg("");
+    
+    const newPassword = newPasswordRef.current?.value;
+    const confirmPassword = confirmPasswordRef.current?.value;
 
     // Basic validations
     if (!newPassword || !confirmPassword) {
@@ -68,8 +71,8 @@ function CentralSettings() {
       setMsg(`Error: ${error.message}`);
     } else {
       setMsg("Password updated successfully!");
-      setNewPassword("");
-      setConfirmPassword("");
+      if (newPasswordRef.current) newPasswordRef.current.value = "";
+      if (confirmPasswordRef.current) confirmPasswordRef.current.value = "";
     }
   };
 
@@ -131,8 +134,7 @@ function CentralSettings() {
               <div className="relative">
                 <input
                   type={showPass ? "text" : "password"}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
+                  ref={newPasswordRef}
                   className="w-full px-5 py-3.5 rounded-xl bg-slate-50 border outline-none font-black text-xs transition-all focus:bg-white text-black focus:border-emerald-500"
                   style={{ borderColor: SOFT_BORDER }}
                   placeholder="NEW PASSWORD"
@@ -144,8 +146,7 @@ function CentralSettings() {
 
               <input
                 type={showPass ? "text" : "password"}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                ref={confirmPasswordRef}
                 className="w-full px-5 py-3.5 rounded-xl bg-slate-50 border outline-none font-black text-xs transition-all focus:bg-white text-black focus:border-emerald-500"
                 style={{ borderColor: SOFT_BORDER }}
                 placeholder="CONFIRM PASSWORD"

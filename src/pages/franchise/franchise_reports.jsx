@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, startTransition } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../frontend_supabase/supabaseClient";
 import {
@@ -177,9 +177,11 @@ function FranchiseAnalytics() {
       const ids = fetchedBills.map(d => d.id);
       const generatedTopItems = ids.length > 0 ? await fetchTopItems(ids) : [];
 
-      setBills(fetchedBills);
-      setGraphData(generatedGraph);
-      setTopItems(generatedTopItems);
+      startTransition(() => {
+        setBills(fetchedBills);
+        setGraphData(generatedGraph);
+        setTopItems(generatedTopItems);
+      });
 
       safeSetSessionStorage(cacheKey, JSON.stringify({
         bills: fetchedBills,
@@ -594,7 +596,7 @@ function FranchiseAnalytics() {
 
             {/* --- NEW REFRESH BUTTON COMPONENT --- */}
             <div className="action-buttons">
-              <button onClick={handleRefresh} className="icon-btn" disabled={loading} title="Refresh Live Data">
+              <button onClick={() => startTransition(handleRefresh)} className="icon-btn" disabled={loading} title="Refresh Live Data">
                 <RefreshCw size={16} className={loading ? "spin-icon" : ""} />
               </button>
 
@@ -719,12 +721,12 @@ function FranchiseAnalytics() {
               <div className="table-header-row">
                 <span className="th-sno">#</span>
                 <span className="th-id">ID</span>
-                <span className="th-date th-sortable" onClick={() => handleSort('created_at')}>Date & Time <SortIcon columnKey="created_at" /></span>
+                <span className="th-date th-sortable" onClick={() => startTransition(() => handleSort('created_at'))}>Date & Time <SortIcon columnKey="created_at" /></span>
                 {activeTab === "store" && (
-                  <span className="th-mode th-sortable" onClick={() => handleSort('payment_mode')}>Mode <SortIcon columnKey="payment_mode" /></span>
+                  <span className="th-mode th-sortable" onClick={() => startTransition(() => handleSort('payment_mode'))}>Mode <SortIcon columnKey="payment_mode" /></span>
                 )}
-                <span className="th-amt th-sortable" onClick={() => handleSort('amount')}>Amount <SortIcon columnKey="amount" /></span>
-                <span className="th-disc th-sortable" onClick={() => handleSort('discount')}>Discount <SortIcon columnKey="discount" /></span>
+                <span className="th-amt th-sortable" onClick={() => startTransition(() => handleSort('amount'))}>Amount <SortIcon columnKey="amount" /></span>
+                <span className="th-disc th-sortable" onClick={() => startTransition(() => handleSort('discount'))}>Discount <SortIcon columnKey="discount" /></span>
                 {activeTab === "store" && (
                   <span className="th-action">Action</span>
                 )}

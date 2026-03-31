@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useDeferredValue, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../frontend_supabase/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
@@ -18,6 +18,26 @@ const BORDER = "#e5e7eb";
 const DANGER = "#ef4444";
 const BLACK = "#000000";
 
+const StoreItemCard = React.memo(({ item, inCart, cartQty, onClick, isMobile }) => {
+  return (
+    <div
+      style={{
+        ...styles.itemCard,
+        position: 'relative',
+        padding: isMobile ? "15px" : "20px",
+        borderColor: inCart ? PRIMARY : BORDER,
+        background: inCart ? "#ecfdf5" : "#fff",
+        borderWidth: inCart ? '3px' : '2px'
+      }}
+      onClick={() => onClick(item)}
+    >
+      {inCart && <div style={styles.mobileQtyBadge}>{cartQty}</div>}
+      <span style={{ ...styles.itemName, fontSize: isMobile ? "13px" : "15px" }}>{item.item_name}</span>
+      <span style={{ ...styles.itemPrice, fontSize: isMobile ? "16px" : "18px" }}>₹{item.price}</span>
+    </div>
+  );
+});
+
 function Store() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
@@ -32,6 +52,7 @@ function Store() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [cart, setCart] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -105,12 +126,12 @@ function Store() {
   }, [franchiseId]);
 
   /* CART LOGIC */
-  const addToCart = (item) => {
+  const addToCart = useCallback((item) => {
     setCart((prev) => {
       const ex = prev.find((i) => i.id === item.id);
       return ex ? prev.map((i) => i.id === item.id ? { ...i, qty: i.qty + 1 } : i) : [...prev, { ...item, qty: 1 }];
     });
-  };
+  }, []);
 
   const updateQty = (id, delta) => {
     setCart((prev) => prev.map((item) => item.id === id ? { ...item, qty: Math.max(0, item.qty + delta) } : item).filter((i) => i.qty > 0));
@@ -134,11 +155,13 @@ function Store() {
     };
   }, [cart, discountValue, discountType]);
 
-  const filteredItems = menuItems.filter(item => {
-    const query = searchQuery.toLowerCase();
-    if (query.trim() !== "") return item.item_name.toLowerCase().includes(query);
-    return selectedCategory === "All" || item.category === selectedCategory;
-  });
+  const filteredItems = useMemo(() => {
+    return menuItems.filter(item => {
+      const query = deferredSearchQuery.toLowerCase();
+      if (query.trim() !== "") return item.item_name.toLowerCase().includes(query);
+      return selectedCategory === "All" || item.category === selectedCategory;
+    });
+  }, [menuItems, deferredSearchQuery, selectedCategory]);
 
   /* TRANSACTION LOGIC */
   const handleCompleteTransaction = async (method) => {
@@ -293,16 +316,16 @@ function Store() {
             padding: isMobile ? "10px" : "20px"
           }}>
             {filteredItems.map((item) => {
-              const inCart = cart.some(i => i.id === item.id);
               const cartItem = cart.find(i => i.id === item.id);
               return (
-                <div key={item.id}
-                  style={{ ...styles.itemCard, position: 'relative', padding: isMobile ? "15px" : "20px", borderColor: inCart ? PRIMARY : BORDER, background: inCart ? "#ecfdf5" : "#fff", borderWidth: inCart ? '3px' : '2px' }}
-                  onClick={() => addToCart(item)}>
-                  {inCart && <div style={styles.mobileQtyBadge}>{cartItem.qty}</div>}
-                  <span style={{ ...styles.itemName, fontSize: isMobile ? "13px" : "15px" }}>{item.item_name}</span>
-                  <span style={{ ...styles.itemPrice, fontSize: isMobile ? "16px" : "18px" }}>₹{item.price}</span>
-                </div>
+                <StoreItemCard
+                  key={item.id}
+                  item={item}
+                  inCart={!!cartItem}
+                  cartQty={cartItem ? cartItem.qty : 0}
+                  onClick={addToCart}
+                  isMobile={isMobile}
+                />
               );
             })}
           </div>

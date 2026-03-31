@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef, useDeferredValue } from "react";
 import { supabase, isNetworkError } from "../../frontend_supabase/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -11,6 +11,50 @@ import {
   FiRefreshCw
 } from "react-icons/fi";
 import { formatCurrency, amountToWords } from "../../utils/formatters";
+
+const StockItemCard = React.memo(({ 
+  item, unit, isInCart, isNotified, isCentral,
+  displayPrice, currentMOQ, qtyValue, cartItemData,
+  onUpdateCartQty, onManualInputCart, onQtyInputChange,
+  onUnitChange, onAddToCart, onNotifyMe
+}) => {
+  const isOutOfStock = Number(item.quantity) <= 0;
+  return (
+    <div className={`group bg-white rounded-2xl sm:rounded-3xl border-2 p-3 sm:p-5 transition-all duration-300 flex flex-col relative min-h-[240px] sm:min-h-[280px] hover:shadow-2xl hover:-translate-y-1 ${isInCart ? 'border-emerald-500 ring-4 ring-emerald-500/10' : 'border-slate-100'} ${isOutOfStock ? 'bg-slate-50/50' : ''}`}>
+      {isInCart && <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-emerald-500 text-white px-3 py-1 text-[8px] font-black uppercase rounded-full shadow-lg flex items-center gap-1 z-10"><FiCheck size={10} /> In Cart</div>}
+      <div className="flex justify-between items-start mb-2"><span className="text-[9px] sm:text-[10px] font-black text-slate-500 tracking-tight">{item.item_code || '---'}</span>{isCentral && <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${Number(item.quantity) > 5 ? 'bg-slate-100 text-slate-500' : 'bg-red-50 text-red-600'}`}>{item.quantity} {item.unit}</span>}</div>
+      <h3 className="font-black text-[11px] sm:text-[13px] uppercase leading-tight sm:leading-snug mb-1 group-hover:text-emerald-900 transition-colors line-clamp-1">{item.item_name}</h3>
+      <p className="text-[10px] font-medium text-slate-400 leading-snug mb-2 line-clamp-2 min-h-[2.5em]">{item.description || "No description available"}</p>
+      <div className="mb-4">
+        <div className="flex items-baseline gap-1.5"><span className="text-base sm:text-lg font-black tracking-tighter text-black">{formatCurrency(displayPrice)}</span><span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">/ {unit}</span></div>
+        <div className="mt-1"><span className="text-[9px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">Minimum Order: {currentMOQ} {unit}</span></div>
+      </div>
+      <div className="mt-auto space-y-2 sm:space-y-3">
+        {!isOutOfStock ? (
+          <>
+            <div className="flex flex-col gap-2">
+              <div className="flex-1 flex items-center border border-slate-200 rounded-lg bg-slate-50 overflow-hidden focus-within:border-black transition-all">
+                <button onClick={() => isInCart ? onUpdateCartQty(item.id, -1) : onQtyInputChange(item.id, null, true, -1)} className="px-3 sm:px-4 h-10 hover:bg-slate-200 text-slate-700 font-bold"><FiMinus size={14} /></button>
+                <input type="number" value={qtyValue || ""} onChange={(e) => isInCart ? onManualInputCart(cartItemData, e.target.value) : onQtyInputChange(item.id, e.target.value)} className="w-full text-center font-black text-xs sm:text-[13px] bg-transparent outline-none p-0" placeholder={currentMOQ} />
+                <button onClick={() => isInCart ? onUpdateCartQty(item.id, 1) : onQtyInputChange(item.id, null, true, 1)} className="px-3 sm:px-4 h-10 hover:bg-slate-200 text-slate-700 font-bold"><FiPlus size={14} /></button>
+              </div>
+              <div className="relative w-full">
+                <select value={isInCart ? cartItemData?.cartUnit : unit} onChange={(e) => onUnitChange(item.id, e.target.value)} className={`w-full bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase py-2 pl-3 pr-8 text-left outline-none appearance-none hover:border-slate-400 focus:border-black cursor-pointer transition-colors`}>
+                  <option value={item.unit}>{item.unit}</option>
+                  {item.alt_unit && item.alt_unit !== item.unit && item.alt_unit !== "None" && <option value={item.alt_unit}>{item.alt_unit}</option>}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500"><svg className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg></div>
+              </div>
+            </div>
+            <button onClick={() => onAddToCart(item.id)} className="w-full py-3.5 sm:py-4 rounded-lg text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all shadow-md active:scale-95 mt-1" style={{ backgroundColor: BRAND_COLOR }}>{isInCart ? "Update Cart" : "Add to Cart"}</button>
+          </>
+        ) : (
+          <button onClick={() => !isNotified && onNotifyMe(item)} className={`w-full py-3.5 sm:py-4 rounded-lg text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-all ${isNotified ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}`}>{isNotified ? <FiCheck size={12} /> : <FiBell size={12} />}{isNotified ? "Sent" : "Notify"}</button>
+        )}
+      </div>
+    </div>
+  );
+});
 
 // --- CONSTANTS ---
 const BRAND_COLOR = "rgb(0, 100, 55)";
@@ -272,7 +316,6 @@ function StockOrder() {
   const [profile, setProfile] = useState(null);
   const [companyDetails, setCompanyDetails] = useState(null);
   const [isCentral, setIsCentral] = useState(false);
-  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [loadingStocks, setLoadingStocks] = useState(true);
   const [processingOrder, setProcessingOrder] = useState(false);
@@ -282,6 +325,7 @@ function StockOrder() {
   const isSubmittingRef = useRef(false);
 
   const [search, setSearch] = useState(() => getSessionData("stock_search", ""));
+  const deferredSearch = useDeferredValue(search);
   const [selectedCategory, setSelectedCategory] = useState(() => getSessionData("stock_category", "All"));
   const [showOnlyAvailable, setShowOnlyAvailable] = useState(() => getSessionData("stock_available", false));
   const [qtyInput, setQtyInput] = useState(() => getSessionData("stock_qty_input", {}));
@@ -302,10 +346,7 @@ function StockOrder() {
 
 
 
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(handler);
-  }, [search]);
+  // using useDeferredValue instead of debouncedSearch
 
 
 
@@ -511,7 +552,7 @@ function StockOrder() {
 
   const filteredStocks = useMemo(() => {
     const baseList = stocks.filter(item => {
-      const query = debouncedSearch.toLowerCase();
+      const query = deferredSearch.toLowerCase();
       const matchesSearch = item.item_name.toLowerCase().includes(query) || item.item_code?.toLowerCase().includes(query);
       const categoryName = item.category ? item.category.trim().toUpperCase() : '';
       const matchesCategory = selectedCategory === "All" || categoryName === selectedCategory;
@@ -519,9 +560,14 @@ function StockOrder() {
       return matchesSearch && matchesCategory && matchesAvailability;
     });
     return baseList.sort((a, b) => (Number(a.quantity) > 0 && Number(b.quantity) <= 0) ? -1 : (Number(a.quantity) <= 0 && Number(b.quantity) > 0) ? 1 : 0);
-  }, [stocks, debouncedSearch, selectedCategory, showOnlyAvailable]);
+  }, [stocks, deferredSearch, selectedCategory, showOnlyAvailable]);
 
-  const handleUnitChange = (itemId, newUnit) => {
+  // Stable callback pointers via Ref
+  const stateRef = useRef({ cart, qtyInput, stocks, selectedUnit, notifiedItems });
+  useEffect(() => { stateRef.current = { cart, qtyInput, stocks, selectedUnit, notifiedItems }; }, [cart, qtyInput, stocks, selectedUnit, notifiedItems]);
+
+  const handleUnitChange = useCallback((itemId, newUnit) => {
+    const { stocks, cart } = stateRef.current;
     const item = stocks.find(s => s.id === itemId);
     if (!item) return;
     setSelectedUnit(prev => ({ ...prev, [itemId]: newUnit }));
@@ -544,9 +590,10 @@ function StockOrder() {
     } else {
       setQtyInput(prev => ({ ...prev, [itemId]: newMOQ }));
     }
-  };
+  }, [addToast]);
 
-  const handleQtyInputChange = (itemId, val, isStepButton = false, direction = 0) => {
+  const handleQtyInputChange = useCallback((itemId, val, isStepButton = false, direction = 0) => {
+    const { stocks, selectedUnit, qtyInput } = stateRef.current;
     const item = stocks.find(s => s.id === itemId);
     if (!item) return;
     const currentUnit = selectedUnit[itemId] || item.unit;
@@ -561,9 +608,10 @@ function StockOrder() {
       numVal = check.clamped;
     }
     setQtyInput(prev => ({ ...prev, [itemId]: numVal }));
-  };
+  }, [addToast]);
 
-  const updateCartQty = (itemId, delta) => {
+  const updateCartQty = useCallback((itemId, delta) => {
+    const { stocks } = stateRef.current;
     setCart(prev => {
       let updatedCart = prev.map(item => {
         if (item.id === itemId) {
@@ -587,9 +635,10 @@ function StockOrder() {
       if (!updatedCart.find(i => i.id === itemId)) setQtyInput(qPrev => ({ ...qPrev, [itemId]: 0 }));
       return updatedCart;
     });
-  };
+  }, [addToast]);
 
-  const handleAddToCart = (itemId) => {
+  const handleAddToCart = useCallback((itemId) => {
+    const { stocks, cart, selectedUnit, qtyInput } = stateRef.current;
     const item = stocks.find(s => s.id === itemId);
     if (cart.some(c => c.id === itemId)) {
       updateCartQty(itemId, 1);
@@ -607,14 +656,15 @@ function StockOrder() {
         setQtyInput(prev => ({ ...prev, [itemId]: qtyToAdd }));
       }
     }
-  };
+  }, [addToast, updateCartQty]);
 
-  const removeFromCart = (id) => {
+  const removeFromCart = useCallback((id) => {
     setCart(prev => prev.filter(i => i.id !== id));
     setQtyInput(prev => ({ ...prev, [id]: 0 }));
-  };
+  }, []);
 
-  const handleManualInputCart = (item, val) => {
+  const handleManualInputCart = useCallback((item, val) => {
+    const { stocks } = stateRef.current;
     const numVal = val === "" ? 0 : Math.max(0, Number(val));
     if (numVal === 0) {
       removeFromCart(item.id);
@@ -630,9 +680,10 @@ function StockOrder() {
       }
     }
     setCart(prev => prev.map(c => c.id === item.id ? { ...c, qty: numVal, displayQty: numVal } : c));
-  };
+  }, [addToast, removeFromCart]);
 
-  const handleNotifyMe = async (item) => {
+  const handleNotifyMe = useCallback(async (item) => {
+    const { notifiedItems } = stateRef.current;
     if (notifiedItems.has(item.id)) return;
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -641,7 +692,7 @@ function StockOrder() {
       setNotifiedItems(prev => new Set(prev).add(item.id));
       addToast('success', 'Requested', `We'll notify you for ${item.item_name}`);
     } catch (e) { addToast('error', 'Failed', e.message); }
-  };
+  }, [profile, addToast]);
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) return;
@@ -1154,45 +1205,32 @@ function StockOrder() {
               {filteredStocks.map((item) => {
                 const isOutOfStock = Number(item.quantity) <= 0;
                 const unit = selectedUnit[item.id] ?? item.unit ?? "pcs";
-                const isInCart = cart.some(c => c.id === item.id);
+                const cartItemData = liveCart.find(c => c.id === item.id);
+                const isInCart = !!cartItemData;
                 const isNotified = notifiedItems.has(item.id);
                 const multiplier = getPriceMultiplier(item.unit, unit);
                 const displayPrice = item.price * multiplier;
                 const currentMOQ = getMOQ(item, unit);
+                const qtyValue = isInCart ? cartItemData.qty : qtyInput[item.id];
                 return (
-                  <div key={item.id} className={`group bg-white rounded-2xl sm:rounded-3xl border-2 p-3 sm:p-5 transition-all duration-300 flex flex-col relative min-h-[240px] sm:min-h-[280px] hover:shadow-2xl hover:-translate-y-1 ${isInCart ? 'border-emerald-500 ring-4 ring-emerald-500/10' : 'border-slate-100'} ${isOutOfStock ? 'bg-slate-50/50' : ''}`}>
-                    {isInCart && <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-emerald-500 text-white px-3 py-1 text-[8px] font-black uppercase rounded-full shadow-lg flex items-center gap-1 z-10"><FiCheck size={10} /> In Cart</div>}
-                    <div className="flex justify-between items-start mb-2"><span className="text-[9px] sm:text-[10px] font-black text-slate-500 tracking-tight">{item.item_code || '---'}</span>{isCentral && <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${Number(item.quantity) > 5 ? 'bg-slate-100 text-slate-500' : 'bg-red-50 text-red-600'}`}>{item.quantity} {item.unit}</span>}</div>
-                    <h3 className="font-black text-[11px] sm:text-[13px] uppercase leading-tight sm:leading-snug mb-1 group-hover:text-emerald-900 transition-colors line-clamp-1">{item.item_name}</h3>
-                    <p className="text-[10px] font-medium text-slate-400 leading-snug mb-2 line-clamp-2 min-h-[2.5em]">{item.description || "No description available"}</p>
-                    <div className="mb-4">
-                      <div className="flex items-baseline gap-1.5"><span className="text-base sm:text-lg font-black tracking-tighter text-black">{formatCurrency(displayPrice)}</span><span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">/ {unit}</span></div>
-                      <div className="mt-1"><span className="text-[9px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">Minimum Order: {currentMOQ} {unit}</span></div>
-                    </div>
-                    <div className="mt-auto space-y-2 sm:space-y-3">
-                      {!isOutOfStock ? (
-                        <>
-                          <div className="flex flex-col gap-2">
-                            <div className="flex-1 flex items-center border border-slate-200 rounded-lg bg-slate-50 overflow-hidden focus-within:border-black transition-all">
-                              <button onClick={() => isInCart ? updateCartQty(item.id, -1) : handleQtyInputChange(item.id, null, true, -1)} className="px-3 sm:px-4 h-10 hover:bg-slate-200 text-slate-700 font-bold"><FiMinus size={14} /></button>
-                              <input type="number" value={(isInCart ? liveCart.find(c => c.id === item.id)?.qty : qtyInput[item.id]) || ""} onChange={(e) => isInCart ? handleManualInputCart(liveCart.find(c => c.id === item.id), e.target.value) : handleQtyInputChange(item.id, e.target.value)} className="w-full text-center font-black text-xs sm:text-[13px] bg-transparent outline-none p-0" placeholder={currentMOQ} />
-                              <button onClick={() => isInCart ? updateCartQty(item.id, 1) : handleQtyInputChange(item.id, null, true, 1)} className="px-3 sm:px-4 h-10 hover:bg-slate-200 text-slate-700 font-bold"><FiPlus size={14} /></button>
-                            </div>
-                            <div className="relative w-full">
-                              <select value={isInCart ? liveCart.find(c => c.id === item.id)?.cartUnit : unit} onChange={(e) => handleUnitChange(item.id, e.target.value)} className={`w-full bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase py-2 pl-3 pr-8 text-left outline-none appearance-none hover:border-slate-400 focus:border-black cursor-pointer transition-colors`}>
-                                <option value={item.unit}>{item.unit}</option>
-                                {item.alt_unit && item.alt_unit !== item.unit && item.alt_unit !== "None" && <option value={item.alt_unit}>{item.alt_unit}</option>}
-                              </select>
-                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500"><svg className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg></div>
-                            </div>
-                          </div>
-                          <button onClick={() => handleAddToCart(item.id)} className="w-full py-3.5 sm:py-4 rounded-lg text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all shadow-md active:scale-95 mt-1" style={{ backgroundColor: BRAND_COLOR }}>{isInCart ? "Update Cart" : "Add to Cart"}</button>
-                        </>
-                      ) : (
-                        <button onClick={() => !isNotified && handleNotifyMe(item)} className={`w-full py-3.5 sm:py-4 rounded-lg text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-all ${isNotified ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}`}>{isNotified ? <FiCheck size={12} /> : <FiBell size={12} />}{isNotified ? "Sent" : "Notify"}</button>
-                      )}
-                    </div>
-                  </div>
+                  <StockItemCard
+                    key={item.id}
+                    item={item}
+                    unit={unit}
+                    isInCart={isInCart}
+                    isNotified={isNotified}
+                    isCentral={isCentral}
+                    displayPrice={displayPrice}
+                    currentMOQ={currentMOQ}
+                    qtyValue={qtyValue}
+                    cartItemData={cartItemData}
+                    onUpdateCartQty={updateCartQty}
+                    onManualInputCart={handleManualInputCart}
+                    onQtyInputChange={handleQtyInputChange}
+                    onUnitChange={handleUnitChange}
+                    onAddToCart={handleAddToCart}
+                    onNotifyMe={handleNotifyMe}
+                  />
                 );
               })}
             </div>
