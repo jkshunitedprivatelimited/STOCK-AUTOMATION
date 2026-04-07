@@ -399,6 +399,10 @@ function StockOrder() {
 
             if (companyData) {
               setCompanyDetails(companyData);
+              // Prefetch logo as base64 so it's ready for any invoice downloads/prints
+              if (companyData.logo_url) {
+                loadImageAsBase64(companyData.logo_url).then(b64 => setCachedLogoBase64(b64));
+              }
             }
           }
         }
@@ -924,9 +928,10 @@ function StockOrder() {
           // Fix 5: DB succeeded — clear pending payment
           try { localStorage.removeItem('pendingPaymentId'); } catch { /* non-critical */ }
 
-          // --- Invoice PDF generation (with pre-loaded base64 logo) ---
-          const logoB64 = await loadImageAsBase64(companyDetails?.logo_url);
-          setCachedLogoBase64(logoB64);
+          // --- Invoice PDF generation ---
+          // Use the prefetched base64 logo or fallback
+          const logoB64 = cachedLogoBase64 || (await loadImageAsBase64(companyDetails?.logo_url));
+          if (!cachedLogoBase64 && logoB64) setCachedLogoBase64(logoB64);
           const currentPrintChunks = [];
           for (let i = 0; i < calculations.items.length; i += ITEMS_PER_INVOICE_PAGE) {
             currentPrintChunks.push(calculations.items.slice(i, i + ITEMS_PER_INVOICE_PAGE));

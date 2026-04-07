@@ -219,19 +219,44 @@ Deno.serve(async (req) => {
         };
         console.log("🔔 [WEBHOOK] RPC params:", JSON.stringify(rpcParams));
 
-        const { error } = await supabaseAdmin.rpc("place_stock_order", rpcParams);
+        const maxRetries = 3;
+        let attempt = 0;
+        let success = false;
+        let lastError = null;
 
-        if (error) {
-          console.error("❌ [Safety Net Error] DB Recovery Failed:", error.message);
+        while (attempt < maxRetries && !success) {
+          attempt++;
+          console.log(`🔔 [WEBHOOK] Calling place_stock_order (Attempt ${attempt}/${maxRetries})...`);
+          
+          const { error } = await supabaseAdmin.rpc("place_stock_order", rpcParams);
+
+          if (error) {
+            lastError = error;
+            console.error(`❌ [Safety Net Error] DB Recovery Failed on attempt ${attempt}:`, error.message);
+            
+            if (attempt < maxRetries) {
+               // Exponential backoff: 1s, 2s, 4s...
+               const backoffDelay = Math.pow(2, attempt - 1) * 1000;
+               console.log(`⏳ Waiting ${backoffDelay}ms before retry...`);
+               await new Promise(resolve => setTimeout(resolve, backoffDelay));
+            }
+          } else {
+             success = true;
+          }
+        }
+
+        if (!success) {
+          console.error("❌ [Safety Net Final Error] DB Recovery FAILED after all retries:", lastError?.message);
           
           // 4. CRITICAL: AUTO-REFUND IF DB FAILS
           // If the DB rejects the order (e.g. stock is 0), we MUST refund the user.
           console.log(`💸 Initiating Auto-Refund for ${paymentId}...`);
           await refundPayment(paymentId);
           
-          return new Response("Order creation failed, refund initiated.", { status: 500 });
+          return new Response(`Order creation failed after ${maxRetries} attempts, refund initiated. Error: ${lastError?.message}`, { status: 500 });
         }
-        console.log(`✅ [Safety Net Success] Order recovered.`);
+        
+        console.log(`✅ [Safety Net Success] Order recovered successfully on attempt ${attempt}.`);
       } else {
         console.log(`ℹ️ Order already exists.`);
       }
