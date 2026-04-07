@@ -49,6 +49,7 @@ serve(async (req) => {
             JSON.stringify({ message: "Password updated successfully" }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
         );
+        //okay
     } catch (error) {
         return new Response(
             JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
