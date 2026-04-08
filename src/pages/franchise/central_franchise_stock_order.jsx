@@ -321,6 +321,11 @@ function StockOrder() {
   const [processingOrder, setProcessingOrder] = useState(false);
   const [toasts, setToasts] = useState([]);
 
+  // Payment warning modal state
+  const [showPaymentWarning, setShowPaymentWarning] = useState(false);
+  const [warningCountdown, setWarningCountdown] = useState(10);
+  const countdownIntervalRef = useRef(null);
+
   // Fix 3: Double-submission guard — ref is synchronous, unlike state
   const isSubmittingRef = useRef(false);
 
@@ -336,13 +341,50 @@ function StockOrder() {
   const [orderSuccess, setOrderSuccess] = useState(() => getSessionData("stock_order_success", false));
 
   useEffect(() => {
-    document.body.style.overflow = (isCartOpen || orderSuccess) ? "hidden" : "";
+    document.body.style.overflow = (isCartOpen || orderSuccess || showPaymentWarning) ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
-  }, [isCartOpen, orderSuccess]);
+  }, [isCartOpen, orderSuccess, showPaymentWarning]);
+
+  // Countdown timer for payment warning modal
+  useEffect(() => {
+    if (showPaymentWarning) {
+      setWarningCountdown(10);
+      countdownIntervalRef.current = setInterval(() => {
+        setWarningCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(countdownIntervalRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+    }
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+    };
+  }, [showPaymentWarning]);
 
   const [cart, setCart] = useState([]);
-
   const [notifiedItems, setNotifiedItems] = useState(() => new Set());
+
+  const openPaymentWarning = useCallback(() => {
+    if (cart.length === 0) return;
+    setShowPaymentWarning(true);
+  }, [cart]);
+
+  const handlePlaceOrderRef = useRef(null);
+
+  const confirmPaymentWarning = useCallback(() => {
+    setShowPaymentWarning(false);
+    if (handlePlaceOrderRef.current) handlePlaceOrderRef.current();
+  }, []);
 
 
 
@@ -1073,6 +1115,7 @@ function StockOrder() {
       isSubmittingRef.current = false;
     }
   };
+  handlePlaceOrderRef.current = handlePlaceOrder;
 
   const printChunks = useMemo(() => {
     if (!printData || !printData.items) return [];
@@ -1092,6 +1135,70 @@ function StockOrder() {
         ))}
       </div>
       <div className="min-h-[100dvh] bg-[#F3F4F6] pb-24 font-sans text-black relative print:hidden">
+        {/* Payment Warning Modal — trilingual with 10s countdown */}
+        {showPaymentWarning && (
+          <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <div className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl animate-in zoom-in-95 overflow-hidden">
+              {/* Red warning header */}
+              <div className="bg-gradient-to-r from-red-600 to-red-700 px-6 py-4 flex items-center gap-3">
+                <div className="w-11 h-11 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+                  <FiAlertTriangle size={22} className="text-white" />
+                </div>
+                <div>
+                  <h2 className="text-white font-black text-base uppercase tracking-wider">⚠️ Important — Please Read</h2>
+                  <p className="text-red-100 text-xs font-bold mt-0.5">Read all instructions before proceeding</p>
+                </div>
+              </div>
+              {/* Warning body — 4 languages, each full-width row */}
+              <div className="px-6 py-5 space-y-3">
+                {/* English */}
+                <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-3.5 flex items-center gap-4">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-red-500 bg-red-100 px-3 py-1 rounded-md flex-shrink-0">English</span>
+                  <p className="text-sm font-bold text-slate-800 leading-relaxed">Please do not close or refresh this tab until the payment confirmation popup appears.</p>
+                </div>
+                {/* Telugu */}
+                <div className="bg-green-50 border border-green-200 rounded-xl px-5 py-3.5 flex items-center gap-4">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-green-600 bg-green-100 px-3 py-1 rounded-md flex-shrink-0">తెలుగు</span>
+                  <p className="text-sm font-bold text-slate-800 leading-relaxed">పేమెంట్ కన్ఫర్మేషన్ పాప్అప్ వచ్చే వరకు దయచేసి ఈ ట్యాబ్ను క్లోజ్ లేదా రీఫ్రెష్ చేయకండి.</p>
+                </div>
+                {/* Hindi */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3.5 flex items-center gap-4">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 bg-amber-100 px-3 py-1 rounded-md flex-shrink-0">हिन्दी</span>
+                  <p className="text-sm font-bold text-slate-800 leading-relaxed">पेमेंट कन्फर्मेशन पॉपअप आने तक कृपया इस टैब को बंद या रिफ्रेश न करें।</p>
+                </div>
+                {/* Tamil */}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-3.5 flex items-center gap-4">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-100 px-3 py-1 rounded-md flex-shrink-0">தமிழ்</span>
+                  <p className="text-sm font-bold text-slate-800 leading-relaxed">பேமெண்ட் கன்ஃபர்மேஷன் பாப்அப் வரும் வரை, தயவுசெய்து இந்த டேப்பை மூடவோ அல்லது ரெஃப்ரெஷ் செய்யவோ வேண்டாம்.</p>
+                </div>
+              </div>
+              {/* Action buttons — side by side */}
+              <div className="px-6 pb-5 pt-1 flex gap-3">
+                <button
+                  onClick={confirmPaymentWarning}
+                  disabled={warningCountdown > 0}
+                  className={`flex-1 py-4 rounded-xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-2 transition-all ${
+                    warningCountdown > 0
+                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      : 'bg-black text-white hover:bg-slate-800 active:scale-95 shadow-lg'
+                  }`}
+                >
+                  <FiCheck size={18} />
+                  {warningCountdown > 0
+                    ? `I Understand — Please Wait (${warningCountdown}s)`
+                    : 'I Understand — Proceed to Payment'
+                  }
+                </button>
+                <button
+                  onClick={() => setShowPaymentWarning(false)}
+                  className="px-8 py-4 bg-slate-100 text-slate-500 rounded-xl font-black uppercase text-[11px] tracking-wider hover:bg-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {orderSuccess && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
             <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full text-center shadow-2xl animate-in zoom-in-95">
@@ -1157,7 +1264,7 @@ function StockOrder() {
                     <div className="flex justify-between text-slate-400 border-b border-slate-100 pb-2 mb-2"><span>Round Off</span><span>{formatCurrency(calculations.roundOff)}</span></div>
                     <div className="flex justify-between text-lg pt-1"><span>Total Bill</span><span>{formatCurrency(calculations.roundedBill)}</span></div>
                   </div>
-                  <button onClick={handlePlaceOrder} disabled={processingOrder} className="w-full py-5 bg-black text-white rounded-2xl font-black uppercase text-[11px] tracking-widest flex items-center justify-center gap-2 hover:bg-slate-800 transition-all active:scale-95">
+                  <button onClick={openPaymentWarning} disabled={processingOrder} className="w-full py-5 bg-black text-white rounded-2xl font-black uppercase text-[11px] tracking-widest flex items-center justify-center gap-2 hover:bg-slate-800 transition-all active:scale-95">
                     {processingOrder ? <FiRefreshCw className="animate-spin" /> : <FiCheck size={18} />}
                     {processingOrder ? "Securing Payment..." : "Checkout Now"}
                   </button>

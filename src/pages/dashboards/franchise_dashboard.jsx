@@ -103,9 +103,9 @@ function FranchiseOwnerDashboard() {
   };
 
   const navItems = [
-    { title: "Order Stock", path: "/stock-orders", icon: <ShoppingBag size={24} />, desc: "Procure inventory", comingSoon: true  },
+    { title: "Order Stock", path: "/stock-orders", icon: <ShoppingBag size={24} />, desc: "Procure inventory"},
     { title: "Invoices", path: "/franchise/invoices", icon: <FileText size={24} />, desc: "Billing history" },
-    { title: "Stock Request", path: "/franchise/requestportal", icon: <SendHorizontal size={24} />, desc: "Support & maintenance", comingSoon: true },
+    { title: "Stock Request", path: "/franchise/requestportal", icon: <SendHorizontal size={24} />, desc: "Support & maintenance" },
     { title: "Analytics", path: "/franchise/analytics", icon: <BarChart3 size={24} />, desc: "Sales performance" },
     { title: "Staff Profiles", path: "/franchise/staff", icon: <Users size={24} />, desc: "Manage employees" },
     { title: "Settings", path: "/franchise/settings", icon: <Settings size={24} />, desc: "Configure store" },
