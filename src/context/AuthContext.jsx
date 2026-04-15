@@ -27,38 +27,50 @@ export function AuthProvider({ children }) {
       return null;
     }
 
-    let { data: ownerProfile } = await fetchWithRetry(() =>
+    let finalProfile = null;
+
+    let { data: officeStaff } = await fetchWithRetry(() =>
       supabase
-        .from("profiles")
+        .from("office_staff_profiles")
         .select("*")
         .eq("id", supabaseUser.id)
         .maybeSingle()
     );
 
-    let finalProfile = null;
-
-    if (ownerProfile) {
-      finalProfile = { ...ownerProfile, role: ownerProfile.role || "owner" };
+    if (officeStaff) {
+      finalProfile = { ...officeStaff, role: "office_staff" };
     } else {
-      const { data: staffProfile } = await fetchWithRetry(() =>
+      let { data: ownerProfile } = await fetchWithRetry(() =>
         supabase
-          .from("staff_profiles")
+          .from("profiles")
           .select("*")
           .eq("id", supabaseUser.id)
           .maybeSingle()
       );
 
-      if (staffProfile) {
-        const { data: storeInfo } = await fetchWithRetry(() =>
+      if (ownerProfile && ownerProfile.role !== null && ownerProfile.role !== '') {
+        finalProfile = { ...ownerProfile, role: ownerProfile.role };
+      } else {
+        const { data: staffProfile } = await fetchWithRetry(() =>
           supabase
-            .from("profiles")
-            .select("company, address, city, state, pincode, phone")
-            .eq("franchise_id", staffProfile.franchise_id)
-            .limit(1)
+            .from("staff_profiles")
+            .select("*")
+            .eq("id", supabaseUser.id)
             .maybeSingle()
         );
 
-        finalProfile = { ...staffProfile, role: "staff", staff_profile_id: staffProfile.id, ...storeInfo };
+        if (staffProfile) {
+          const { data: storeInfo } = await fetchWithRetry(() =>
+            supabase
+              .from("profiles")
+              .select("company, address, city, state, pincode, phone")
+              .eq("franchise_id", staffProfile.franchise_id)
+              .limit(1)
+              .maybeSingle()
+          );
+
+          finalProfile = { ...staffProfile, role: "staff", staff_profile_id: staffProfile.id, ...storeInfo };
+        }
       }
     }
 
