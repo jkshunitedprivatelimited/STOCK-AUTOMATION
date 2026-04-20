@@ -135,9 +135,11 @@ function CentralProfiles() {
       filtered.sort((a, b) => {
         const valA = (a[sortField] || "").toString().toLowerCase();
         const valB = (b[sortField] || "").toString().toLowerCase();
-        if (valA < valB) return sortDirection === "asc" ? -1 : 1;
-        if (valA > valB) return sortDirection === "asc" ? 1 : -1;
-        return 0;
+        
+        // Use natural sorting (so TV-2 comes before TV-10)
+        return sortDirection === "asc"
+          ? valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' })
+          : valB.localeCompare(valA, undefined, { numeric: true, sensitivity: 'base' });
       });
     } else {
       const roleOrder = { central: 1, stock: 2, franchise: 3 };

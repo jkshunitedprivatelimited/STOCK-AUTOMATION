@@ -27,6 +27,7 @@ function FranchiseOwnerDashboard() {
   const [franchiseName, setFranchiseName] = useState("");
   const [franchiseId, setFranchiseId] = useState("...");
   const [notifications, setNotifications] = useState([]);
+  const [onlinePaymentsEnabled, setOnlinePaymentsEnabled] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -56,6 +57,22 @@ function FranchiseOwnerDashboard() {
       isMounted = false;
       supabase.removeChannel(channel);
     };
+  }, []);
+
+  // Fetch central settings to check if online payments is enabled
+  useEffect(() => {
+    const fetchCentralSettings = async () => {
+      const { data, error } = await supabase
+        .from("central_settings")
+        .select("key, enabled")
+        .eq("key", "online_payments")
+        .single();
+
+      if (!error && data) {
+        setOnlinePaymentsEnabled(data.enabled);
+      }
+    };
+    fetchCentralSettings();
   }, []);
 
   const fetchProfileAndNotifications = async (isMounted = true) => {
@@ -103,9 +120,9 @@ function FranchiseOwnerDashboard() {
   };
 
   const navItems = [
-    { title: "Order Stock", path: "/stock-orders", icon: <ShoppingBag size={24} />, desc: "Procure inventory"},
+    { title: "Order Stock", path: "/stock-orders", icon: <ShoppingBag size={24} />, desc: "Procure inventory", comingSoon: !onlinePaymentsEnabled },
     { title: "Invoices", path: "/franchise/invoices", icon: <FileText size={24} />, desc: "Billing history" },
-    { title: "Stock Request", path: "/franchise/requestportal", icon: <SendHorizontal size={24} />, desc: "Support & maintenance" },
+    { title: "Stock Request", path: "/franchise/requestportal", icon: <SendHorizontal size={24} />, desc: "Support & maintenance", comingSoon: true },
     { title: "Analytics", path: "/franchise/analytics", icon: <BarChart3 size={24} />, desc: "Sales performance" },
     { title: "Staff Profiles", path: "/franchise/staff", icon: <Users size={24} />, desc: "Manage employees" },
     { title: "Settings", path: "/franchise/settings", icon: <Settings size={24} />, desc: "Configure store" },

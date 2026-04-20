@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../frontend_supabase/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 import {
-  ArrowLeft, Lock, LogOut, Eye, EyeOff
+  ArrowLeft, Lock, LogOut, Eye, EyeOff, CreditCard, MessageCircle
 } from "lucide-react";
 
 const BRAND_GREEN = "rgb(0, 100, 55)";
@@ -19,6 +19,9 @@ function CentralSettings() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+  const [onlinePayments, setOnlinePayments] = useState(false);
+  const [chatSupport, setChatSupport] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(true);
 
   // FIX: Define fetchProfile BEFORE calling it in useEffect
   useEffect(() => {
@@ -37,6 +40,40 @@ function CentralSettings() {
 
     fetchProfile();
   }, [authUser]);
+
+  // Fetch central settings (online payments, chat support)
+  useEffect(() => {
+    const fetchSettings = async () => {
+      setSettingsLoading(true);
+      const { data, error } = await supabase
+        .from("central_settings")
+        .select("key, enabled")
+        .in("key", ["online_payments", "chat_support"]);
+
+      if (!error && data) {
+        data.forEach((s) => {
+          if (s.key === "online_payments") setOnlinePayments(s.enabled);
+          if (s.key === "chat_support") setChatSupport(s.enabled);
+        });
+      }
+      setSettingsLoading(false);
+    };
+    fetchSettings();
+  }, []);
+
+  const handleToggle = async (key, currentValue, setter) => {
+    const newValue = !currentValue;
+    setter(newValue);
+
+    const { error } = await supabase
+      .from("central_settings")
+      .upsert({ key, enabled: newValue }, { onConflict: "key" });
+
+    if (error) {
+      setter(currentValue);
+      console.error("Failed to update setting:", error);
+    }
+  };
 
   const handleChangePassword = async () => {
     setMsg("");
@@ -169,7 +206,99 @@ function CentralSettings() {
             </button>
           </div>
 
-          {/* 2. LOGOUT CARD */}
+          {/* 2. ONLINE PAYMENTS CARD */}
+          <div className="bg-white rounded-[24px] md:rounded-[32px] border p-6 md:p-8 shadow-sm flex flex-col h-full min-h-[320px]" style={{ borderColor: SOFT_BORDER }}>
+            <div className="flex items-center gap-4 mb-4">
+              <div className="p-3 rounded-xl bg-emerald-50" style={{ color: BRAND_GREEN }}>
+                <CreditCard className="w-6 h-6" strokeWidth={2.5} />
+              </div>
+              <h3 className="text-lg font-black uppercase tracking-tight text-black">Online Payments</h3>
+            </div>
+
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed mb-6">
+              Enable or disable the online stock ordering gateway for all franchise outlets.
+            </p>
+
+            <div className="flex-1 flex flex-col justify-center items-center gap-4">
+              <button
+                onClick={() => !settingsLoading && handleToggle("online_payments", onlinePayments, setOnlinePayments)}
+                disabled={settingsLoading}
+                className="relative outline-none border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  width: 72,
+                  height: 38,
+                  borderRadius: 19,
+                  backgroundColor: onlinePayments ? BRAND_GREEN : "#d1d5db",
+                  transition: "background-color 0.3s ease",
+                  padding: 0,
+                }}
+              >
+                <span style={{
+                  position: "absolute",
+                  top: 4,
+                  left: onlinePayments ? 38 : 4,
+                  width: 30,
+                  height: 30,
+                  borderRadius: 15,
+                  backgroundColor: "white",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.18)",
+                  transition: "left 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                  display: "block",
+                }} />
+              </button>
+              <span className="text-[10px] font-black uppercase tracking-[0.3em]" style={{ color: onlinePayments ? BRAND_GREEN : "#9ca3af" }}>
+                {settingsLoading ? "Loading..." : onlinePayments ? "Enabled" : "Disabled"}
+              </span>
+            </div>
+          </div>
+
+          {/* 3. CHAT SUPPORT CARD */}
+          <div className="bg-white rounded-[24px] md:rounded-[32px] border p-6 md:p-8 shadow-sm flex flex-col h-full min-h-[320px]" style={{ borderColor: SOFT_BORDER }}>
+            <div className="flex items-center gap-4 mb-4">
+              <div className="p-3 rounded-xl bg-emerald-50" style={{ color: BRAND_GREEN }}>
+                <MessageCircle className="w-6 h-6" strokeWidth={2.5} />
+              </div>
+              <h3 className="text-lg font-black uppercase tracking-tight text-black">Chat Support</h3>
+            </div>
+
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed mb-6">
+              Enable or disable the live chat support feature for all franchise outlets.
+            </p>
+
+            <div className="flex-1 flex flex-col justify-center items-center gap-4">
+              <button
+                onClick={() => !settingsLoading && handleToggle("chat_support", chatSupport, setChatSupport)}
+                disabled={settingsLoading}
+                className="relative outline-none border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  width: 72,
+                  height: 38,
+                  borderRadius: 19,
+                  backgroundColor: chatSupport ? BRAND_GREEN : "#d1d5db",
+                  transition: "background-color 0.3s ease",
+                  padding: 0,
+                }}
+              >
+                <span style={{
+                  position: "absolute",
+                  top: 4,
+                  left: chatSupport ? 38 : 4,
+                  width: 30,
+                  height: 30,
+                  borderRadius: 15,
+                  backgroundColor: "white",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.18)",
+                  transition: "left 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                  display: "block",
+                }} />
+              </button>
+              <span className="text-[10px] font-black uppercase tracking-[0.3em]" style={{ color: chatSupport ? BRAND_GREEN : "#9ca3af" }}>
+                {settingsLoading ? "Loading..." : chatSupport ? "Enabled" : "Disabled"}
+              </span>
+            </div>
+          </div>
+
+          {/* 4. LOGOUT CARD */}
           <div className="bg-white rounded-[24px] md:rounded-[32px] border p-6 md:p-10 shadow-sm flex flex-col justify-center items-center text-center h-full min-h-[320px]" style={{ borderColor: "rgba(225, 29, 72, 0.15)" }}>
             <div className="p-6 rounded-2xl bg-rose-50 text-rose-600 mb-6 transition-transform hover:scale-110">
               <LogOut className="w-10 h-10" strokeWidth={2.5} />
