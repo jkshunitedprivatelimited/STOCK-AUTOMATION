@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../frontend_supabase/supabaseClient";
 import {
   Eye, EyeOff, ArrowLeft, MapPin, Building2, User,
-  Phone, Mail, KeyRound, Sparkles, Map, Loader2, RefreshCw
+  Phone, Mail, KeyRound, Sparkles, Map, Loader2, RefreshCw, IndianRupee
 } from "lucide-react";
 import { BRAND_GREEN, BRAND_GREEN_LIGHT } from "../../utils/theme";
 
@@ -157,6 +157,7 @@ function RegisterUser() {
         state: data.get("state") || "",
         pincode: (data.get("pincode") || "").trim(),
         nearest_bus_stop: (data.get("nearestBusStop") || "").trim(),
+        transportation_charge: data.get("transportation_charge") ? parseFloat(data.get("transportation_charge")) : null,
         role: 'franchise'
       };
 
@@ -337,6 +338,13 @@ function RegisterUser() {
               <InputGroup icon={MapPin} isFocused={focusedField === "nearestBusStop"} label="Nearest Bus Stop *" isMobile={isMobile}>
                 <input name="nearestBusStop" required placeholder="e.g. Jubilee Hills Checkpost" style={styles.cleanInput}
                   onFocus={() => setFocusedField("nearestBusStop")} onBlur={() => setFocusedField(null)} />
+              </InputGroup>
+            </div>
+
+            <div style={{ marginBottom: "24px" }}>
+              <InputGroup icon={IndianRupee} isFocused={focusedField === "transportation_charge"} label="Transportation Charge (Optional)" isMobile={isMobile}>
+                <input name="transportation_charge" placeholder="0" type="number" min="0" step="0.01" style={styles.cleanInput}
+                  onFocus={() => setFocusedField("transportation_charge")} onBlur={() => setFocusedField(null)} />
               </InputGroup>
             </div>
 

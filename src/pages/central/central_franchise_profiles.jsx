@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useDeferredValue } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../frontend_supabase/supabaseClient";
+import * as XLSX from "xlsx";
 import {
   ArrowLeft,
   Search,
@@ -18,6 +19,7 @@ import {
   Eye,
   EyeOff,
   Lock,
+  Download,
 } from "lucide-react";
 import { BRAND_GREEN } from "../../utils/theme";
 
@@ -365,6 +367,40 @@ function CentralProfiles() {
     }
   };
 
+  const handleExportExcel = () => {
+    const exportData = sortedAndFilteredProfiles.map((p, idx) => ({
+      "S.No": idx + 1,
+      "Name": p.name || "",
+      "Email": p.email || "",
+      "Phone": p.phone || "",
+      "Franchise ID": p.franchise_id || "",
+      "Role": p.role ? p.role.charAt(0).toUpperCase() + p.role.slice(1) : "",
+      "Company": p.company || "",
+      "Branch Location": p.branch_location || "",
+      "Nearest Bus Stop": p.nearest_bus_stop || "",
+      "City": p.city || "",
+      "State": p.state || "",
+      "Country": p.country || "",
+      "Pincode": p.pincode || "",
+      "Address": p.address || "",
+      "Transportation Charge": p.transportation_charge != null ? p.transportation_charge : "",
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+
+    // Auto-size columns
+    const colWidths = Object.keys(exportData[0] || {}).map(key => ({
+      wch: Math.max(key.length, ...exportData.map(row => String(row[key] || "").length)) + 2
+    }));
+    ws["!cols"] = colWidths;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Franchise Profiles");
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `Franchise_Profiles_${dateStr}.xlsx`);
+  };
+
   if (loading && profiles.length === 0) return <div style={styles.loader}>Loading Profiles...</div>;
 
   return (
@@ -454,16 +490,29 @@ function CentralProfiles() {
             </span>
           </div>
 
-          {/* Register Button Right */}
-          <button onClick={() => navigate("/register")} style={{
-            ...styles.registerBtn,
-            width: isMobile ? '100%' : 'auto',
-            justifyContent: 'center',
-            height: '42px'
-          }}>
-            <UserPlus size={16} />
-            <span>REGISTER NEW USER</span>
-          </button>
+          {/* Register & Export Buttons Right */}
+          <div style={{ display: 'flex', gap: '12px', flexDirection: isMobile ? 'column' : 'row', width: isMobile ? '100%' : 'auto' }}>
+            <button onClick={handleExportExcel} style={{
+              ...styles.registerBtn,
+              background: '#1e293b',
+              width: isMobile ? '100%' : 'auto',
+              justifyContent: 'center',
+              height: '42px'
+            }}>
+              <Download size={16} />
+              <span>EXPORT EXCEL</span>
+            </button>
+
+            <button onClick={() => navigate("/register")} style={{
+              ...styles.registerBtn,
+              width: isMobile ? '100%' : 'auto',
+              justifyContent: 'center',
+              height: '42px'
+            }}>
+              <UserPlus size={16} />
+              <span>REGISTER NEW USER</span>
+            </button>
+          </div>
         </div>
 
         {/* CONTENT AREA: MOBILE CARDS OR DESKTOP TABLE */}
@@ -690,6 +739,26 @@ function CentralProfiles() {
                 </div>
               </div>
               {/* END OF NEW FIELDS */}
+
+              <div style={{ ...styles.formRow, flexDirection: isMobile ? 'column' : 'row' }}>
+                <div style={styles.inputGroup}>
+                  <label style={styles.label}>Transportation Charge (Optional)</label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', fontWeight: '700', color: '#9ca3af' }}>₹</span>
+                    <input
+                      style={{ ...styles.modalInput, paddingLeft: '32px', width: '100%', boxSizing: 'border-box' }}
+                      name="transportation_charge"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0"
+                      value={editForm.transportation_charge ?? ""}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                </div>
+                <div style={styles.inputGroup}></div>
+              </div>
 
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Permanent Address</label>
