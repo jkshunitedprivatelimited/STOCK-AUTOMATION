@@ -8,43 +8,53 @@ import { supabase } from "../../frontend_supabase/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 import { BRAND_GREEN } from "../../utils/theme";
 
+
 const BRAND_COLOR = BRAND_GREEN;
+
 
 const CustomStyles = () => (
   <style>{`
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  `}</style>
+   .no-scrollbar::-webkit-scrollbar { display: none; }
+   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+ `}</style>
 );
+
 
 const CentralTransportationService = () => {
   const navigate = useNavigate();
   const { profile: authProfile } = useAuth();
 
+
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+
 
   // Filters
   const [filterState, setFilterState] = useState("");
   const [filterCity, setFilterCity] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
+
   // Sorting
   const [sortKey, setSortKey] = useState("name");
   const [sortDir, setSortDir] = useState("asc");
+
 
   // Inline edits
   const [editingCharges, setEditingCharges] = useState({});
   const [savingIds, setSavingIds] = useState(new Set());
   const [successIds, setSuccessIds] = useState(new Set());
 
+
   // Bulk select
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkCharge, setBulkCharge] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
 
+
   useEffect(() => { fetchProfiles(); }, []);
+
 
   const fetchProfiles = async () => {
     setLoading(true);
@@ -61,12 +71,14 @@ const CentralTransportationService = () => {
     } finally { setLoading(false); }
   };
 
+
   // Derived filter options
-  const stateOptions = useMemo(() => [...new Set(profiles.map(p => p.state).filter(Boolean))].sort(), [profiles]);
+  const stateOptions = useMemo(() => [...new Set(profiles.map(p => p.state).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })), [profiles]);
   const cityOptions = useMemo(() => {
     const filtered = filterState ? profiles.filter(p => p.state === filterState) : profiles;
-    return [...new Set(filtered.map(p => p.city).filter(Boolean))].sort();
+    return [...new Set(filtered.map(p => p.city).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
   }, [profiles, filterState]);
+
 
   // Sort handler
   const handleSort = (key) => {
@@ -77,6 +89,7 @@ const CentralTransportationService = () => {
     if (sortKey !== col) return <ChevronDown size={12} className="text-slate-300" />;
     return sortDir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
   };
+
 
   // Filtered + sorted
   const displayProfiles = useMemo(() => {
@@ -103,10 +116,12 @@ const CentralTransportationService = () => {
     return list;
   }, [profiles, searchTerm, filterState, filterCity, sortKey, sortDir]);
 
+
   // Inline edit
   const handleChargeChange = (id, val) => {
     setEditingCharges(prev => ({ ...prev, [id]: val.replace(/[^0-9.]/g, "") }));
   };
+
 
   const handleSave = async (id) => {
     const charge = parseFloat(editingCharges[id]);
@@ -126,8 +141,10 @@ const CentralTransportationService = () => {
     }
   };
 
+
   const getDisplayCharge = (p) => editingCharges[p.id] !== undefined ? editingCharges[p.id] : (p.transportation_charge || 0);
   const hasUnsaved = (p) => editingCharges[p.id] !== undefined && parseFloat(editingCharges[p.id]) !== (p.transportation_charge || 0);
+
 
   // Bulk selection
   const toggleSelect = (id) => {
@@ -158,15 +175,19 @@ const CentralTransportationService = () => {
     } finally { setBulkSaving(false); }
   };
 
+
   const clearFilters = () => { setFilterState(""); setFilterCity(""); setSearchTerm(""); };
   const hasActiveFilters = filterState || filterCity || searchTerm;
+
 
   const visibleIds = displayProfiles.map(p => p.id);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
 
+
   return (
     <div className="h-[100dvh] w-full flex flex-col bg-slate-50 font-sans text-black overflow-hidden relative">
       <CustomStyles />
+
 
       {/* HEADER */}
       <div className="flex-none bg-white shadow-sm z-30 pt-safe-top">
@@ -188,6 +209,7 @@ const CentralTransportationService = () => {
             </div>
           </div>
         </div>
+
 
         {/* SEARCH + FILTER BAR */}
         <div className="w-full px-4 md:px-6 py-3 space-y-3">
@@ -212,6 +234,7 @@ const CentralTransportationService = () => {
               </button>
             </div>
           </div>
+
 
           {/* Filter dropdowns */}
           {showFilters && (
@@ -240,6 +263,7 @@ const CentralTransportationService = () => {
             </div>
           )}
 
+
           {/* Bulk Action Bar */}
           {selectedIds.size > 0 && (
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 rounded-xl border-2 animate-in slide-in-from-top-2 duration-200" style={{ backgroundColor: BRAND_COLOR + "10", borderColor: BRAND_COLOR + "40" }}>
@@ -267,6 +291,7 @@ const CentralTransportationService = () => {
             </div>
           )}
 
+
           {/* Summary */}
           <div className="flex items-center gap-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
             <Users size={12} />
@@ -274,6 +299,7 @@ const CentralTransportationService = () => {
           </div>
         </div>
       </div>
+
 
       {/* TABLE CONTENT */}
       <div className="flex-grow overflow-hidden relative bg-slate-50">
@@ -326,6 +352,7 @@ const CentralTransportationService = () => {
                   const isSuccess = successIds.has(p.id);
                   const edited = hasUnsaved(p);
 
+
                   return (
                     <tr key={p.id}
                       className={`border-b border-slate-100 text-sm transition-colors ${isSelected ? "bg-emerald-50/50" : isSuccess ? "bg-green-50" : "hover:bg-slate-50"}`}>
@@ -358,10 +385,9 @@ const CentralTransportationService = () => {
                       </td>
                       <td className="px-3 py-3 text-center">
                         <button onClick={() => handleSave(p.id)} disabled={!edited || isSaving}
-                          className={`h-[32px] px-3 rounded-lg font-bold uppercase text-[9px] inline-flex items-center gap-1 transition-all active:scale-95 ${
-                            isSuccess ? "bg-emerald-500 text-white"
-                            : edited ? "text-white shadow-sm" : "bg-slate-100 text-slate-300 cursor-not-allowed"
-                          }`}
+                          className={`h-[32px] px-3 rounded-lg font-bold uppercase text-[9px] inline-flex items-center gap-1 transition-all active:scale-95 ${isSuccess ? "bg-emerald-500 text-white"
+                              : edited ? "text-white shadow-sm" : "bg-slate-100 text-slate-300 cursor-not-allowed"
+                            }`}
                           style={edited && !isSuccess ? { backgroundColor: BRAND_COLOR } : {}}>
                           {isSaving ? <RefreshCw size={12} className="animate-spin" /> : isSuccess ? <><Check size={12} /> Saved</> : "Save"}
                         </button>
@@ -378,4 +404,8 @@ const CentralTransportationService = () => {
   );
 };
 
+
 export default CentralTransportationService;
+
+
+

@@ -246,10 +246,12 @@ function PackageBills() {
 
         const targetCompanyName = selectedCompany.company_name ? String(selectedCompany.company_name).trim().toLowerCase() : "";
 
-        return franchises.filter(f => {
-            const fCompany = f.company ? String(f.company).trim().toLowerCase() : "";
-            return fCompany === targetCompanyName;
-        });
+        return franchises
+            .filter(f => {
+                const fCompany = f.company ? String(f.company).trim().toLowerCase() : "";
+                return fCompany === targetCompanyName;
+            })
+            .sort((a, b) => (a.franchise_id || "").toString().localeCompare((b.franchise_id || "").toString(), undefined, { numeric: true, sensitivity: 'base' }));
     }, [selectedCompanyId, companies, franchises]);
 
     const openBillModal = () => {
@@ -358,7 +360,7 @@ function PackageBills() {
     };
 
     const modalCategories = useMemo(() => {
-        const cats = Array.from(new Set(stocks.map(s => s.category || "Uncategorized"))).sort();
+        const cats = Array.from(new Set(stocks.map(s => s.category || "Uncategorized"))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
         return ["All", ...cats];
     }, [stocks]);
 

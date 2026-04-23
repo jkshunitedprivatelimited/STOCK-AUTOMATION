@@ -1,3 +1,4 @@
+
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../frontend_supabase/supabaseClient";
@@ -131,7 +132,7 @@ function Reports() {
                 const { data, error } = await supabase.from('companies').select('company_name');
                 if (error) throw error;
                 if (data) {
-                    const unique = [...new Set(data.map(c => c.company_name).filter(Boolean))].sort();
+                    const unique = [...new Set(data.map(c => c.company_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
                     setDbCompanyList(unique);
                     safeSetCache(CACHE_COMPANIES_KEY, { data: unique, timestamp: Date.now() });
                 }
@@ -144,7 +145,7 @@ function Reports() {
 
     useEffect(() => {
         const fetchFranchisesForCompany = async () => {
-            
+
             if (!selectedCompany || selectedCompany === "all") {
                 setDbFranchiseList([]);
                 return;
@@ -154,7 +155,7 @@ function Reports() {
                 const cacheKey = `reports_franchises_${selectedCompany}`;
                 const cached = safeGetCache(cacheKey);
                 if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-                    
+
                     setDbFranchiseList(cached.data);
                     return;
                 }
@@ -165,12 +166,12 @@ function Reports() {
                     .eq('company', selectedCompany)
                     .neq('franchise_id', null);
 
-                
+
 
                 if (error) throw error;
                 if (data) {
-                    const unique = [...new Set(data.map(p => p.franchise_id).filter(Boolean))].sort();
-                    
+                    const unique = [...new Set(data.map(p => p.franchise_id).filter(Boolean))].sort((a, b) => a.toString().localeCompare(b.toString(), undefined, { numeric: true, sensitivity: 'base' }));
+
                     setDbFranchiseList(unique);
                     safeSetCache(cacheKey, { data: unique, timestamp: Date.now() });
                 }
@@ -183,7 +184,7 @@ function Reports() {
 
     // Use only active franchise IDs from the database
     const mergedFranchiseList = useMemo(() => {
-        return dbFranchiseList;
+        return [...dbFranchiseList].sort((a, b) => a.toString().localeCompare(b.toString(), undefined, { numeric: true, sensitivity: 'base' }));
     }, [dbFranchiseList]);
 
     // Save dropdown selections to session storage
@@ -244,7 +245,7 @@ function Reports() {
 
                 if (createdBy && profileByUserId[createdBy]) return profileByUserId[createdBy];
                 if (fid && profileMap[fid]) return profileMap[fid];
-                
+
                 // Return null; enrichment will use "Unknown Company".
                 return null;
             };
@@ -371,7 +372,7 @@ function Reports() {
     const handleDownload = () => {
         if (!filteredData.length) return alert("No data to export!");
         const isStore = activeTab === "store";
-        
+
         // Calculate stats for export summary
         const eTotalSales = filteredData.reduce((sum, b) => sum + Number(b.total ?? b.total_amount ?? 0), 0);
         const eUpiSales = filteredData.reduce((sum, b) => ((b.payment_mode || "").toUpperCase() === "UPI" ? sum + Number(b.total ?? b.total_amount ?? 0) : sum), 0);
@@ -407,7 +408,7 @@ function Reports() {
             const name = (item.mapped_location || item.customer_name || "Standard Sale").replace(/,/g, " ");
             const dateObj = new Date(item.created_at);
             const amount = item.total || item.total_amount || 0;
-            
+
             if (isStore) {
                 const mode = item.payment_mode || "N/A";
                 const discount = item.discount || 0;
@@ -973,7 +974,7 @@ function Reports() {
                                 <span className="text-[10px] font-black text-black/40 uppercase tracking-widest mb-1">TOTAL {activeTab === "store" ? "SALES" : "AMOUNT"}</span>
                                 <span className="text-xl md:text-2xl font-black text-black">₹{stats.totalSales.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                             </div>
-                            
+
                             <div className="bg-white p-5 rounded-2xl border border-black/10 shadow-sm flex flex-col items-center justify-center text-center">
                                 <span className="text-[10px] font-black text-black/40 uppercase tracking-widest mb-1">TOTAL {activeTab === "store" ? "BILLS" : "ORDERS"}</span>
                                 <span className="text-xl md:text-2xl font-black text-indigo-500">{stats.totalOrders}</span>
@@ -1010,7 +1011,7 @@ function Reports() {
                                 </PieChart>
                             </ResponsiveContainer>
                         </div>
-                        
+
                         <div className="flex text-[9px] font-black text-black/40 uppercase tracking-widest border-b border-black/10 pb-2 mb-2 shrink-0">
                             <div className="w-10 text-center">#</div>
                             <div className="flex-1 text-left pl-1">Item Name</div>
@@ -1022,8 +1023,8 @@ function Reports() {
                             {itemPieData.map((item, i) => (
                                 <div key={i} className="flex justify-between items-center text-xs border-b border-black/5 py-2.5 last:border-0 hover:bg-black/5 transition-colors">
                                     <div className="flex items-center gap-3 flex-1 min-w-0 pr-3">
-                                        <div 
-                                            className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-white text-[10px] font-black mx-1" 
+                                        <div
+                                            className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-white text-[10px] font-black mx-1"
                                             style={{ backgroundColor: COLORS[i % COLORS.length] }}
                                         >
                                             {i + 1}
@@ -1153,7 +1154,7 @@ function Reports() {
                 {/* Pagination Controls */}
                 {totalPages > 1 && (
                     <div className="flex items-center justify-between bg-white p-4 rounded-[2rem] border border-black/10 shadow-sm mb-10 shrink-0">
-                        <button 
+                        <button
                             onClick={() => setPage(p => Math.max(1, p - 1))}
                             disabled={page === 1}
                             className="px-6 py-3 bg-black/5 hover:bg-black/10 active:scale-95 transition-all rounded-xl font-black text-sm uppercase tracking-widest disabled:opacity-50 disabled:active:scale-100 disabled:hover:bg-black/5"
@@ -1163,7 +1164,7 @@ function Reports() {
                         <span className="text-sm font-black text-black/60 uppercase tracking-widest">
                             Page {page} of {totalPages}
                         </span>
-                        <button 
+                        <button
                             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                             disabled={page === totalPages}
                             className="px-6 py-3 bg-black/5 hover:bg-black/10 active:scale-95 transition-all rounded-xl font-black text-sm uppercase tracking-widest disabled:opacity-50 disabled:active:scale-100 disabled:hover:bg-black/5"
@@ -1449,3 +1450,8 @@ function DiscountReEvalModal({ context, deleting, onConfirm, onCancel }) {
 }
 
 export default Reports;
+
+
+
+
+

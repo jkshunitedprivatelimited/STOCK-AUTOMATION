@@ -103,7 +103,7 @@ function PosManagement() {
           companyData
             .map(c => c.company_name?.trim())
             .filter(Boolean)
-        )].sort();
+        )].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
         devLog("=== DEBUG 1: Companies from companies table ===", uniqueCompanies);
         setCompanies(uniqueCompanies);
       }
@@ -158,7 +158,7 @@ function PosManagement() {
     devLog("Filtered Records Matching Company:", filteredRecords);
 
     const matchingIds = filteredRecords.map(p => p.franchise_id);
-    const finalIds = [...new Set(matchingIds)].sort();
+    const finalIds = [...new Set(matchingIds)].sort((a, b) => a.toString().localeCompare(b.toString(), undefined, { numeric: true, sensitivity: 'base' }));
 
     devLog("Final Unique IDs mapped to dropdown:", finalIds);
     return finalIds;

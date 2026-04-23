@@ -394,13 +394,13 @@ export default function OldTokenBills() {
                 supabase.from('token_bills').select('*').order('created_at', { ascending: false }),
                 supabase.from('quotations').select('*').order('created_at', { ascending: false })
             ]);
-            
+
             if (tErr) console.error("Error fetching token bills:", tErr);
             if (qErr) console.error("Error fetching quotations:", qErr);
-            
+
             if (tData) setBills(tData);
             if (qData) setQuotations(qData);
-            
+
             setLoading(false);
         };
         fetchInitialData();
@@ -455,11 +455,11 @@ export default function OldTokenBills() {
     const handleDelete = async (id) => {
         const table = activeTab === 'tokens' ? 'token_bills' : 'quotations';
         if (!window.confirm(`Are you sure you want to permanently delete this ${activeTab === 'tokens' ? 'Registration Bill' : 'Quotation'}? It cannot be recovered.`)) return;
-        
+
         console.log(`Attempting to delete ${id} from table ${table}`);
         const { data, error, count } = await supabase.from(table).delete().eq('id', id).select();
         console.log("Delete response:", { data, error, count });
-        
+
         if (error) {
             alert(`Error deleting record: ` + error.message);
         } else {
@@ -477,238 +477,238 @@ export default function OldTokenBills() {
         }
     };
 
-// --- QUOTE LOGIC ---
-const openQuoteModal = () => {
-    setQuoteClient({ name: "", phone: "", address: "" });
-    setQuoteCompanyId(companies.length === 1 ? companies[0].id : "");
-    setQuoteMode("specific");
-    setQuoteSpecificItems([]);
-    setQuoteCustomItems([]);
-    setQuoteStockSearch("");
-    setQuoteCategory("All");
-    setShowQuoteModal(true);
-};
+    // --- QUOTE LOGIC ---
+    const openQuoteModal = () => {
+        setQuoteClient({ name: "", phone: "", address: "" });
+        setQuoteCompanyId(companies.length === 1 ? companies[0].id : "");
+        setQuoteMode("specific");
+        setQuoteSpecificItems([]);
+        setQuoteCustomItems([]);
+        setQuoteStockSearch("");
+        setQuoteCategory("All");
+        setShowQuoteModal(true);
+    };
 
-const handleQuoteSpecificQty = (stock, newQty) => {
-    const qty = Math.max(0, parseInt(newQty) || 0);
-    if (qty === 0) {
-        setQuoteSpecificItems(prev => prev.filter(i => i.stock_id !== stock.id));
-    } else {
-        setQuoteSpecificItems(prev => {
-            const existing = prev.find(i => i.stock_id === stock.id);
-            if (existing) return prev.map(i => i.stock_id === stock.id ? { ...i, quantity: qty } : i);
-            return [...prev, { stock_id: stock.id, quantity: qty, stockDetails: stock }];
-        });
-    }
-};
-
-const addCustomRow = () => {
-    setQuoteCustomItems(prev => [...prev, { item_name: "", price: 0, gst_rate: "", showQty: false, quantity: 1, showUnit: false, unit: "" }]);
-};
-
-const updateCustomRow = (idx, field, value) => {
-    setQuoteCustomItems(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
-};
-
-const removeCustomRow = (idx) => {
-    setQuoteCustomItems(prev => prev.filter((_, i) => i !== idx));
-};
-
-const handleGenerateQuote = async () => {
-    if (!quoteClient.name.trim()) return alert("Please enter the client name.");
-    if (!quoteCompanyId) return alert("Please select a billing company.");
-
-    let quoteItems = [];
-
-    if (quoteMode === "specific") {
-        if (quoteSpecificItems.length === 0) return alert("Please add at least one item.");
-        for (const pItem of quoteSpecificItems) {
-            const stock = stocks.find(s => s.id === pItem.stock_id);
-            if (!stock) continue;
-            const qty = Number(pItem.quantity);
-            const price = Number(stock.price);
-            const gstRate = Number(stock.gst_rate) || 0;
-            const lineSubtotal = qty * price;
-            const lineGst = lineSubtotal * (gstRate / 100);
-            const lineTotal = lineSubtotal + lineGst;
-            quoteItems.push({
-                item_name: stock.item_name, quantity: qty, unit: stock.unit,
-                price, total: lineTotal, gst_rate: gstRate,
-                stocks: stock, hsn_code: stock.hsn_code
+    const handleQuoteSpecificQty = (stock, newQty) => {
+        const qty = Math.max(0, parseInt(newQty) || 0);
+        if (qty === 0) {
+            setQuoteSpecificItems(prev => prev.filter(i => i.stock_id !== stock.id));
+        } else {
+            setQuoteSpecificItems(prev => {
+                const existing = prev.find(i => i.stock_id === stock.id);
+                if (existing) return prev.map(i => i.stock_id === stock.id ? { ...i, quantity: qty } : i);
+                return [...prev, { stock_id: stock.id, quantity: qty, stockDetails: stock }];
             });
         }
-    } else {
-        const valid = quoteCustomItems.filter(r => r.item_name.trim());
+    };
+
+    const addCustomRow = () => {
+        setQuoteCustomItems(prev => [...prev, { item_name: "", price: 0, gst_rate: "", showQty: false, quantity: 1, showUnit: false, unit: "" }]);
+    };
+
+    const updateCustomRow = (idx, field, value) => {
+        setQuoteCustomItems(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
+    };
+
+    const removeCustomRow = (idx) => {
+        setQuoteCustomItems(prev => prev.filter((_, i) => i !== idx));
+    };
+
+    const handleGenerateQuote = async () => {
+        if (!quoteClient.name.trim()) return alert("Please enter the client name.");
+        if (!quoteCompanyId) return alert("Please select a billing company.");
+
+        let quoteItems = [];
+
+        if (quoteMode === "specific") {
+            if (quoteSpecificItems.length === 0) return alert("Please add at least one item.");
+            for (const pItem of quoteSpecificItems) {
+                const stock = stocks.find(s => s.id === pItem.stock_id);
+                if (!stock) continue;
+                const qty = Number(pItem.quantity);
+                const price = Number(stock.price);
+                const gstRate = Number(stock.gst_rate) || 0;
+                const lineSubtotal = qty * price;
+                const lineGst = lineSubtotal * (gstRate / 100);
+                const lineTotal = lineSubtotal + lineGst;
+                quoteItems.push({
+                    item_name: stock.item_name, quantity: qty, unit: stock.unit,
+                    price, total: lineTotal, gst_rate: gstRate,
+                    stocks: stock, hsn_code: stock.hsn_code
+                });
+            }
+        } else {
+            const valid = quoteCustomItems.filter(r => r.item_name.trim());
+            if (valid.length === 0) return alert("Please add at least one item.");
+            for (const row of valid) {
+                const qty = row.showQty ? (Number(row.quantity) || 1) : 1;
+                const price = Number(row.price) || 0;
+                const gstRate = Number(row.gst_rate) || 0;
+                const lineSubtotal = qty * price;
+                const lineGst = lineSubtotal * (gstRate / 100);
+                const lineTotal = lineSubtotal + lineGst;
+                const unitVal = row.showUnit && row.unit?.trim() ? row.unit.trim() : "Pcs";
+                quoteItems.push({
+                    item_name: row.item_name, quantity: qty, unit: unitVal,
+                    price, total: lineTotal, gst_rate: gstRate,
+                    stocks: null, hsn_code: null
+                });
+            }
+        }
+
+        const subtotal = quoteItems.reduce((s, i) => s + (Number(i.price) * Number(i.quantity)), 0);
+        const tax_amount = quoteItems.reduce((s, i) => s + ((Number(i.price) * Number(i.quantity)) * (Number(i.gst_rate) / 100)), 0);
+        const total_amount = subtotal + tax_amount;
+
+        const company = companies.find(c => c.id === quoteCompanyId);
+
+        const { data: savedQuote, error: quoteError } = await supabase.from('quotations').insert({
+            created_by: user.id,
+            company_id: quoteCompanyId,
+            customer_name: quoteClient.name,
+            customer_phone: quoteClient.phone || null,
+            customer_address: quoteClient.address || null,
+            quote_mode: quoteMode,
+            items: quoteItems.map(i => ({ item_name: i.item_name, quantity: i.quantity, unit: i.unit, price: i.price, gst_rate: i.gst_rate, total: i.total })),
+            subtotal,
+            tax_amount,
+            total_amount,
+            snapshot_company_name: company.company_name,
+        }).select().single();
+
+        if (quoteError) {
+            console.error("Quote save error:", quoteError);
+        }
+
+        const quoteId = savedQuote?.id ? savedQuote.id.substring(0, 8).toUpperCase() : "QT-" + Date.now().toString(36).toUpperCase();
+
+        const fakeOrder = {
+            id: quoteId,
+            created_at: new Date().toISOString(),
+            customer_name: quoteClient.name,
+            customer_phone: quoteClient.phone,
+            customer_address: quoteClient.address,
+            franchise_id: "",
+            subtotal, tax_amount, total_amount,
+            round_off: 0,
+        };
+
+        setPrintDocTitle("QUOTATION");
+        setPrintOrder(fakeOrder);
+        setPrintCompanyDetails(company);
+        setPrintItems(quoteItems);
+        setShowQuoteModal(false);
+
+        setTimeout(() => { window.print(); }, 1500); // Wait longer for the logo to load
+    };
+
+    // --- TOKEN BILL LOGIC ---
+    const openTokenModal = () => {
+        setTokenClient({ name: "", phone: "", address: "" });
+        setTokenCompanyId(companies.length === 1 ? companies[0].id : "");
+        setTokenItems([]);
+        setShowTokenModal(true);
+    };
+
+    const addTokenRow = () => {
+        setTokenItems(prev => [...prev, { item_name: "", price: 0, gst_rate: "", quantity: 1 }]);
+    };
+
+    const updateTokenRow = (idx, field, value) => {
+        setTokenItems(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
+    };
+
+    const removeTokenRow = (idx) => {
+        setTokenItems(prev => prev.filter((_, i) => i !== idx));
+    };
+
+    const handleGenerateTokenBill = async () => {
+        if (!tokenClient.name.trim()) return alert("Please enter the client name.");
+        if (!tokenCompanyId) return alert("Please select a billing company.");
+
+        const valid = tokenItems.filter(r => r.item_name.trim());
         if (valid.length === 0) return alert("Please add at least one item.");
-        for (const row of valid) {
-            const qty = row.showQty ? (Number(row.quantity) || 1) : 1;
+
+        setIsGenerating(true);
+
+        const finalItems = valid.map(row => {
+            const qty = Number(row.quantity) || 1;
             const price = Number(row.price) || 0;
             const gstRate = Number(row.gst_rate) || 0;
             const lineSubtotal = qty * price;
             const lineGst = lineSubtotal * (gstRate / 100);
             const lineTotal = lineSubtotal + lineGst;
-            const unitVal = row.showUnit && row.unit?.trim() ? row.unit.trim() : "Pcs";
-            quoteItems.push({
-                item_name: row.item_name, quantity: qty, unit: unitVal,
-                price, total: lineTotal, gst_rate: gstRate,
-                stocks: null, hsn_code: null
-            });
+            return {
+                item_name: row.item_name, quantity: qty, unit: "Pcs",
+                price, total: lineTotal, gst_rate: gstRate
+            };
+        });
+
+        const subtotal = finalItems.reduce((s, i) => s + (Number(i.price) * Number(i.quantity)), 0);
+        const tax_amount = finalItems.reduce((s, i) => s + ((Number(i.price) * Number(i.quantity)) * (Number(i.gst_rate) / 100)), 0);
+        const total_amount = subtotal + tax_amount;
+
+        const company = companies.find(c => c.id === tokenCompanyId);
+
+        const { data: savedToken, error: tokenError } = await supabase.from('token_bills').insert({
+            created_by: user.id,
+            company_id: tokenCompanyId,
+            customer_name: tokenClient.name,
+            customer_phone: tokenClient.phone || null,
+            customer_address: tokenClient.address || null,
+            items: finalItems,
+            subtotal,
+            tax_amount,
+            total_amount,
+            snapshot_company_name: company.company_name,
+        }).select().single();
+
+        setIsGenerating(false);
+
+        if (tokenError) {
+            console.error("Registration Bill save error:", tokenError);
+            return alert("Database Error: " + tokenError.message);
         }
-    }
 
-    const subtotal = quoteItems.reduce((s, i) => s + (Number(i.price) * Number(i.quantity)), 0);
-    const tax_amount = quoteItems.reduce((s, i) => s + ((Number(i.price) * Number(i.quantity)) * (Number(i.gst_rate) / 100)), 0);
-    const total_amount = subtotal + tax_amount;
+        const tokenId = savedToken?.id ? savedToken.id.substring(0, 8).toUpperCase() : "TK-" + Date.now().toString(36).toUpperCase();
 
-    const company = companies.find(c => c.id === quoteCompanyId);
-
-    const { data: savedQuote, error: quoteError } = await supabase.from('quotations').insert({
-        created_by: user.id,
-        company_id: quoteCompanyId,
-        customer_name: quoteClient.name,
-        customer_phone: quoteClient.phone || null,
-        customer_address: quoteClient.address || null,
-        quote_mode: quoteMode,
-        items: quoteItems.map(i => ({ item_name: i.item_name, quantity: i.quantity, unit: i.unit, price: i.price, gst_rate: i.gst_rate, total: i.total })),
-        subtotal,
-        tax_amount,
-        total_amount,
-        snapshot_company_name: company.company_name,
-    }).select().single();
-
-    if (quoteError) {
-        console.error("Quote save error:", quoteError);
-    }
-
-    const quoteId = savedQuote?.id ? savedQuote.id.substring(0, 8).toUpperCase() : "QT-" + Date.now().toString(36).toUpperCase();
-
-    const fakeOrder = {
-        id: quoteId,
-        created_at: new Date().toISOString(),
-        customer_name: quoteClient.name,
-        customer_phone: quoteClient.phone,
-        customer_address: quoteClient.address,
-        franchise_id: "",
-        subtotal, tax_amount, total_amount,
-        round_off: 0,
-    };
-
-    setPrintDocTitle("QUOTATION");
-    setPrintOrder(fakeOrder);
-    setPrintCompanyDetails(company);
-    setPrintItems(quoteItems);
-    setShowQuoteModal(false);
-
-    setTimeout(() => { window.print(); }, 1500); // Wait longer for the logo to load
-};
-
-// --- TOKEN BILL LOGIC ---
-const openTokenModal = () => {
-    setTokenClient({ name: "", phone: "", address: "" });
-    setTokenCompanyId(companies.length === 1 ? companies[0].id : "");
-    setTokenItems([]);
-    setShowTokenModal(true);
-};
-
-const addTokenRow = () => {
-    setTokenItems(prev => [...prev, { item_name: "", price: 0, gst_rate: "", quantity: 1 }]);
-};
-
-const updateTokenRow = (idx, field, value) => {
-    setTokenItems(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
-};
-
-const removeTokenRow = (idx) => {
-    setTokenItems(prev => prev.filter((_, i) => i !== idx));
-};
-
-const handleGenerateTokenBill = async () => {
-    if (!tokenClient.name.trim()) return alert("Please enter the client name.");
-    if (!tokenCompanyId) return alert("Please select a billing company.");
-    
-    const valid = tokenItems.filter(r => r.item_name.trim());
-    if (valid.length === 0) return alert("Please add at least one item.");
-
-    setIsGenerating(true);
-
-    const finalItems = valid.map(row => {
-        const qty = Number(row.quantity) || 1;
-        const price = Number(row.price) || 0;
-        const gstRate = Number(row.gst_rate) || 0;
-        const lineSubtotal = qty * price;
-        const lineGst = lineSubtotal * (gstRate / 100);
-        const lineTotal = lineSubtotal + lineGst;
-        return {
-            item_name: row.item_name, quantity: qty, unit: "Pcs",
-            price, total: lineTotal, gst_rate: gstRate
+        const fakeOrder = {
+            id: tokenId,
+            created_at: new Date().toISOString(),
+            customer_name: tokenClient.name,
+            customer_phone: tokenClient.phone,
+            customer_address: tokenClient.address,
+            franchise_id: "",
+            subtotal, tax_amount, total_amount,
+            round_off: 0,
         };
-    });
 
-    const subtotal = finalItems.reduce((s, i) => s + (Number(i.price) * Number(i.quantity)), 0);
-    const tax_amount = finalItems.reduce((s, i) => s + ((Number(i.price) * Number(i.quantity)) * (Number(i.gst_rate) / 100)), 0);
-    const total_amount = subtotal + tax_amount;
+        setPrintDocTitle("REGISTRATION RECEIPT");
+        setPrintOrder(fakeOrder);
+        setPrintCompanyDetails(company);
+        setPrintItems(finalItems);
 
-    const company = companies.find(c => c.id === tokenCompanyId);
+        // Auto refresh bills
+        setBills(prev => [savedToken, ...prev]);
 
-    const { data: savedToken, error: tokenError } = await supabase.from('token_bills').insert({
-        created_by: user.id,
-        company_id: tokenCompanyId,
-        customer_name: tokenClient.name,
-        customer_phone: tokenClient.phone || null,
-        customer_address: tokenClient.address || null,
-        items: finalItems,
-        subtotal,
-        tax_amount,
-        total_amount,
-        snapshot_company_name: company.company_name,
-    }).select().single();
+        setShowTokenModal(false);
 
-    setIsGenerating(false);
-
-    if (tokenError) {
-        console.error("Registration Bill save error:", tokenError);
-        return alert("Database Error: " + tokenError.message);
-    }
-
-    const tokenId = savedToken?.id ? savedToken.id.substring(0, 8).toUpperCase() : "TK-" + Date.now().toString(36).toUpperCase();
-
-    const fakeOrder = {
-        id: tokenId,
-        created_at: new Date().toISOString(),
-        customer_name: tokenClient.name,
-        customer_phone: tokenClient.phone,
-        customer_address: tokenClient.address,
-        franchise_id: "",
-        subtotal, tax_amount, total_amount,
-        round_off: 0,
+        setTimeout(() => { window.print(); }, 1500); // Wait longer for the logo to load
     };
 
-    setPrintDocTitle("REGISTRATION RECEIPT");
-    setPrintOrder(fakeOrder);
-    setPrintCompanyDetails(company);
-    setPrintItems(finalItems);
-    
-    // Auto refresh bills
-    setBills(prev => [savedToken, ...prev]);
+    const quoteFilteredStocks = useMemo(() => {
+        return stocks.filter(stock => {
+            const cat = stock.category || "Uncategorized";
+            const matchesSearch = !quoteStockSearch || stock.item_name.toLowerCase().includes(quoteStockSearch.toLowerCase()) || stock.item_code?.toLowerCase().includes(quoteStockSearch.toLowerCase());
+            const matchesCategory = quoteCategory === "All" || cat === quoteCategory;
+            return matchesSearch && matchesCategory;
+        });
+    }, [stocks, quoteStockSearch, quoteCategory]);
 
-    setShowTokenModal(false);
-
-    setTimeout(() => { window.print(); }, 1500); // Wait longer for the logo to load
-};
-
-const quoteFilteredStocks = useMemo(() => {
-    return stocks.filter(stock => {
-        const cat = stock.category || "Uncategorized";
-        const matchesSearch = !quoteStockSearch || stock.item_name.toLowerCase().includes(quoteStockSearch.toLowerCase()) || stock.item_code?.toLowerCase().includes(quoteStockSearch.toLowerCase());
-        const matchesCategory = quoteCategory === "All" || cat === quoteCategory;
-        return matchesSearch && matchesCategory;
-    });
-}, [stocks, quoteStockSearch, quoteCategory]);
-
-const modalCategories = useMemo(() => {
-    const cats = Array.from(new Set(stocks.map(s => s.category || "Uncategorized"))).sort();
-    return ["All", ...cats];
-}, [stocks]);
+    const modalCategories = useMemo(() => {
+        const cats = Array.from(new Set(stocks.map(s => s.category || "Uncategorized"))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+        return ["All", ...cats];
+    }, [stocks]);
 
 
     const getDateRange = () => {
@@ -797,7 +797,7 @@ const modalCategories = useMemo(() => {
                 }
                 .print-content { display: none; }
             `}</style>
-            
+
             <div className="print-content bg-white">
                 {printOrder && (() => {
                     const pages = [];
@@ -831,7 +831,7 @@ const modalCategories = useMemo(() => {
                             </div>
                         </div>
                     </div>
-                    
+
                     {/* HUB CARDS */}
                     <div className="bg-slate-50 px-3 sm:px-4 md:px-6 py-4 sm:py-6 border-b border-slate-200">
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 max-w-7xl mx-auto">
@@ -911,7 +911,7 @@ const modalCategories = useMemo(() => {
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div className="flex flex-wrap gap-2 items-center">
                             <div className="flex bg-slate-200 p-[2px] rounded-lg">
                                 {["all", "date", "range"].map(dt => (
@@ -969,7 +969,7 @@ const modalCategories = useMemo(() => {
                                 <span className="text-right">Date</span>
                                 <span className="text-center">Action</span>
                             </div>
-                            
+
                             {filteredData.map((record, recordIndex) => {
                                 const isSelected = selectedItemObj?.id === record.id;
                                 const companyName = record.snapshot_company_name || companiesCache[record.company_id]?.company_name || "Unknown Company";
@@ -1208,11 +1208,11 @@ const modalCategories = useMemo(() => {
                                                     <div key={idx} className="grid grid-cols-[28px_1fr_90px_80px_80px_60px_80px_32px] gap-1.5 px-3 py-2 border-b border-slate-100 items-center overflow-hidden">
                                                         <span className="text-center text-[10px] font-bold text-slate-400">{idx + 1}</span>
                                                         <input value={row.item_name} onChange={e => updateCustomRow(idx, "item_name", e.target.value)} placeholder="Item description" className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold outline-none focus:border-[rgb(0,100,55)] transition min-w-0" />
-                                                        
+
                                                         {/* Qty toggle */}
                                                         <div className="flex items-center gap-1 justify-center">
-                                                            <button 
-                                                                onClick={() => { updateCustomRow(idx, "showQty", !row.showQty); if(row.showQty) updateCustomRow(idx, "quantity", 1); }}
+                                                            <button
+                                                                onClick={() => { updateCustomRow(idx, "showQty", !row.showQty); if (row.showQty) updateCustomRow(idx, "quantity", 1); }}
                                                                 className={`px-1.5 py-1 rounded text-[8px] font-black uppercase tracking-wider transition-all ${row.showQty ? 'bg-[rgb(0,100,55)] text-white' : 'bg-slate-200 text-slate-500 hover:bg-slate-300'}`}
                                                             >
                                                                 {row.showQty ? 'ON' : 'OFF'}
@@ -1224,7 +1224,7 @@ const modalCategories = useMemo(() => {
 
                                                         {/* Unit toggle */}
                                                         <div className="flex items-center gap-1 justify-center">
-                                                            <button 
+                                                            <button
                                                                 onClick={() => updateCustomRow(idx, "showUnit", !row.showUnit)}
                                                                 className={`px-1.5 py-1 rounded text-[8px] font-black uppercase tracking-wider transition-all ${row.showUnit ? 'bg-[rgb(0,100,55)] text-white' : 'bg-slate-200 text-slate-500 hover:bg-slate-300'}`}
                                                             >
@@ -1346,3 +1346,4 @@ const modalCategories = useMemo(() => {
         </div>
     );
 }
+

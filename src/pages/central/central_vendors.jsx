@@ -7,37 +7,45 @@ import { supabase } from "../../frontend_supabase/supabaseClient";
 import { useAuth } from "../../context/AuthContext"; // IMPORTED AUTH CONTEXT
 import { BRAND_GREEN } from "../../utils/theme";
 
+
 // --- THEME ---
 const BRAND_COLOR = BRAND_GREEN;
+
 
 // --- UTILITY STYLES (Injected for Scrollbar Hiding) ---
 const CustomStyles = () => (
   <style>{`
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  `}</style>
+   .no-scrollbar::-webkit-scrollbar { display: none; }
+   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+ `}</style>
 );
+
 
 const CentralVendors = () => {
   const navigate = useNavigate();
   const { profile: authProfile } = useAuth(); // EXTRACTED PROFILE
 
+
   // --- DROPDOWN & AUTH STATE ---
   const [companyList, setCompanyList] = useState([]);
   const [selectedCompany, setSelectedCompany] = useState(() => sessionStorage.getItem("vendor_central_selectedCompany") || "");
+
 
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+
 
   // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState(null);
+
 
   // Form Data
   const [formData, setFormData] = useState({
@@ -48,16 +56,19 @@ const CentralVendors = () => {
     gst: ""
   });
 
+
   // --- LIFECYCLE ---
   useEffect(() => {
     fetchUserData();
     fetchCompanyList();
   }, []);
 
+
   // Save dropdown state to session storage
   useEffect(() => {
     sessionStorage.setItem("vendor_central_selectedCompany", selectedCompany);
   }, [selectedCompany]);
+
 
   // Auto-Fetch vendors when Company changes
   useEffect(() => {
@@ -67,6 +78,8 @@ const CentralVendors = () => {
       setVendors([]);
     }
   }, [selectedCompany]);
+
+
 
 
   // --- DATA FETCHING ---
@@ -83,6 +96,7 @@ const CentralVendors = () => {
     }
   };
 
+
   const fetchCompanyList = async () => {
     try {
       const { data, error } = await supabase.from('companies').select('company_name');
@@ -95,6 +109,7 @@ const CentralVendors = () => {
     }
   };
 
+
   const fetchVendors = async (companyName) => {
     setLoading(true);
     setError(null);
@@ -106,6 +121,7 @@ const CentralVendors = () => {
         .eq('company_name', companyName)
         .order('created_at', { ascending: false });
 
+
       if (error) throw error;
       setVendors(data || []);
     } catch (err) {
@@ -116,6 +132,7 @@ const CentralVendors = () => {
     }
   };
 
+
   // --- HANDLERS ---
   const handleOpenAdd = () => {
     if (!selectedCompany) return alert("Please select a Company first.");
@@ -123,6 +140,7 @@ const CentralVendors = () => {
     setFormData({ name: "", category: "", phone: "", address: "", gst: "" });
     setIsModalOpen(true);
   };
+
 
   const handleOpenEdit = (vendor) => {
     setEditingId(vendor.id);
@@ -136,17 +154,22 @@ const CentralVendors = () => {
     setIsModalOpen(true);
   };
 
+
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this vendor? This cannot be undone.")) return;
+
 
     try {
       const response = await supabase.from('vendors').delete().eq('id', id).select();
 
+
       if (response.error) throw response.error;
+
 
       if (!response.data || response.data.length === 0) {
         throw new Error("RLS Silent Failure: The database refused to delete the row.");
       }
+
 
       setVendors(prev => prev.filter(v => v.id !== id));
     } catch (err) {
@@ -155,6 +178,7 @@ const CentralVendors = () => {
     }
   };
 
+
   const handlePhoneChange = (e) => {
     const val = e.target.value.replace(/\D/g, '');
     if (val.length <= 10) {
@@ -162,16 +186,20 @@ const CentralVendors = () => {
     }
   };
 
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedCompany) return alert("System Error: Company missing.");
+
 
     if (formData.phone.length !== 10) {
       alert("Please enter a valid 10-digit mobile number.");
       return;
     }
 
+
     setSubmitting(true);
+
 
     try {
       const payload = {
@@ -183,9 +211,11 @@ const CentralVendors = () => {
         company_name: selectedCompany
       };
 
+
       if (!payload.name || !payload.phone) {
         throw new Error("Name and Phone are required.");
       }
+
 
       if (editingId) {
         const { error } = await supabase.from('vendors').update(payload).eq('id', editingId);
@@ -194,6 +224,7 @@ const CentralVendors = () => {
         const { error } = await supabase.from('vendors').insert([payload]);
         if (error) throw error;
       }
+
 
       setIsModalOpen(false);
       fetchVendors(selectedCompany);
@@ -205,6 +236,7 @@ const CentralVendors = () => {
     }
   };
 
+
   const openWhatsApp = (phone) => {
     if (!phone) return alert("No phone number available");
     let cleanNumber = phone.replace(/[^0-9]/g, '');
@@ -212,17 +244,20 @@ const CentralVendors = () => {
     window.open(`https://api.whatsapp.com/send?phone=${cleanNumber}`, '_blank', 'noopener,noreferrer');
   };
 
+
   // --- MEMOIZED DATA ---
   const uniqueCategories = useMemo(() => {
     if (!vendors) return ["All"];
     const cats = new Set(vendors.map(v => v.category).filter(c => c && c.trim() !== ""));
-    return ["All", ...Array.from(cats).sort()];
+    return ["All", ...Array.from(cats).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))];
   }, [vendors]);
+
 
   const filteredVendors = useMemo(() => {
     return vendors.filter(v => {
       const vendorCat = v.category || "";
       if (selectedCategory !== "All" && vendorCat !== selectedCategory) return false;
+
 
       const searchLower = searchTerm.toLowerCase();
       const matchText = v.name.toLowerCase().includes(searchLower) ||
@@ -230,13 +265,16 @@ const CentralVendors = () => {
         (v.phone && v.phone.includes(searchTerm));
       if (!matchText) return false;
 
+
       return true;
     });
   }, [vendors, searchTerm, selectedCategory]);
 
+
   return (
     <div className="h-[100dvh] w-full flex flex-col bg-slate-50 font-sans text-black overflow-hidden relative">
       <CustomStyles />
+
 
       {/* --- HEADER --- */}
       <div className="flex-none bg-white shadow-sm z-30 pt-safe-top">
@@ -248,6 +286,7 @@ const CentralVendors = () => {
             <h1 className="text-xs md:text-2xl font-black uppercase text-black text-center flex-1 truncate px-2">
               Company <span style={{ color: BRAND_COLOR }}>Vendors</span>
             </h1>
+
 
             {/* UPDATED: Displays ID of logged in user */}
             <div className="flex items-center flex-shrink-0">
@@ -261,14 +300,17 @@ const CentralVendors = () => {
           </div>
         </div>
 
+
         {/* --- COMPANY DROPDOWN & ACTIONS --- */}
         <div className="w-full px-4 md:px-6 py-4 pb-0">
+
 
           <div className="flex flex-col md:flex-row items-center gap-3 w-full mb-3 bg-white p-3 md:p-4 rounded-xl border border-slate-200 shadow-sm">
             <div className="flex items-center gap-2 text-[#065f46] font-bold text-sm w-full md:w-auto flex-shrink-0">
               <Building2 size={18} />
               <span className="whitespace-nowrap">Select Company:</span>
             </div>
+
 
             <div className="relative flex-1 w-full">
               <select
@@ -283,6 +325,7 @@ const CentralVendors = () => {
             </div>
           </div>
 
+
           <div className="flex flex-col lg:flex-row gap-3 mb-3">
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -295,6 +338,7 @@ const CentralVendors = () => {
               />
             </div>
 
+
             <div className="flex items-center justify-end overflow-x-auto no-scrollbar pb-1 lg:pb-0">
               <button onClick={handleOpenAdd}
                 disabled={!selectedCompany}
@@ -306,13 +350,14 @@ const CentralVendors = () => {
             </div>
           </div>
 
+
           {/* Categories */}
           {selectedCompany && (
             <div className="flex gap-2 overflow-x-auto pb-3 border-t border-slate-100 pt-3 no-scrollbar touch-pan-x">
               {uniqueCategories.map((cat) => (
                 <button key={cat} onClick={() => setSelectedCategory(cat)}
                   className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-bold border transition-all whitespace-nowrap flex items-center gap-1
-                      ${selectedCategory === cat ? "text-white shadow-md" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
+                     ${selectedCategory === cat ? "text-white shadow-md" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
                   style={selectedCategory === cat ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}>
                   {selectedCategory === cat && <Layers size={12} />}
                   {cat}
@@ -322,6 +367,7 @@ const CentralVendors = () => {
           )}
         </div>
       </div>
+
 
       {/* --- CONTENT LIST --- */}
       <div className="flex-grow overflow-hidden relative bg-slate-50">
@@ -387,10 +433,12 @@ const CentralVendors = () => {
         </div>
       </div>
 
+
       {/* --- MODAL --- */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
+
 
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl flex flex-col relative z-10 animate-in zoom-in-95 duration-200">
             <div className="p-5 border-b border-slate-100 flex justify-between items-center">
@@ -403,13 +451,16 @@ const CentralVendors = () => {
               </button>
             </div>
 
+
             <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4 overflow-y-auto max-h-[80vh] no-scrollbar">
+
 
               {/* Context Banner */}
               <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-center gap-2 mb-2">
                 <Building2 size={16} className="text-slate-400" />
                 <span className="text-xs font-bold text-slate-600">Company: <span style={{ color: BRAND_COLOR }}>{selectedCompany}</span></span>
               </div>
+
 
               <div>
                 <input
@@ -456,6 +507,7 @@ const CentralVendors = () => {
                 />
               </div>
 
+
               <button type="submit" disabled={submitting} className="w-full py-4 text-white font-black uppercase rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-95 disabled:bg-slate-300 disabled:scale-100 disabled:shadow-none mt-2 text-sm tracking-wide" style={{ backgroundColor: BRAND_COLOR }}>
                 {submitting ? 'Saving...' : 'Save Vendor'}
               </button>
@@ -467,4 +519,6 @@ const CentralVendors = () => {
   );
 };
 
+
 export default CentralVendors;
+
