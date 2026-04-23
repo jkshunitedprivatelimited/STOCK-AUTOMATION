@@ -160,58 +160,34 @@ function CentralProfiles() {
     if (!profileToDelete) return;
     setDeleting(true);
 
-    // Delete associated data for this franchise_id to avoid foreign key constraints
-    if (profileToDelete.franchise_id) {
-      const fid = profileToDelete.franchise_id;
+    try {
+      const payload = { 
+        user_id: profileToDelete.id, 
+        franchise_id: profileToDelete.franchise_id || null 
+      };
 
-      try {
-        // 1. Delete bills and bills_items_generated
-        const { data: menuData } = await supabase.from("menus").select("id").eq("franchise_id", fid);
-        const menuIds = menuData?.map(m => m.id) || [];
-        if (menuIds.length > 0) {
-          const chunkSize = 100;
-          for (let i = 0; i < menuIds.length; i += chunkSize) {
-            await supabase.from("bills_items_generated").delete().in("item_id", menuIds.slice(i, i + chunkSize));
-          }
-        }
-        await supabase.from("bills_generated").delete().eq("franchise_id", fid);
+      const { data, error } = await supabase.functions.invoke('admin-delete-user', {
+        body: payload
+      });
 
-        // 2. Delete invoices and invoice_items
-        const { data: invoices } = await supabase.from("invoices").select("id").eq("franchise_id", fid);
-        const invoiceIds = invoices?.map(i => i.id) || [];
-        if (invoiceIds.length > 0) {
-          const chunkSize = 100;
-          for (let i = 0; i < invoiceIds.length; i += chunkSize) {
-            await supabase.from("invoice_items").delete().in("invoice_id", invoiceIds.slice(i, i + chunkSize));
-          }
-        }
-        await supabase.from("invoices").delete().eq("franchise_id", fid);
-
-        // 3. Delete stocks and stock_requests
-        await supabase.from("stocks").delete().eq("franchise_id", fid);
-        await supabase.from("stock_requests").delete().eq("franchise_id", fid);
-
-        // 4. Finally, delete the menus
-        const { error: menuError } = await supabase.from("menus").delete().eq("franchise_id", fid);
-        if (menuError) {
-          alert("Error deleting associated menus: " + menuError.message);
-          setDeleting(false);
-          return;
-        }
-      } catch (err) {
-        console.error("Error cleaning up franchise data:", err);
+      if (error) {
+        throw new Error(error.message || "Failed to invoke edge function");
       }
-    }
 
-    const { error } = await supabase.from("profiles").delete().eq("id", profileToDelete.id);
-    if (error) {
-      alert("Error deleting user: " + error.message);
-    } else {
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
       setProfiles(prev => prev.filter(p => p.id !== profileToDelete.id));
       setShowDeleteModal(false);
       setProfileToDelete(null);
+
+    } catch (err) {
+      console.error("Error deleting user:", err);
+      alert("Could not delete user: " + (err.message || String(err)));
+    } finally {
+      setDeleting(false);
     }
-    setDeleting(false);
   };
 
   const openEditModal = (profile) => {

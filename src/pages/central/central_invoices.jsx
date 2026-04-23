@@ -5,7 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import {
     ArrowLeft, Search, X, RotateCcw,
     FileText, IndianRupee, Printer, Hash, ShoppingBag, Shield, Activity, Calendar, Inbox,
-    ArrowUp, ArrowDown, ArrowUpDown, Building2, ChevronDown
+    ArrowUp, ArrowDown, ArrowUpDown, Building2, ChevronDown, Trash2
 } from "lucide-react";
 
 const PRIMARY = "rgb(0, 100, 55)";
@@ -239,6 +239,8 @@ function CentralInvoices() {
     const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [items, setItems] = useState([]);
     const [itemsLoading, setItemsLoading] = useState(false);
+    
+    const [invoiceToDelete, setInvoiceToDelete] = useState(null);
 
     const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'descending' });
 
@@ -368,6 +370,51 @@ function CentralInvoices() {
             setItems(data || []);
         } catch (err) { console.error(err); }
         finally { setItemsLoading(false); }
+    };
+
+    const triggerDelete = (invoiceId, e) => {
+        e.stopPropagation();
+        console.log("[DEBUG] Delete button clicked for invoice, opening modal:", invoiceId);
+        setInvoiceToDelete(invoiceId);
+    };
+
+    const confirmDelete = async () => {
+        const invoiceId = invoiceToDelete;
+        if (!invoiceId) return;
+
+        try {
+            console.log("[DEBUG] Attempting to delete invoice_items for invoice:", invoiceId);
+            const { data: itemsData, error: itemsError } = await supabase.from("invoice_items").delete().eq("invoice_id", invoiceId).select();
+            if (itemsError) {
+                console.warn("[DEBUG] Error deleting items:", itemsError);
+            } else {
+                console.log("[DEBUG] Deleted items successfully. Items removed:", itemsData?.length || 0);
+            }
+
+            console.log("[DEBUG] Attempting to delete main invoice record:", invoiceId);
+            const { data: invData, error: invError } = await supabase.from("invoices").delete().eq("id", invoiceId).select();
+            
+            if (invError) {
+                console.error("[DEBUG] Error from Supabase on invoice delete:", invError);
+                throw invError;
+            }
+            
+            console.log("[DEBUG] Delete invoice response data:", invData);
+
+            if (!invData || invData.length === 0) {
+                console.warn("[DEBUG] WARNING: Supabase returned no error, but 0 rows were deleted. This usually means Row Level Security (RLS) silently blocked the deletion.");
+                alert("The system blocked the deletion. This is likely an RLS permission issue. Check console logs.");
+            } else {
+                console.log("[DEBUG] Successfully deleted invoice from DB. Removing from UI state...");
+                setInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
+                if (selectedInvoice?.id === invoiceId) setShowModal(false);
+            }
+        } catch (err) {
+            console.error("[DEBUG] Delete invoice exception caught:", err);
+            alert("Could not delete invoice: " + err.message);
+        } finally {
+            setInvoiceToDelete(null);
+        }
     };
 
     const resetFilters = () => {
@@ -501,6 +548,23 @@ function CentralInvoices() {
             </div>
 
             <div className="screen-content">
+                {invoiceToDelete && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setInvoiceToDelete(null)} />
+                        <div className="relative bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm animate-in zoom-in-95 duration-200 text-center">
+                            <div className="mx-auto w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+                                <Trash2 size={24} />
+                            </div>
+                            <h3 className="text-xl font-black text-slate-800 mb-2">Delete Invoice?</h3>
+                            <p className="text-xs font-bold text-slate-500 mb-6">Are you sure you want to permanently delete this invoice? This action cannot be undone.</p>
+                            <div className="flex gap-3">
+                                <button onClick={() => setInvoiceToDelete(null)} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black uppercase text-xs tracking-widest transition-colors">Cancel</button>
+                                <button onClick={confirmDelete} className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black uppercase text-xs tracking-widest transition-colors shadow-lg shadow-red-600/20">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {showModal && selectedInvoice && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setShowModal(false)} />
@@ -687,13 +751,14 @@ function CentralInvoices() {
                                         <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('status')}>Status <SortIcon columnKey="status" /></th>
                                         <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('created_at')}>Date & Time <SortIcon columnKey="created_at" /></th>
                                         <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 text-right cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('total_amount')}>Amount <SortIcon columnKey="total_amount" /></th>
+                                        <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 text-center sticky top-0 bg-slate-50 z-20 shadow-sm">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {loading && invoices.length === 0 ? (
-                                        <tr><td colSpan="7" className="p-10 text-center font-bold text-slate-400">Loading Ledger...</td></tr>
+                                        <tr><td colSpan="8" className="p-10 text-center font-bold text-slate-400">Loading Ledger...</td></tr>
                                     ) : filteredInvoices.length === 0 ? (
-                                        <tr><td colSpan="7" className="p-10 text-center font-bold text-slate-400">No Invoices Found</td></tr>
+                                        <tr><td colSpan="8" className="p-10 text-center font-bold text-slate-400">No Invoices Found</td></tr>
                                     ) : filteredInvoices.map((inv, index) => (
                                         <tr key={inv.id} onClick={() => openInvoiceModal(inv)} className="hover:bg-slate-50 cursor-pointer transition-colors group">
                                             <td className="p-6 text-[10px] font-bold text-slate-400">{index + 1}.</td>
@@ -703,6 +768,11 @@ function CentralInvoices() {
                                             <td className="p-6"><span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase border ${getStatusStyle(inv.status)}`}>{inv.status || 'Incoming'}</span></td>
                                             <td className="p-6 text-xs font-bold text-slate-500 uppercase">{formatDateTime(inv.created_at)}</td>
                                             <td className="p-6 text-right text-sm font-black" style={{ color: PRIMARY }}>₹{Number(inv.total_amount).toLocaleString('en-IN')}</td>
+                                            <td className="p-6 text-center">
+                                                <button onClick={(e) => triggerDelete(inv.id, e)} className="p-2 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 rounded-xl transition-colors inline-flex items-center justify-center active:scale-95">
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -732,7 +802,12 @@ function CentralInvoices() {
                                 </div>
                                 <div className="pt-4 border-t-2 border-slate-50 flex justify-between items-center">
                                     <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase"><Calendar size={12} /> {formatDateTime(inv.created_at)}</div>
-                                    <span className="text-[10px] font-black uppercase text-slate-300 tracking-widest">View Details &rarr;</span>
+                                    <div className="flex items-center gap-3">
+                                        <button onClick={(e) => triggerDelete(inv.id, e)} className="p-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg active:scale-95 transition-all flex items-center justify-center">
+                                            <Trash2 size={14} />
+                                        </button>
+                                        <span className="text-[10px] font-black uppercase text-slate-300 tracking-widest">View Details &rarr;</span>
+                                    </div>
                                 </div>
                             </div>
                         ))}
