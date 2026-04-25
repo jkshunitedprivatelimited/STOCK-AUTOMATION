@@ -512,6 +512,49 @@ function Reports() {
         }
     }, [selectedBill]);
 
+    // --- DELETE ENTIRE SUPPLY INVOICE ---
+    const handleDeleteInvoice = useCallback(async (invoice) => {
+        setDeleting(true);
+        try {
+            // Step 1: Delete invoice items
+            const { error: itemsError } = await supabase
+                .from('invoice_items')
+                .delete()
+                .eq('invoice_id', invoice.id);
+            if (itemsError) console.warn("Error deleting invoice items:", itemsError);
+
+            // Step 2: Delete the invoice itself
+            const { data: invData, error: invError } = await supabase
+                .from('invoices')
+                .delete()
+                .eq('id', invoice.id)
+                .select();
+
+            if (invError) throw invError;
+
+            if (!invData || invData.length === 0) {
+                alert("Could not delete invoice. This is likely an RLS permission issue.");
+                setDeleting(false);
+                return;
+            }
+
+            setRawData(prev => ({
+                ...prev,
+                invoices: prev.invoices.filter(i => i.id !== invoice.id),
+                invoiceItems: prev.invoiceItems.filter(ii => ii.invoice_id !== invoice.id)
+            }));
+            if (selectedBill?.id === invoice.id) setSelectedBill(null);
+            setBillToDelete(null);
+            clearReportsCaches();
+            alert("Invoice deleted successfully!");
+        } catch (err) {
+            console.error("Delete invoice error:", err);
+            alert("Failed to delete invoice: " + (err.message || 'Unknown error'));
+        } finally {
+            setDeleting(false);
+        }
+    }, [selectedBill]);
+
     // --- DELETE SINGLE ITEM (no discount or zero discount) ---
     const handleDeleteItemDirect = useCallback(async (bill, item, allItems) => {
         if (allItems.length <= 1) {
@@ -1091,15 +1134,13 @@ function Reports() {
                                                 >
                                                     <Eye size={14} />
                                                 </button>
-                                                {activeTab === "store" && (
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); setBillToDelete(item); }}
-                                                        className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
-                                                        title="Delete Bill"
-                                                    >
-                                                        <Trash2 size={14} />
-                                                    </button>
-                                                )}
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setBillToDelete(item); }}
+                                                    className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+                                                    title={activeTab === "store" ? "Delete Bill" : "Delete Invoice"}
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -1134,15 +1175,13 @@ function Reports() {
                                 <div className="flex justify-between items-center text-[10px] font-bold text-black/40 uppercase border-t border-black/5 pt-3">
                                     <span>{new Date(item.created_at).toLocaleDateString()}</span>
                                     <div className="flex items-center gap-3">
-                                        {activeTab === "store" && (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); setBillToDelete(item); }}
-                                                className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
-                                                title="Delete Bill"
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
-                                        )}
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setBillToDelete(item); }}
+                                            className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+                                            title={activeTab === "store" ? "Delete Bill" : "Delete Invoice"}
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
                                         <span>Tap for details &rarr;</span>
                                     </div>
                                 </div>
@@ -1270,14 +1309,12 @@ function Reports() {
                                 <span className="text-xs font-black uppercase tracking-widest text-white/60">Grand Total</span>
                                 <span className="text-xl font-black">₹{Number(selectedBill.total || selectedBill.total_amount || 0).toFixed(2)}</span>
                             </div>
-                            {activeTab === "store" && (
-                                <button
-                                    onClick={() => setBillToDelete(selectedBill)}
-                                    className="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-red-50 text-red-500 hover:bg-red-100 border border-red-100 text-xs font-black uppercase tracking-widest transition-colors"
-                                >
-                                    <Trash2 size={14} /> Delete This Bill
-                                </button>
-                            )}
+                            <button
+                                onClick={() => setBillToDelete(selectedBill)}
+                                className="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-red-50 text-red-500 hover:bg-red-100 border border-red-100 text-xs font-black uppercase tracking-widest transition-colors"
+                            >
+                                <Trash2 size={14} /> {activeTab === "store" ? "Delete This Bill" : "Delete This Invoice"}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1343,11 +1380,11 @@ function Reports() {
             {billToDelete && (
                 <div className="confirm-modal-overlay" onClick={() => !deleting && setBillToDelete(null)}>
                     <div className="confirm-modal-box" onClick={(e) => e.stopPropagation()}>
-                        <h3>Delete Bill?</h3>
-                        <p>This will permanently delete bill <strong>#{billToDelete.id.toString().slice(-8)}</strong> and all its items. This action cannot be undone.</p>
+                        <h3>Delete {activeTab === "store" ? "Bill" : "Invoice"}?</h3>
+                        <p>This will permanently delete {activeTab === "store" ? "bill" : "invoice"} <strong>#{billToDelete.id.toString().slice(-8)}</strong> and all its items. This action cannot be undone.</p>
                         <div className="confirm-modal-actions">
                             <button className="confirm-cancel-btn" onClick={() => setBillToDelete(null)} disabled={deleting}>Cancel</button>
-                            <button className="confirm-delete-btn" onClick={() => handleDeleteBill(billToDelete)} disabled={deleting}>
+                            <button className="confirm-delete-btn" onClick={() => activeTab === "store" ? handleDeleteBill(billToDelete) : handleDeleteInvoice(billToDelete)} disabled={deleting}>
                                 {deleting ? "Deleting..." : "Yes, Delete"}
                             </button>
                         </div>
