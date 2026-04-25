@@ -246,7 +246,7 @@ const CentralStaffProfiles = () => {
             metadata: {
               name: formData.name,
               role: 'staff',
-              franchise_id: activeFranchiseId,
+              franchise_id: searchFranchiseId,
               staff_id: formData.staff_id,
               phone: formData.phone,
               address: formData.address,

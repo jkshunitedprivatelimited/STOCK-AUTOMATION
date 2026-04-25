@@ -7,6 +7,7 @@ const ROLE_DASHBOARD = {
   franchise: "/dashboard/franchiseowner",
   central: "/dashboard/central",
   staff: "/store", // Staff "dashboard" is the store itself
+  office_staff: "/dashboard/office_staff_attendance_dashboard", // Office Staff routing
 };
 
 function ProtectedRoute({ children, allowedRoles, storeOnly = false }) {

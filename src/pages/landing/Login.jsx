@@ -138,26 +138,38 @@ function Login() {
       let finalProfileData = null;
 
       try {
-        const { data: ownerProfile } = await fetchWithRetry(() =>
-          supabase.from("profiles").select("*").eq("id", authData.user.id).maybeSingle()
+        const { data: officeStaffProfile } = await fetchWithRetry(() =>
+          supabase.from("office_staff_profiles").select("*").eq("id", authData.user.id).maybeSingle()
         );
 
-        if (ownerProfile) {
-          userRole = ownerProfile.role;
-          finalProfileData = ownerProfile;
+        if (officeStaffProfile) {
+          if (loginType === "store") {
+            throw new Error("Office Staff are prohibited from accessing the STORE portal. Please switch to ADMIN.");
+          }
+          userRole = "office_staff";
+          finalProfileData = officeStaffProfile;
         } else {
-          const { data: staffProfile } = await fetchWithRetry(() =>
-            supabase.from("staff_profiles").select("*").eq("id", authData.user.id).maybeSingle()
+          const { data: ownerProfile } = await fetchWithRetry(() =>
+            supabase.from("profiles").select("*").eq("id", authData.user.id).maybeSingle()
           );
 
-          if (staffProfile) {
-            userRole = "staff";
-            const { data: franchiseInfo } = await fetchWithRetry(() =>
-              supabase.from("profiles").select("*").eq("franchise_id", staffProfile.franchise_id).maybeSingle()
-            );
-            finalProfileData = { ...staffProfile, role: "staff", ...franchiseInfo };
+          if (ownerProfile && ownerProfile.role !== null && ownerProfile.role !== '') {
+            userRole = ownerProfile.role;
+            finalProfileData = ownerProfile;
           } else {
-            throw new Error("Profile not found. Please contact your administrator.");
+            const { data: staffProfile } = await fetchWithRetry(() =>
+              supabase.from("staff_profiles").select("*").eq("id", authData.user.id).maybeSingle()
+            );
+
+            if (staffProfile) {
+              userRole = "staff";
+              const { data: franchiseInfo } = await fetchWithRetry(() =>
+                supabase.from("profiles").select("*").eq("franchise_id", staffProfile.franchise_id).maybeSingle()
+              );
+              finalProfileData = { ...staffProfile, role: "staff", ...franchiseInfo };
+            } else {
+              throw new Error("Valid profile not found. Please contact your administrator.");
+            }
           }
         }
       } catch (profileErr) {
@@ -176,7 +188,7 @@ function Login() {
       if (finalLoginMode === "store") {
         navigate("/store");
       } else {
-        const routes = { central: "central", franchise: "franchiseowner", stock: "stockmanager" };
+        const routes = { central: "central", franchise: "franchiseowner", stock: "stockmanager", office_staff: "office_staff_attendance_dashboard" };
         const route = routes[userRole] || "franchiseowner";
         navigate(`/dashboard/${route}`);
       }

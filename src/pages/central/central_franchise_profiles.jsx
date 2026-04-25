@@ -20,6 +20,7 @@ import {
   EyeOff,
   Lock,
   Download,
+  Truck,
 } from "lucide-react";
 import { BRAND_GREEN } from "../../utils/theme";
 
@@ -520,6 +521,14 @@ function CentralProfiles() {
                   </div>
                 </div>
 
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', padding: '10px 14px', background: '#f0fdf4', borderRadius: '12px', border: '1px solid #dcfce7' }}>
+                  <Truck size={16} color={ACTION_GREEN} style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: '11px', fontWeight: '800', color: '#6b7280', textTransform: 'uppercase' }}>Transport Charge:</span>
+                  <span style={{ fontSize: '14px', fontWeight: '900', color: p.transportation_charge ? ACTION_GREEN : '#9ca3af', marginLeft: 'auto' }}>
+                    {p.transportation_charge ? `₹${Number(p.transportation_charge).toLocaleString('en-IN')}` : "Not Set"}
+                  </span>
+                </div>
+
                 <div style={styles.addressBox}>
                   <MapPin style={{ flexShrink: 0 }} size={18} />
                   <span style={styles.addressText}>{p.address || "No Address Provided"}</span>
@@ -572,6 +581,12 @@ function CentralProfiles() {
                       {sortField === 'phone' ? (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />) : <ChevronDown size={14} color="#ccc" />}
                     </div>
                   </th>
+                  <th style={styles.th}>
+                    <div style={styles.sortableDiv} onClick={() => handleSort('transportation_charge')}>
+                      <span>TRANSPORT CHARGE</span>
+                      {sortField === 'transportation_charge' ? (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />) : <ChevronDown size={14} color="#ccc" />}
+                    </div>
+                  </th>
                   <th style={{ ...styles.th, textAlign: 'center' }}>ACTION</th>
                 </tr>
               </thead>
@@ -588,6 +603,11 @@ function CentralProfiles() {
                       </span>
                     </td>
                     <td style={styles.td}>{p.phone || "—"}</td>
+                    <td style={styles.td}>
+                      <span style={{ fontWeight: '700', color: p.transportation_charge ? '#111827' : '#9ca3af' }}>
+                        {p.transportation_charge ? `₹${Number(p.transportation_charge).toLocaleString('en-IN')}` : "—"}
+                      </span>
+                    </td>
                     <td style={{ ...styles.td, textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
                         <button onClick={() => openEditModal(p)} style={styles.actionIconBtn}>
@@ -712,6 +732,20 @@ function CentralProfiles() {
                 <div style={styles.inputGroup}>
                   <label style={styles.label}>Pincode</label>
                   <input style={styles.modalInput} name="pincode" value={editForm.pincode || ""} onChange={handleInputChange} />
+                </div>
+              </div>
+
+              <div style={{ ...styles.formRow, flexDirection: isMobile ? 'column' : 'row' }}>
+                <div style={styles.inputGroup}>
+                  <label style={styles.label}>Transportation Charge (₹)</label>
+                  <input 
+                    style={styles.modalInput} 
+                    type="number"
+                    name="transportation_charge" 
+                    value={editForm.transportation_charge || ""} 
+                    onChange={handleInputChange} 
+                    placeholder="e.g. 500"
+                  />
                 </div>
               </div>
               {/* END OF NEW FIELDS */}

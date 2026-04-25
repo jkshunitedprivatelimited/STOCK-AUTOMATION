@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import {
   FileText, Users, Settings, LayoutDashboard,
   BarChart3, ChevronRight, Package, ShoppingBag,
-  Headphones, Calendar, Truck, UserCheck, Printer, Receipt, Ticket
+  Headphones, Calendar, Truck, UserCheck, Printer, Receipt, Ticket, UserCog
 } from "lucide-react";
 import { BRAND_GREEN } from "../../utils/theme";
 
@@ -69,6 +69,7 @@ function CentralDashboard() {
     { title: "Reports", path: "/central/central_reports", icon: <BarChart3 size={isMobile ? 20 : 24} />, desc: "Performance analytics" },
 
     // — People —
+    { title: "Office Staff", path: "/central/office_staff", icon: <UserCog size={isMobile ? 20 : 24} />, desc: "HQ Internal staff management" },
     { title: "Franchise Profiles", path: "/central/central_franchise_profiles", icon: <Users size={isMobile ? 20 : 24} />, desc: "Franchise network" },
     { title: "Staff Profiles", path: "/central/central_staff_profiles", icon: <UserCheck size={isMobile ? 20 : 24} />, desc: "Employee management" },
     { title: "Register a company", path: "/central/central_register_company", icon: <Printer size={isMobile ? 20 : 24} />, desc: "Add new companies" },
