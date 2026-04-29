@@ -4,9 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../frontend_supabase/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 import { ArrowLeft, Lock, LogOut, Eye, EyeOff } from "lucide-react";
-
-const BRAND_GREEN = "rgb(0, 100, 55)";
-
+import { BRAND_GREEN } from "../../utils/theme";
 function Settings() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();

@@ -4,41 +4,11 @@ import { supabase } from "../../frontend_supabase/supabaseClient";
 import {
     ArrowLeft, Search, Printer, X, TrendingUp, ReceiptText, ChevronRight, Clock, Calendar
 } from "lucide-react";
-import { formatCurrency, amountToWords } from "../../utils/formatters";
+import { formatCurrency, amountToWords, formatDate, formatTime } from "../../utils/formatters";
+import { BRAND_GREEN as brandGreen } from "../../utils/theme";
 import { headerStyles } from "../../utils/headerStyles";
 
 const ITEMS_PER_INVOICE_PAGE = 15;
-
-// --- HELPERS: Date & Time Fixing ---
-
-const parseDate = (dateStr) => {
-    if (!dateStr) return new Date();
-    return dateStr.includes('Z') || dateStr.includes('+')
-        ? new Date(dateStr)
-        : new Date(dateStr.replace(' ', 'T') + "Z");
-};
-
-const formatDate = (dateStr) => {
-    if (!dateStr) return "";
-    return parseDate(dateStr).toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        timeZone: 'Asia/Kolkata'
-    });
-};
-
-const formatTime = (dateStr) => {
-    if (!dateStr) return "";
-    return parseDate(dateStr).toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-        timeZone: 'Asia/Kolkata'
-    });
-};
-
-
 
 
 // --- INVOICE PRINT COMPONENT ---
@@ -221,7 +191,7 @@ const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsCh
 // --- MAIN PAGE ---
 function FranchiseInvoices() {
     const navigate = useNavigate();
-    const brandGreen = "rgb(0, 100, 55)";
+
 
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -261,7 +231,7 @@ function FranchiseInvoices() {
         return invoices.filter(inv => {
             const matchesSearch = inv.customer_name?.toLowerCase().includes(search.toLowerCase()) || inv.id.toLowerCase().includes(search.toLowerCase());
 
-            const invDateIST = parseDate(inv.created_at).toLocaleDateString('en-CA', {
+            const invDateIST = new Date(inv.created_at).toLocaleDateString('en-CA', {
                 timeZone: 'Asia/Kolkata'
             });
 

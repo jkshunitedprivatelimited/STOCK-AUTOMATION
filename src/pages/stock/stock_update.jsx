@@ -9,8 +9,10 @@ import {
     ShoppingCart
 } from "lucide-react";
 
+import { BRAND_GREEN } from "../../utils/theme";
+
 // --- CONSTANTS ---
-const BRAND_COLOR = "rgb(0, 100, 55)";
+const BRAND_COLOR = BRAND_GREEN;
 
 // --- HELPER COMPONENTS ---
 const TaxToggle = ({ value, onSelect, brandColor }) => (
@@ -386,8 +388,9 @@ function StockUpdate() {
     const deleteItem = async (id) => {
         if (!window.confirm("Delete item permanently?")) return;
         try {
-            const { error } = await supabase.from("stocks").delete().eq("id", id);
+            const { data, error } = await supabase.from("stocks").delete().eq("id", id).select();
             if (error) throw error;
+            if (!data || data.length === 0) throw new Error("Delete blocked by RLS.");
             fetchItems();
         } catch (err) {
             alert("Failed to delete item: " + (err.message || "Unknown error"));

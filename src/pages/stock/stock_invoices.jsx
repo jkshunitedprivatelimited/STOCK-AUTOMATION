@@ -5,9 +5,10 @@ import { supabase } from "../../frontend_supabase/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 import { FiArrowLeft, FiPrinter, FiSearch, FiCalendar, FiX, FiFileText, FiRotateCcw } from "react-icons/fi";
 import { formatCurrency, amountToWords } from "../../utils/formatters";
+import { BRAND_GREEN } from "../../utils/theme";
 
 // --- THEME CONSTANTS ---
-const THEME_COLOR = "rgb(0, 100, 55)"; // Deep Green
+const THEME_COLOR = BRAND_GREEN; // Deep Green
 const ITEMS_PER_INVOICE_PAGE = 15;
 
 // --- UTILITY: Safe Session Storage ---
@@ -171,7 +172,7 @@ const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsCh
                         <div className="flex justify-between py-0.5 px-2 border-b border-slate-300 text-black text-[9px] bg-slate-50 pl-4"><span>CGST</span><span>{formatCurrency(cgst)}</span></div>
                         <div className="flex justify-between py-0.5 px-2 border-b border-black text-black text-[9px] bg-slate-50 pl-4"><span>SGST</span><span>{formatCurrency(sgst)}</span></div>
 
-                        {transportationCharge > 0 && <div className="flex justify-between py-1 px-1.5 border-b border-slate-300 text-black"><span>Transportation</span><span>{formatCurrency(transportationCharge)}</span></div>}
+                        <div className="flex justify-between py-1 px-1.5 border-b border-slate-300 text-black"><span>Transportation</span><span>{formatCurrency(transportationCharge)}</span></div>
                         <div className="flex justify-between py-1 px-1.5 border-b border-black text-black"><span>Round Off</span><span>{formatCurrency(roundOff)}</span></div>
                         <div className="flex justify-between py-1.5 px-2 border-b-2 border-black bg-slate-200 text-black"><span className="font-black uppercase text-black">Total</span><span className="font-black text-black">{formatCurrency(roundedBill)}</span></div>
                         <div className="flex-1 flex flex-col justify-end p-2 text-center">
@@ -282,9 +283,18 @@ function InvoicesBilling() {
         });
     }, [invoices, searchQuery, filterType, singleDate, startDate, endDate]);
 
-    const getCompanyDetails = (franchiseId) => {
-        if (!franchiseId || !companies.length) return companies[0] || {};
-        return companies.find(c => c.franchise_id?.toUpperCase() === franchiseId.toUpperCase()) || companies[0] || {};
+    const getCompanyDetails = (invoice) => {
+        if (!invoice || !companies.length) return companies[0] || {};
+        
+        // 1. Priority: Find company specifically linked to this franchise
+        const byFranchise = invoice.franchise_id && companies.find(c => c.franchise_id?.toUpperCase() === invoice.franchise_id.toUpperCase());
+        if (byFranchise) return byFranchise;
+        
+        // 2. Fallback: Use snapshot company name (might incorrectly be the admin's company on old invoices)
+        const byName = invoice.snapshot_company_name && companies.find(c => c.company_name === invoice.snapshot_company_name);
+        if (byName) return byName;
+        
+        return companies[0] || {};
     };
 
     return (
@@ -308,7 +318,7 @@ function InvoicesBilling() {
             {/* --- ACTUAL PRINT CONTAINER --- */}
             <div className="print-only hidden print:block bg-white">
                 {selectedInvoice && (() => {
-                    const companyDetails = getCompanyDetails(selectedInvoice.franchise_id);
+                    const companyDetails = getCompanyDetails(selectedInvoice);
                     const fullItems = selectedInvoice.invoice_items || [];
                     const pages = [];
 
@@ -430,14 +440,24 @@ function InvoicesBilling() {
                     <div className="hidden lg:block bg-white border border-slate-100 rounded-[2.5rem] shadow-xl overflow-hidden">
                         <table className="w-full text-left border-collapse">
                             <thead className="bg-gray-50 border-b border-gray-100 text-xs uppercase font-black tracking-wider text-black">
-                                <tr><th className="px-8 py-6">S.No</th><th className="px-8 py-6">Franchise ID</th><th className="px-8 py-6 w-1/3 text-center">Address</th><th className="px-8 py-6 text-right">Amount</th></tr>
+                                <tr>
+                                    <th className="px-8 py-6">S.No</th>
+                                    <th className="px-8 py-6">Franchise</th>
+                                    <th className="px-8 py-6">Address</th>
+                                    <th className="px-8 py-6 text-right">Amount</th>
+                                </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50 font-bold text-xs">
-                                {loading ? (<tr><td colSpan="4" className="py-32 text-center text-gray-400 uppercase tracking-widest animate-pulse">Fetching Invoices...</td></tr>) : filteredInvoices.map((inv, idx) => (
+                                {loading ? (<tr><td colSpan="5" className="py-32 text-center text-gray-400 uppercase tracking-widest animate-pulse">Fetching Invoices...</td></tr>) : filteredInvoices.map((inv, idx) => (
                                     <tr key={inv.id} onClick={() => startTransition(() => setSelectedInvoice(inv))} className="group cursor-pointer hover:bg-gray-50 transition-colors">
                                         <td className="px-8 py-6 opacity-60">{(idx + 1).toString().padStart(2, '0')}</td>
-                                        <td className="px-8 py-6"><span className="px-3 py-1.5 rounded-lg text-white font-black tracking-wide text-[10px]" style={{ backgroundColor: THEME_COLOR }}>{inv.franchise_id}</span></td>
-                                        <td className="px-8 py-6 text-gray-500 text-center max-w-xs truncate">{inv.customer_address || "N/A"}</td>
+                                        <td className="px-8 py-6">
+                                            <span className="px-3 py-1.5 rounded-lg text-white font-black tracking-wide text-[10px]" style={{ backgroundColor: THEME_COLOR }}>{inv.franchise_id}</span>
+                                        </td>
+                                        <td className="px-8 py-6">
+                                            <div className="text-gray-800 uppercase font-black">{inv.customer_name}</div>
+                                            <div className="text-[10px] text-gray-500 max-w-xs truncate mt-0.5">{inv.customer_address || "N/A"}</div>
+                                        </td>
                                         <td className="px-8 py-6 text-right text-black font-black">₹{Number(inv.total_amount).toLocaleString()}</td>
                                     </tr>
                                 ))}
@@ -482,11 +502,12 @@ function InvoicesBilling() {
                                     <div className="bg-white rounded-[1.5rem] p-5 shadow-xl border border-slate-100 shrink-0">
                                         <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-4">Payment Summary</h4>
                                         <div className="space-y-3">
-                                            <div className="flex justify-between items-center text-[11px] font-bold text-gray-500"><span>Taxable</span><span className="text-gray-800 font-black">₹{Number(selectedInvoice.subtotal).toLocaleString()}</span></div>
-                                            <div className="flex justify-between items-center text-[11px] font-bold text-gray-500"><span>Total Tax</span><span className="text-gray-600">+ ₹{Number(selectedInvoice.tax_amount).toLocaleString()}</span></div>
-                                            {Number(selectedInvoice.transportation_charge) > 0 && <div className="flex justify-between items-center text-[11px] font-bold text-gray-500"><span>Transportation</span><span className="text-gray-600">+ ₹{Number(selectedInvoice.transportation_charge).toLocaleString()}</span></div>}
+                                            <div className="flex justify-between items-center text-[11px] font-bold text-gray-500"><span>Taxable</span><span className="text-gray-800 font-black">₹{Number(selectedInvoice.subtotal || 0).toFixed(2)}</span></div>
+                                            <div className="flex justify-between items-center text-[11px] font-bold text-gray-500"><span>Total Tax</span><span className="text-gray-600">+ ₹{Number(selectedInvoice.tax_amount || 0).toFixed(2)}</span></div>
+                                            <div className="flex justify-between items-center text-[11px] font-bold text-gray-500"><span>Transportation</span><span className="text-gray-600">+ ₹{Number(selectedInvoice.transportation_charge || 0).toFixed(2)}</span></div>
+                                            <div className="flex justify-between items-center text-[11px] font-bold text-gray-500"><span>Round Off</span><span className="text-gray-600">₹{Number(selectedInvoice.round_off || 0).toFixed(2)}</span></div>
                                             <div className="my-2 border-t border-dashed border-gray-100"></div>
-                                            <div className="flex justify-between items-end pt-1"><span className="text-[10px] font-black uppercase text-gray-900">Grand Total</span><span className="text-2xl font-black leading-none" style={{ color: THEME_COLOR }}>₹{Number(selectedInvoice.total_amount).toLocaleString()}</span></div>
+                                            <div className="flex justify-between items-end pt-1"><span className="text-[10px] font-black uppercase text-gray-900">Grand Total</span><span className="text-2xl font-black leading-none" style={{ color: THEME_COLOR }}>₹{Number(selectedInvoice.total_amount).toLocaleString('en-IN')}</span></div>
                                         </div>
                                     </div>
                                     <button onClick={() => window.print()} className="w-full py-4 rounded-xl text-white font-black uppercase text-[10px] tracking-widest shadow-lg flex items-center justify-center gap-3 transition-all hover:brightness-110 active:scale-95" style={{ backgroundColor: THEME_COLOR }}><FiPrinter size={16} /> Print Invoice</button>

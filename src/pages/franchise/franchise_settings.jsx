@@ -6,6 +6,7 @@ import {
   ArrowLeft, Lock, LogOut, Eye, EyeOff,
   User, X, Check, Save, Hash, MapPin, Utensils, ShieldCheck
 } from "lucide-react";
+import { BRAND_GREEN as brandGreen } from "../../utils/theme";
 
 function FranchiseSettingsCard() {
   const navigate = useNavigate();
@@ -44,7 +45,7 @@ function FranchiseSettingsCard() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [updateMsg, setUpdateMsg] = useState("");
 
-  const brandGreen = "rgb(0, 100, 55)";
+
 
   const fetchProfile = async () => {
     if (!authUser?.id) return;

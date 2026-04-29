@@ -84,6 +84,7 @@ function Reports() {
     const [billToDelete, setBillToDelete] = useState(null);
     const [itemDeleteContext, setItemDeleteContext] = useState(null);
     const [deleting, setDeleting] = useState(false);
+    const [showAutoDeleteConfirm, setShowAutoDeleteConfirm] = useState(false);
 
     // --- BILL ITEMS CACHE (in-memory + sessionStorage) ---
     const billItemsCache = useRef({});
@@ -404,7 +405,7 @@ function Reports() {
         const rows = filteredData.map((item, index) => {
             const id = item.id;
             const fid = item.franchise_id || "Head Office";
-            const company = item.company || "Unknown";
+            const company = (item.company || "Unknown").replace(/,/g, " ");
             const name = (item.mapped_location || item.customer_name || "Standard Sale").replace(/,/g, " ");
             const dateObj = new Date(item.created_at);
             const amount = item.total || item.total_amount || 0;
@@ -511,6 +512,49 @@ function Reports() {
             setDeleting(false);
         }
     }, [selectedBill]);
+
+    // --- AUTO DELETE 45-DAY OLD DATA ---
+    const handleAutoDeleteOldData = useCallback(async () => {
+        if (!selectedFranchise || selectedFranchise === "all") return;
+        setDeleting(true);
+        try {
+            const fortyFiveDaysAgo = new Date();
+            fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
+            fortyFiveDaysAgo.setHours(0, 0, 0, 0);
+
+            const { data: oldBills, error: fetchError } = await supabase
+                .from('bills_generated')
+                .select('id')
+                .eq('franchise_id', selectedFranchise)
+                .lte('created_at', fortyFiveDaysAgo.toISOString());
+
+            if (fetchError) throw fetchError;
+
+            if (oldBills && oldBills.length > 0) {
+                const billIds = oldBills.map(b => b.id);
+                for (let bId of billIds) {
+                    await supabase.rpc('admin_delete_bill', { target_bill_id: bId });
+                }
+            }
+
+            alert("Old data deleted successfully.");
+            setShowAutoDeleteConfirm(false);
+            clearReportsCaches();
+            
+            // Force refresh of stats and tables
+            const cacheKey = `reports_oldest_${selectedFranchise}`;
+            sessionStorage.removeItem(cacheKey);
+            setOldestRecordDate(null);
+            setDaysUntilDeletion(null);
+            setTimeout(() => fetchData(true), 300);
+        } catch (error) {
+            console.error("Auto delete failed", error);
+            alert("Failed to delete old data.");
+        } finally {
+            setDeleting(false);
+        }
+    }, [selectedFranchise, fetchData]);
+
 
     // --- DELETE ENTIRE SUPPLY INVOICE ---
     const handleDeleteInvoice = useCallback(async (invoice) => {
@@ -735,13 +779,27 @@ function Reports() {
     }, [filteredData, activeTab, rawData]);
 
     const chartData = useMemo(() => {
+        if (!filteredData.length) return [];
         const daily = {};
         const sorted = [...filteredData].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         sorted.forEach(item => {
-            const date = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            daily[date] = (daily[date] || 0) + Number(item.total || item.total_amount || 0);
+            const d = new Date(item.created_at);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            daily[key] = (daily[key] || 0) + Number(item.total || item.total_amount || 0);
         });
-        return Object.entries(daily).map(([name, revenue]) => ({ name, revenue }));
+        // Fill every day between min and max dates so the chart has no gaps
+        const dateKeys = Object.keys(daily).sort();
+        const minDate = new Date(dateKeys[0] + 'T00:00:00');
+        const maxDate = new Date(dateKeys[dateKeys.length - 1] + 'T00:00:00');
+        const result = [];
+        const cursor = new Date(minDate);
+        while (cursor <= maxDate) {
+            const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+            const label = cursor.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            result.push({ name: label, revenue: daily[key] || 0 });
+            cursor.setDate(cursor.getDate() + 1);
+        }
+        return result;
     }, [filteredData]);
 
     const chartYDomain = useMemo(() => {
@@ -784,6 +842,14 @@ function Reports() {
                         <div className="deletion-banner-icon"><AlertOctagon size={20} /></div>
                         <div className="deletion-banner-text">
                             <strong>🚨 ACTION NEEDED:</strong> Franchise <strong>{selectedFranchise}</strong> — oldest bills from <span className="deletion-date-highlight">{formattedDate}</span> are 45 days old. They will be deleted <strong>TONIGHT</strong>. Click 'Download CSV' to save them right now!
+                            <div className="mt-3">
+                                <button 
+                                    onClick={() => setShowAutoDeleteConfirm(true)} 
+                                    className="px-4 py-2 bg-red-200 text-red-800 text-[10px] font-black uppercase rounded-xl hover:bg-red-300 transition-colors shadow-sm"
+                                >
+                                    Delete Old Data Now
+                                </button>
+                            </div>
                         </div>
                     </div>
                 );
@@ -1386,6 +1452,22 @@ function Reports() {
                             <button className="confirm-cancel-btn" onClick={() => setBillToDelete(null)} disabled={deleting}>Cancel</button>
                             <button className="confirm-delete-btn" onClick={() => activeTab === "store" ? handleDeleteBill(billToDelete) : handleDeleteInvoice(billToDelete)} disabled={deleting}>
                                 {deleting ? "Deleting..." : "Yes, Delete"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- AUTO DELETE CONFIRM MODAL --- */}
+            {showAutoDeleteConfirm && (
+                <div className="confirm-modal-overlay" onClick={() => !deleting && setShowAutoDeleteConfirm(false)}>
+                    <div className="confirm-modal-box" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="text-red-600">Delete 45-Day Old Data?</h3>
+                        <p>Are you absolutely sure? This will permanently delete all bills for <strong>{selectedFranchise}</strong> that are older than 45 days. This action cannot be undone.</p>
+                        <div className="confirm-modal-actions">
+                            <button className="confirm-cancel-btn" onClick={() => setShowAutoDeleteConfirm(false)} disabled={deleting}>Cancel</button>
+                            <button className="confirm-delete-btn" onClick={handleAutoDeleteOldData} disabled={deleting}>
+                                {deleting ? "Deleting..." : "Yes, Delete Old Data"}
                             </button>
                         </div>
                     </div>

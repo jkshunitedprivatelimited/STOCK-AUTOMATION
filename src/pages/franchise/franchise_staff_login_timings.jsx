@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 import { supabase } from "../../frontend_supabase/supabaseClient";
 
-const THEME_GREEN = "rgb(0, 100, 55)";
+import { formatTime } from "../../utils/formatters";
+import { BRAND_GREEN as THEME_GREEN } from "../../utils/theme";
 const BG_GRAY = "#f8fafc";
 const TEXT_DARK = "#1e293b";
 const BORDER_COLOR = "#e2e8f0";
@@ -47,15 +48,11 @@ const LoginTimings = () => {
     window.scrollTo(0, 0);
   }, []);
 
-  const cleanupRealtime = useCallback(async () => {
+  const cleanupRealtime = useCallback(() => {
     if (channelRef.current) {
       const channel = channelRef.current;
       channelRef.current = null;
-      try {
-        await supabase.removeChannel(channel);
-      } catch (err) {
-        // Quietly handle websocket closure during unmount
-      }
+      supabase.removeChannel(channel);
     }
   }, []);
 
@@ -154,7 +151,7 @@ const LoginTimings = () => {
     if (channelRef.current) return;
 
     const channel = supabase
-      .channel(`logs-${fid}-${Date.now()}`)
+      .channel(`franchise-logs-${fid}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'login_logs', filter: `franchise_id=eq.${fid}` },
         () => {
           if (isMounted.current) fetchLogs(fid, role, uid, true);
@@ -209,12 +206,7 @@ const LoginTimings = () => {
     return `${hours}h ${mins}m`;
   };
 
-  const formatTime = (dateString) => {
-    if (!dateString) return "---";
-    return new Date(dateString).toLocaleTimeString('en-US', {
-      hour: 'numeric', minute: '2-digit', hour12: true
-    });
-  };
+
 
   const finalLogs = useMemo(() => {
     return logs.filter(log => {

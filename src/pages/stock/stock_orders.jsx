@@ -8,7 +8,8 @@ import {
   FiArrowUp, FiArrowDown, FiCheck, FiAlertTriangle
 } from "react-icons/fi";
 import { FaWhatsapp } from "react-icons/fa";
-import { formatCurrency, amountToWords } from "../../utils/formatters";
+import { formatCurrency, amountToWords, formatDateTime } from "../../utils/formatters";
+import { BRAND_GREEN } from "../../utils/theme";
 
 // --- STATIC STYLES (extracted to avoid recreating on every render) ---
 const PRINT_STYLES = `
@@ -41,24 +42,12 @@ const PRINT_STYLES = `
 `;
 
 // --- STATIC INLINE STYLE OBJECTS (prevent re-creation every render) ---
-const BRAND_RING_STYLE = { '--tw-ring-color': 'rgb(0, 100, 55)' };
-const BRAND_BG_STYLE = { backgroundColor: 'rgb(0, 100, 55)' };
+const BRAND_RING_STYLE = { '--tw-ring-color': BRAND_GREEN };
+const BRAND_BG_STYLE = { backgroundColor: BRAND_GREEN };
 
 // --- CONSTANTS & HELPERS ---
 const TABS = ["all", "incoming", "packed", "dispatched"];
-const BRAND_COLOR = "rgb(0, 100, 55)";
 const ITEMS_PER_INVOICE_PAGE = 15;
-
-const formatDateTime = (dateString, timeText = null) => {
-  if (!dateString) return "N/A";
-  const dateObj = new Date(dateString);
-  const datePart = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
-  if (timeText) return `${datePart}, ${timeText}`;
-  return dateObj.toLocaleString('en-GB', {
-    day: '2-digit', month: 'short', year: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: true
-  });
-};
 
 // --- INVOICE PRINT COMPONENT ---
 const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsChunk }) => {
@@ -68,7 +57,9 @@ const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsCh
   // LOGO IS FETCHED DYNAMICALLY FROM companyDetails.logo_url
   const currentLogo = companyDetails?.logo_url || null;
 
-  const invDate = new Date(order.created_at).toLocaleDateString('en-GB');
+  const invDate = new Date(order.created_at).toLocaleDateString('en-GB', {
+    day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata'
+  });
   const taxableAmount = Number(order.subtotal) || 0;
   const totalGst = Number(order.tax_amount) || 0;
   const cgst = totalGst / 2;
@@ -195,14 +186,14 @@ const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsCh
               <div>
                 <p className="font-black uppercase underline text-[11px] mb-1.5 text-black">Bank Details</p>
                 <div className="grid grid-cols-[50px_1fr] gap-y-0.5 text-[10px] font-bold uppercase text-black leading-tight">
-                  <span>Bank:</span> <span className="text-black">{companyDetails?.bank_name || ""}</span>
-                  <span>A/c No:</span> <span className="text-black">{companyDetails?.bank_acc_no || ""}</span>
-                  <span>IFSC:</span> <span className="text-black">{companyDetails?.bank_ifsc || ""}</span>
+                  <span>Bank:</span> <span className="text-black">{order.snapshot_bank_details?.bank_name || companyDetails?.bank_name || ""}</span>
+                  <span>A/c No:</span> <span className="text-black">{order.snapshot_bank_details?.bank_acc_no || companyDetails?.bank_acc_no || ""}</span>
+                  <span>IFSC:</span> <span className="text-black">{order.snapshot_bank_details?.bank_ifsc || companyDetails?.bank_ifsc || ""}</span>
                 </div>
               </div>
               <div className="mt-2 pt-1.5 border-t border-slate-300">
                 <p className="font-black uppercase underline text-[10px] mb-1 text-black">Terms & Conditions:</p>
-                <p className="text-[8px] text-black whitespace-pre-wrap leading-tight">{companyDetails?.terms || "No terms available."}</p>
+                <p className="text-[8px] text-black whitespace-pre-wrap leading-tight">{order.snapshot_terms || companyDetails?.terms || "No terms available."}</p>
               </div>
             </div>
           </div>
@@ -212,7 +203,7 @@ const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsCh
             <div className="flex justify-between py-1 px-1.5 border-b border-slate-300 text-black"><span>Total GST</span><span>{formatCurrency(totalGst)}</span></div>
             <div className="flex justify-between py-0.5 px-2 border-b border-slate-300 text-black text-[9px] bg-slate-50 pl-4"><span>CGST</span><span>{formatCurrency(cgst)}</span></div>
             <div className="flex justify-between py-0.5 px-2 border-b border-black text-black text-[9px] bg-slate-50 pl-4 mb-2"><span>SGST</span><span>{formatCurrency(sgst)}</span></div>
-            {transportationCharge > 0 && <div className="flex justify-between py-1 px-1.5 border-b border-slate-300 text-black"><span>Transportation</span><span>{formatCurrency(transportationCharge)}</span></div>}
+            <div className="flex justify-between py-1 px-1.5 border-b border-slate-300 text-black"><span>Transportation</span><span>{formatCurrency(transportationCharge)}</span></div>
             <div className="flex justify-between py-1 px-1.5 border-b border-black text-black"><span>Round Off</span><span>{formatCurrency(roundOff)}</span></div>
             <div className="flex justify-between py-1.5 px-2 border-b-2 border-black bg-slate-200 text-black"><span className="font-black uppercase text-black">Total</span><span className="font-black text-black">{formatCurrency(roundedBill)}</span></div>
             <div className="flex-1 flex flex-col justify-end p-2 text-center">
@@ -450,7 +441,7 @@ function StockOrders() {
       const searchMatch = (o.customer_name?.toLowerCase().includes(deferredSearchTerm.toLowerCase())) ||
         (o.franchise_id?.toLowerCase().includes(deferredSearchTerm.toLowerCase()));
 
-      const orderDate = new Date(o.created_at).toISOString().split('T')[0];
+      const orderDate = new Date(o.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       let dateMatch = true;
 
       if (dateMode === "date" && singleDate) dateMatch = orderDate === singleDate;
@@ -820,7 +811,7 @@ function StockOrders() {
                             <p className="text-[11px] font-black uppercase truncate text-black">{item.item_name}</p>
                             <p className="text-[9px] font-bold text-black/50 uppercase">{item.quantity} {item.unit}</p>
                           </div>
-                          <span className="font-black text-xs text-black shrink-0">₹{item.price}</span>
+                          <span className="font-black text-xs text-black shrink-0">{formatCurrency(Number(item.total) || (Number(item.price) * Number(item.quantity)))}</span>
                         </div>
                       ))}
                     </div>

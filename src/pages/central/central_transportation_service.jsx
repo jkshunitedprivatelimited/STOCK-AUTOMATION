@@ -37,7 +37,7 @@ const CentralTransportationService = () => {
 
 
   // Sorting
-  const [sortKey, setSortKey] = useState("name");
+  const [sortKey, setSortKey] = useState("franchise_id");
   const [sortDir, setSortDir] = useState("asc");
 
 
@@ -63,7 +63,7 @@ const CentralTransportationService = () => {
         .from("profiles")
         .select("id, name, franchise_id, role, phone, address, city, state, branch_location, transportation_charge")
         .in("role", ["franchise", "central"])
-        .order("name", { ascending: true });
+        .order("franchise_id", { ascending: true });
       if (error) throw error;
       setProfiles(data || []);
     } catch (err) {
@@ -111,7 +111,9 @@ const CentralTransportationService = () => {
       if (sortKey === "transportation_charge") {
         return sortDir === "asc" ? (Number(a[sortKey]) || 0) - (Number(b[sortKey]) || 0) : (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0);
       }
-      return sortDir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      return sortDir === "asc" 
+        ? aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: 'base' }) 
+        : bVal.localeCompare(aVal, undefined, { numeric: true, sensitivity: 'base' });
     });
     return list;
   }, [profiles, searchTerm, filterState, filterCity, sortKey, sortDir]);

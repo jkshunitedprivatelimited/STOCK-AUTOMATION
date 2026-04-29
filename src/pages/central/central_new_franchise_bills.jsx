@@ -10,31 +10,7 @@ const PRIMARY = "rgb(0, 100, 55)";
 const ITEMS_PER_INVOICE_PAGE = 15;
 
 // --- HELPER FUNCTIONS ---
-const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-        style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2
-    }).format(amount || 0);
-};
-
-const amountToWords = (price) => {
-    if (!price) return "";
-    const num = Math.round(price);
-    const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
-    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-    const inWords = (n) => {
-        if ((n = n.toString()).length > 9) return 'overflow';
-        let n_array = ('000000000' + n).slice(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
-        if (!n_array) return;
-        let str = '';
-        str += (n_array[1] != 0) ? (a[Number(n_array[1])] || b[n_array[1][0]] + ' ' + a[n_array[1][1]]) + 'Crore ' : '';
-        str += (n_array[2] != 0) ? (a[Number(n_array[2])] || b[n_array[2][0]] + ' ' + a[n_array[2][1]]) + 'Lakh ' : '';
-        str += (n_array[3] != 0) ? (a[Number(n_array[3])] || b[n_array[3][0]] + ' ' + a[n_array[3][1]]) + 'Thousand ' : '';
-        str += (n_array[4] != 0) ? (a[Number(n_array[4])] || b[n_array[4][0]] + ' ' + a[n_array[4][1]]) + 'Hundred ' : '';
-        str += (n_array[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n_array[5])] || b[n_array[5][0]] + ' ' + a[n_array[5][1]]) : '';
-        return str;
-    }
-    return inWords(num) + "Rupees Only";
-};
+import { formatCurrency, amountToWords } from '../../utils/formatters';
 
 // --- PRINT COMPONENT ---
 const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsChunk, docTitle = "TAX INVOICE" }) => {
@@ -315,11 +291,14 @@ function PackageBills() {
             stockUpdates.push({ id: stock.id, newQuantity: Number(stock.quantity) - qty });
         }
 
-        const total_amount = subtotal + tax_amount;
+        const exactBill = parseFloat((subtotal + tax_amount).toFixed(2));
+        const roundedBill = Math.ceil(exactBill);
+        const round_off = roundedBill - exactBill;
+        const total_amount = roundedBill;
 
         const { data: invData, error: invError } = await supabase.from('invoices').insert({
             created_by: user.id,
-            total_amount, subtotal, tax_amount, round_off: 0,
+            total_amount, subtotal, tax_amount, round_off,
             status: 'incoming',
             franchise_id: franchise.franchise_id,
             customer_name: franchise.name,

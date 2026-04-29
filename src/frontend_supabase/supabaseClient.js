@@ -13,9 +13,9 @@ const supabaseUrl = supabaseDirectUrl;
 // In production, rewrites supabase.co HTTP URLs through the Vercel proxy
 // to bypass carrier DNS blocking (e.g., Jio in India).
 
-const MAX_RETRIES = 3;
-const BASE_DELAY = 1000;
-const REQUEST_TIMEOUT = 15000;
+const MAX_RETRIES = 1;
+const BASE_DELAY = 800;
+const REQUEST_TIMEOUT = 10000;
 
 // Rewrite supabase.co URLs to proxy (works in both dev and production)
 const SUPABASE_DOMAIN = 'vfhwuncpzbsjegmedvjr.supabase.co';
@@ -27,8 +27,6 @@ export function getProxiedUrl(url) {
   // the strict Authorization Bearer JWT headers required by Deno.
   if (url.includes(SUPABASE_DOMAIN) && !url.includes('/functions/v1/')) {
     const proxied = url.replace(`https://${SUPABASE_DOMAIN}`, window.location.origin + '/sb-proxy');
-    console.log(`🔀 [PROXY_DEBUG] Original: ${url.substring(0, 100)}...`);
-    console.log(`🔀 [PROXY_DEBUG] Proxied: ${proxied.substring(0, 100)}...`);
     devLog(`🔀 [PROXY] ${url.substring(0, 60)}... → ${proxied.substring(0, 60)}...`);
     return proxied;
   }
@@ -46,7 +44,7 @@ async function resilientFetch(url, options = {}) {
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      console.log(`🌐 [NET_DEBUG] Attempt ${attempt + 1}: Fetching ${proxiedUrl.substring(0, 100)}... Method: ${cleanOptions.method || 'GET'}`);
+      devLog(`🌐 [NET] Attempt ${attempt + 1}: ${cleanOptions.method || 'GET'} ${proxiedUrl.substring(0, 80)}...`);
       const response = await Promise.race([
         fetch(proxiedUrl, cleanOptions),
         new Promise((_, reject) =>
@@ -180,7 +178,7 @@ export async function checkSupabaseConnection(timeoutMs = 8000) {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     // Use a lightweight HEAD request to the Supabase REST endpoint
-    const response = await fetch(`${supabaseUrl}/rest/v1/`, {
+    const response = await fetch(getProxiedUrl(`${supabaseUrl}/rest/v1/`), {
       method: "HEAD",
       headers: {
         "apikey": supabaseAnonKey,

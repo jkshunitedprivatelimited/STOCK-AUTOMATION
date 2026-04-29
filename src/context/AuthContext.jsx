@@ -19,13 +19,14 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
 
   const hydrate = async (supabaseUser) => {
-    if (!supabaseUser) {
-      setUser(null);
-      setRole(null);
-      setProfile(null);
-      setLoading(false);
-      return null;
-    }
+    try {
+      if (!supabaseUser) {
+        setUser(null);
+        setRole(null);
+        setProfile(null);
+        setLoading(false);
+        return null;
+      }
 
     let finalProfile = null;
 
@@ -93,25 +94,42 @@ export function AuthProvider({ children }) {
       setLoading(false);
       return finalProfile;
     }
+    } catch (err) {
+      console.error("[AUTH] Hydration error:", err);
+      setUser(null);
+      setRole(null);
+      setProfile(null);
+      setLoading(false);
+      return null;
+    }
   };
 
   useEffect(() => {
+    let isInitialized = false;
+
     supabase.auth.getSession().then(({ data }) => {
+      isInitialized = true;
       hydrate(data?.session?.user ?? null);
     }).catch((err) => {
+      isInitialized = true;
       console.error("[AUTH] Failed to get initial session (network issue):", err);
-      setLoading(false); // Don't leave app in loading state if network fails
+      setLoading(false);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        // Skip INITIAL_SESSION — getSession() already handles it
+        if (event === "INITIAL_SESSION") return;
+
         if (event === "SIGNED_OUT") {
           setUser(null);
           setRole(null);
           setProfile(null);
           setLoading(false);
-        } else if (event === "INITIAL_SESSION") {
-          if (session?.user) hydrate(session.user);
+        } else if (event === "SIGNED_IN" && isInitialized) {
+          // Only re-hydrate on explicit sign-in AFTER initial load
+          // (hot-login from another tab, etc.)
+          hydrate(session?.user);
         }
       }
     );
@@ -131,40 +149,38 @@ export function AuthProvider({ children }) {
     setProfile(profileData);
     setRole(profileData.role);
 
-    // 2. Record the physical login to the DB
-    try {
-      const isStaff = profileData.role === "staff";
+    // 2. Record the physical login to the DB (fire-and-forget — don't block login)
+    (async () => {
+      try {
+        const isStaff = profileData.role === "staff";
+        const finalMode = isStaff ? "STORE" : chosenMode.toUpperCase();
+        const staffProfId = isStaff ? (profileData.staff_profile_id || profileData.id) : null;
+        const ownerProfId = !isStaff ? profileData.id : null;
 
-      // HARD OVERRIDE: If staff, it is physically impossible to be ADMIN mode.
-      const finalMode = isStaff ? "STORE" : chosenMode.toUpperCase();
+        // Close any stuck sessions first
+        const { data: activeSessions } = await supabase
+          .from('login_logs')
+          .select('id')
+          .eq('staff_id', supabaseUser.id)
+          .is('logout_at', null);
 
-      const staffProfId = isStaff ? (profileData.staff_profile_id || profileData.id) : null;
-      const ownerProfId = !isStaff ? profileData.id : null;
+        if (activeSessions && activeSessions.length > 0) {
+          const idsToClose = activeSessions.map(s => s.id);
+          await supabase.from('login_logs').update({ logout_at: new Date().toISOString() }).in('id', idsToClose);
+        }
 
-      // Close any stuck sessions first
-      const { data: activeSessions } = await supabase
-        .from('login_logs')
-        .select('id')
-        .eq('staff_id', supabaseUser.id)
-        .is('logout_at', null);
-
-      if (activeSessions && activeSessions.length > 0) {
-        const idsToClose = activeSessions.map(s => s.id);
-        await supabase.from('login_logs').update({ logout_at: new Date().toISOString() }).in('id', idsToClose);
+        // Insert the perfect record
+        await supabase.from('login_logs').insert([{
+          staff_id: supabaseUser.id,
+          staff_profile_id: staffProfId,
+          owner_profile_id: ownerProfId,
+          franchise_id: profileData.franchise_id,
+          login_mode: finalMode
+        }]);
+      } catch (err) {
+        console.error("Login Log Error:", err);
       }
-
-      // Insert the perfect record
-      await supabase.from('login_logs').insert([{
-        staff_id: supabaseUser.id,
-        staff_profile_id: staffProfId,     // Fixed the null issue!
-        owner_profile_id: ownerProfId,
-        franchise_id: profileData.franchise_id,
-        login_mode: finalMode              // Guaranteed accurate mode!
-      }]);
-
-    } catch (err) {
-      console.error("Login Log Error:", err);
-    }
+    })();
   };
 
   const logout = async () => {
@@ -187,7 +203,6 @@ export function AuthProvider({ children }) {
       console.error("Logout Logic Error:", err);
     }
 
-    await new Promise(resolve => setTimeout(resolve, 500));
     await supabase.auth.signOut();
 
     setUser(null);

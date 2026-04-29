@@ -11,6 +11,7 @@ import {
   FiRefreshCw
 } from "react-icons/fi";
 import { formatCurrency, amountToWords } from "../../utils/formatters";
+import { BRAND_GREEN as BRAND_COLOR } from "../../utils/theme";
 
 const StockItemCard = React.memo(({ 
   item, unit, isInCart, isNotified, isCentral,
@@ -57,7 +58,7 @@ const StockItemCard = React.memo(({
 });
 
 // --- CONSTANTS ---
-const BRAND_COLOR = "rgb(0, 100, 55)";
+
 const ITEMS_PER_INVOICE_PAGE = 15;
 const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID;
 
@@ -472,7 +473,7 @@ function StockOrder() {
   useEffect(() => {
     fetchData();
     let debounceTimer;
-    const stockSubscription = supabase.channel('public:stocks').on('postgres_changes', { event: '*', schema: 'public', table: 'stocks' }, () => {
+    const stockSubscription = supabase.channel('central-franchise-stocks').on('postgres_changes', { event: '*', schema: 'public', table: 'stocks' }, () => {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => fetchData(true), 300);
     }).subscribe();
@@ -602,11 +603,14 @@ function StockOrder() {
       const matchesSearch = item.item_name.toLowerCase().includes(query) || item.item_code?.toLowerCase().includes(query);
       const categoryName = item.category ? item.category.trim().toUpperCase() : '';
       const matchesCategory = selectedCategory === "All" || categoryName === selectedCategory;
-      const matchesAvailability = showOnlyAvailable ? Number(item.quantity) > 0 : true;
+      // Central users can toggle availability; franchise users ALWAYS hide out-of-stock
+      const matchesAvailability = isCentral
+        ? (showOnlyAvailable ? Number(item.quantity) > 0 : true)
+        : Number(item.quantity) > 0;
       return matchesSearch && matchesCategory && matchesAvailability;
     });
     return baseList.sort((a, b) => (Number(a.quantity) > 0 && Number(b.quantity) <= 0) ? -1 : (Number(a.quantity) <= 0 && Number(b.quantity) > 0) ? 1 : 0);
-  }, [stocks, deferredSearch, selectedCategory, showOnlyAvailable]);
+  }, [stocks, deferredSearch, selectedCategory, showOnlyAvailable, isCentral]);
 
   // Stable callback pointers via Ref
   const stateRef = useRef({ cart, qtyInput, stocks, selectedUnit, notifiedItems });
@@ -1295,7 +1299,9 @@ function StockOrder() {
                 <input placeholder="SEARCH ITEMS..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full h-11 sm:h-12 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black uppercase outline-none focus:border-black focus:bg-white transition-all shadow-sm" />
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setShowOnlyAvailable(!showOnlyAvailable)} className={`flex-1 sm:flex-none px-4 sm:px-5 h-11 sm:h-12 rounded-2xl border font-black text-xs sm:text-sm uppercase flex items-center justify-center gap-2 transition-all shadow-sm ${showOnlyAvailable ? "bg-emerald-600 border-emerald-600 text-white" : "bg-white border-slate-200 text-slate-600 hover:border-slate-400"}`}><FiFilter /> {showOnlyAvailable ? "Show Available Only" : "Show All Items"}</button>
+                {isCentral && (
+                  <button onClick={() => setShowOnlyAvailable(!showOnlyAvailable)} className={`flex-1 sm:flex-none px-4 sm:px-5 h-11 sm:h-12 rounded-2xl border font-black text-xs sm:text-sm uppercase flex items-center justify-center gap-2 transition-all shadow-sm ${showOnlyAvailable ? "bg-emerald-600 border-emerald-600 text-white" : "bg-white border-slate-200 text-slate-600 hover:border-slate-400"}`}><FiFilter /> {showOnlyAvailable ? "Show Available Only" : "Show All Items"}</button>
+                )}
               </div>
             </div>
             <div className="overflow-x-auto pb-3 scrollbar-thin">

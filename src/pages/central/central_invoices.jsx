@@ -11,36 +11,7 @@ import {
 const PRIMARY = "rgb(0, 100, 55)";
 const ITEMS_PER_INVOICE_PAGE = 15;
 
-// --- HELPER FUNCTIONS ---
-const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }).format(amount || 0);
-};
-
-const amountToWords = (price) => {
-    if (!price) return "";
-    const num = Math.round(price);
-    const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
-    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-    const inWords = (n) => {
-        if ((n = n.toString()).length > 9) return 'overflow';
-        let n_array = ('000000000' + n).slice(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
-        if (!n_array) return;
-        let str = '';
-        str += (n_array[1] != 0) ? (a[Number(n_array[1])] || b[n_array[1][0]] + ' ' + a[n_array[1][1]]) + 'Crore ' : '';
-        str += (n_array[2] != 0) ? (a[Number(n_array[2])] || b[n_array[2][0]] + ' ' + a[n_array[2][1]]) + 'Lakh ' : '';
-        str += (n_array[3] != 0) ? (a[Number(n_array[3])] || b[n_array[3][0]] + ' ' + a[n_array[3][1]]) + 'Thousand ' : '';
-        str += (n_array[4] != 0) ? (a[Number(n_array[4])] || b[n_array[4][0]] + ' ' + a[n_array[4][1]]) + 'Hundred ' : '';
-        str += (n_array[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n_array[5])] || b[n_array[5][0]] + ' ' + a[n_array[5][1]]) : '';
-        return str;
-    }
-    return inWords(num) + "Rupees Only";
-};
-
+import { formatCurrency, amountToWords } from "../../utils/formatters";
 
 // --- INVOICE PRINT COMPONENT ---
 const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsChunk }) => {
@@ -56,9 +27,10 @@ const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsCh
     const totalGst = Number(order.tax_amount) || 0;
     const cgst = totalGst / 2;
     const sgst = totalGst / 2;
-    const roundedBill = Number(order.total_amount) || 0;
-    const roundOff = Number(order.round_off) || 0;
     const transportationCharge = Number(order.transportation_charge) || 0;
+    const exactBill = taxableAmount + totalGst + transportationCharge;
+    const roundedBill = Math.ceil(exactBill);
+    const roundOff = roundedBill - exactBill;
     const orderId = order.id ? order.id.substring(0, 8).toUpperCase() : 'PENDING';
 
     const termsList = companyDetails?.terms
@@ -198,7 +170,7 @@ const FullPageInvoice = ({ order, companyDetails, pageIndex, totalPages, itemsCh
                         <div className="flex justify-between py-1 px-1.5 border-b border-slate-300 text-black"><span>Total GST</span><span>{formatCurrency(totalGst)}</span></div>
                         <div className="flex justify-between py-0.5 px-2 border-b border-slate-300 text-black text-[9px] bg-slate-50 pl-4"><span>CGST</span><span>{formatCurrency(cgst)}</span></div>
                         <div className="flex justify-between py-0.5 px-2 border-b border-black text-black text-[9px] bg-slate-50 pl-4"><span>SGST</span><span>{formatCurrency(sgst)}</span></div>
-                        {transportationCharge > 0 && <div className="flex justify-between py-1 px-1.5 border-b border-slate-300 text-black"><span>Transportation</span><span>{formatCurrency(transportationCharge)}</span></div>}
+                        <div className="flex justify-between py-1 px-1.5 border-b border-slate-300 text-black"><span>Transportation</span><span>{formatCurrency(transportationCharge)}</span></div>
                         <div className="flex justify-between py-1 px-1.5 border-b border-black text-black"><span>Round Off</span><span>{formatCurrency(roundOff)}</span></div>
                         <div className="flex justify-between py-1.5 px-2 border-b-2 border-black bg-slate-200 text-black"><span className="font-black uppercase text-black">Total</span><span className="font-black text-black">{formatCurrency(roundedBill)}</span></div>
                         <div className="flex-1 flex flex-col justify-end p-2 text-center">
@@ -348,17 +320,27 @@ function CentralInvoices() {
         setItemsLoading(true);
         setItems([]);
 
-        // Always fetch company details for this invoice's company (ensures logo is loaded for print)
-        const invoiceCompany = invoice.snapshot_company_name || invoice.profiles?.company;
-        if (invoiceCompany) {
+        // Attempt to fetch company details by franchise_id first (fixes wrong logo on older invoices)
+        let cdFetched = false;
+        if (invoice.franchise_id) {
             try {
-                const { data: cd } = await supabase
-                    .from('companies')
-                    .select('*')
-                    .eq('company_name', invoiceCompany)
-                    .single();
-                if (cd) setCompanyDetails(cd);
-            } catch (err) { console.error("Logo fetch error:", err); }
+                const { data: cd } = await supabase.from('companies').select('*').ilike('franchise_id', invoice.franchise_id).single();
+                if (cd) {
+                    setCompanyDetails(cd);
+                    cdFetched = true;
+                }
+            } catch (err) { /* ignore, fallback to snapshot */ }
+        }
+
+        // Fallback to snapshot_company_name if franchise-specific company isn't found
+        if (!cdFetched) {
+            const invoiceCompany = invoice.snapshot_company_name || invoice.profiles?.company;
+            if (invoiceCompany) {
+                try {
+                    const { data: cd } = await supabase.from('companies').select('*').eq('company_name', invoiceCompany).single();
+                    if (cd) setCompanyDetails(cd);
+                } catch (err) { console.error("Logo fetch error:", err); }
+            }
         }
 
         try {
@@ -494,7 +476,7 @@ function CentralInvoices() {
     }, [search, singleDate, dateRange, rangeMode, invoices, sortConfig, statusFilter, selectedCompany]);
 
     const stats = useMemo(() => {
-        const revenue = filteredInvoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0);
+        const revenue = filteredInvoices.reduce((sum, inv) => sum + Math.ceil(Number(inv.subtotal || 0) + Number(inv.tax_amount || 0) + Number(inv.transportation_charge || 0)), 0);
         return { total: filteredInvoices.length, revenue };
     }, [filteredInvoices]);
 
@@ -609,7 +591,9 @@ function CentralInvoices() {
                                             {itemsLoading ? (
                                                 <tr><td colSpan="5" className="p-8 text-center text-slate-400 animate-pulse">Loading items...</td></tr>
                                             ) : items.map((item) => {
-                                                const basePrice = Number(item.total);
+                                                const rate = Number(item.price) || 0;
+                                                const qty = Number(item.quantity) || 0;
+                                                const basePrice = rate * qty;
                                                 const gstRate = Number(item.gst_rate) || 0;
                                                 const taxAmount = basePrice * (gstRate / 100);
                                                 const lineTotal = basePrice + taxAmount;
@@ -620,7 +604,7 @@ function CentralInvoices() {
                                                             <div className="text-[10px] text-slate-400 mt-0.5">SKU: {item.stock_id?.slice(0, 8)}</div>
                                                         </td>
                                                         <td className="p-4 text-center border-y border-slate-100">{item.quantity} {item.unit}</td>
-                                                        <td className="p-4 text-right border-y border-slate-100">₹{Number(item.price).toFixed(2)}</td>
+                                                        <td className="p-4 text-right border-y border-slate-100">₹{rate.toFixed(2)}</td>
                                                         <td className="p-4 text-center text-xs border-y border-slate-100">
                                                             <div className="text-slate-500">{gstRate}%</div>
                                                             <div className="text-[10px] text-emerald-600">+₹{taxAmount.toFixed(2)}</div>
@@ -634,10 +618,47 @@ function CentralInvoices() {
                                 </div>
                             </div>
                             <div className="p-6 border-t-2 border-slate-100 bg-white shrink-0">
-                                <div className="flex justify-between items-center bg-slate-900 text-white p-5 rounded-2xl shadow-lg">
-                                    <span className="text-xs font-black uppercase tracking-widest text-slate-400">Total Payable</span>
-                                    <span className="text-2xl font-black">₹{Number(selectedInvoice.total_amount).toLocaleString('en-IN')}</span>
-                                </div>
+                                {(() => {
+                                    let totalSub = 0, totalGst = 0;
+                                    items.forEach(item => {
+                                        const rate = Number(item.price) || 0;
+                                        const qty = Number(item.quantity) || 0;
+                                        const basePrice = rate * qty;
+                                        const gstRate = Number(item.gst_rate) || 0;
+                                        const taxAmount = basePrice * (gstRate / 100);
+                                        totalSub += basePrice;
+                                        totalGst += taxAmount;
+                                    });
+                                    const transportationCharge = Number(selectedInvoice.transportation_charge) || 0;
+                                    const exactBill = parseFloat((totalSub + totalGst + transportationCharge).toFixed(2));
+                                    const roundedBill = Math.ceil(exactBill);
+                                    const roundOff = roundedBill - exactBill;
+                                    
+                                    return (
+                                        <div className="space-y-3">
+                                            <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-widest">
+                                                <span>Subtotal</span>
+                                                <span>₹{totalSub.toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-widest">
+                                                <span>Total GST</span>
+                                                <span>₹{totalGst.toFixed(2)}</span>
+                                            </div>
+                                                <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-widest">
+                                                    <span>Transportation</span>
+                                                    <span>₹{transportationCharge.toFixed(2)}</span>
+                                                </div>
+                                            <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-widest border-b border-slate-100 pb-3">
+                                                <span>Round Off</span>
+                                                <span>₹{roundOff.toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center bg-slate-900 text-white p-5 rounded-2xl shadow-lg mt-3">
+                                                <span className="text-xs font-black uppercase tracking-widest text-slate-400">Total Payable</span>
+                                                <span className="text-2xl font-black">₹{roundedBill.toLocaleString('en-IN')}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                                 <button onClick={handlePrint} className="md:hidden w-full mt-4 py-4 bg-slate-100 text-slate-800 rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all">
                                     <Printer size={16} /> Print Invoice
                                 </button>
@@ -746,8 +767,8 @@ function CentralInvoices() {
                                     <tr className="bg-slate-50 text-slate-400">
                                         <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 w-16 sticky top-0 bg-slate-50 z-20 shadow-sm">S.No</th>
                                         <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('id')}>Invoice <SortIcon columnKey="id" /></th>
-                                        <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('franchise_id')}>Franchise ID <SortIcon columnKey="franchise_id" /></th>
-                                        <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('customer_name')}>Customer <SortIcon columnKey="customer_name" /></th>
+                                        <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('franchise_id')}>Franchise <SortIcon columnKey="franchise_id" /></th>
+                                        <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('customer_name')}>Address <SortIcon columnKey="customer_name" /></th>
                                         <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('status')}>Status <SortIcon columnKey="status" /></th>
                                         <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('created_at')}>Date & Time <SortIcon columnKey="created_at" /></th>
                                         <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 text-right cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('total_amount')}>Amount <SortIcon columnKey="total_amount" /></th>
@@ -764,10 +785,15 @@ function CentralInvoices() {
                                             <td className="p-6 text-[10px] font-bold text-slate-400">{index + 1}.</td>
                                             <td className="p-6"><span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-[10px] font-black">#{inv.id.toString().slice(-6).toUpperCase()}</span></td>
                                             <td className="p-6"><span className="text-xs font-black text-slate-700">{inv.franchise_id}</span></td>
-                                            <td className="p-6"><div className="text-xs font-black text-slate-800">{inv.customer_name}</div><div className="text-[10px] font-bold text-slate-400">{inv.customer_phone}</div></td>
+                                            <td className="p-6">
+                                                <div className="text-xs font-black text-slate-800">{inv.customer_name}</div>
+                                                <div className="text-[10px] font-bold text-slate-400 mt-0.5 max-w-[200px] truncate" title={inv.customer_address}>{inv.customer_address || inv.customer_phone}</div>
+                                            </td>
                                             <td className="p-6"><span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase border ${getStatusStyle(inv.status)}`}>{inv.status || 'Incoming'}</span></td>
                                             <td className="p-6 text-xs font-bold text-slate-500 uppercase">{formatDateTime(inv.created_at)}</td>
-                                            <td className="p-6 text-right text-sm font-black" style={{ color: PRIMARY }}>₹{Number(inv.total_amount).toLocaleString('en-IN')}</td>
+                                            <td className="p-6 text-right text-sm font-black" style={{ color: PRIMARY }}>
+                                                ₹{Math.ceil(Number(inv.subtotal || 0) + Number(inv.tax_amount || 0) + Number(inv.transportation_charge || 0)).toLocaleString('en-IN')}
+                                            </td>
                                             <td className="p-6 text-center">
                                                 <button onClick={(e) => triggerDelete(inv.id, e)} className="p-2 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 rounded-xl transition-colors inline-flex items-center justify-center active:scale-95">
                                                     <Trash2 size={16} />
@@ -796,7 +822,9 @@ function CentralInvoices() {
                                         <p className="text-[10px] font-bold text-slate-400">ID: {inv.franchise_id}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-lg font-black" style={{ color: PRIMARY }}>₹{Number(inv.total_amount).toLocaleString('en-IN')}</p>
+                                        <p className="text-lg font-black" style={{ color: PRIMARY }}>
+                                            ₹{Math.ceil(Number(inv.subtotal || 0) + Number(inv.tax_amount || 0) + Number(inv.transportation_charge || 0)).toLocaleString('en-IN')}
+                                        </p>
                                         <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase border inline-block mt-1 ${getStatusStyle(inv.status)}`}>{inv.status || 'Incoming'}</span>
                                     </div>
                                 </div>

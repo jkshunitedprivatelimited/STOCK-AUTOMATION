@@ -42,7 +42,8 @@ const CentralStaffLogins = lazy(() => import("./pages/central/central_staff_logi
 const CentralVendors = lazy(() => import("./pages/central/central_vendors"));
 const PosManagement = lazy(() => import("./pages/central/central_master_menu"));
 const Reports = lazy(() => import("./pages/central/central_reports"));
-const FranchiseReplies = lazy(() => import("./pages/central/central_franchise_replies"));
+const FranchiseReplies = lazy(() => import("./pages/central/central_stock_requests"));
+const CentralInternalStockRequests = lazy(() => import("./pages/central/central_internal_stock_requests"));
 const CentralStockMaster = lazy(() => import("./pages/central/central_stock_master"));
 const InvoiceDesign = lazy(() => import("./pages/central/central_register_company"));
 const PackageBills = lazy(() => import("./pages/central/central_new_franchise_bills"));
@@ -327,10 +328,19 @@ function App() {
               />
 
               <Route
-                path="/central/central_franchise_replies"
+                path="/central/central_stock_requests"
+                element={
+                  <ProtectedRoute allowedRoles={["central", "stock"]}>
+                    <FranchiseReplies />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/central/internal-stock-requests"
                 element={
                   <ProtectedRoute allowedRoles={["central"]}>
-                    <FranchiseReplies />
+                    <CentralInternalStockRequests />
                   </ProtectedRoute>
                 }
               />
@@ -338,7 +348,7 @@ function App() {
               <Route
                 path="/central/replies"
                 element={
-                  <ProtectedRoute allowedRoles={["central"]}>
+                  <ProtectedRoute allowedRoles={["central", "stock"]}>
                     <FranchiseReplies />
                   </ProtectedRoute>
                 }

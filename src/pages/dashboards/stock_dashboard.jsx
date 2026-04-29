@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { supabase } from "../../frontend_supabase/supabaseClient";
 import {
   Home,
   Package,
@@ -47,6 +48,7 @@ function StockManagerDashboard() {
   );
 
   const [screenSize, setScreenSize] = useState('desktop');
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
 
   // 2. DATA SYNC: Update state and session storage when user data is available
   useEffect(() => {
@@ -82,13 +84,29 @@ function StockManagerDashboard() {
     };
   }, []);
 
+  // 4. DATA: Fetch pending stock requests count
+  useEffect(() => {
+    async function getPendingRequests() {
+      const { count, error } = await supabase
+        .from('stock_request_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'received');
+      if (!error && count !== null) setPendingRequestsCount(count);
+    }
+    getPendingRequests();
+    const channel = supabase.channel('stock-dashboard-requests')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_request_orders' }, getPendingRequests)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
+
   // --- NAVIGATION DATA ---
   const navItems = [
     { title: "Update Stock", path: "/stock", icon: <Package />, desc: "Manage inventory" },
     { title: "Orders", path: "/stock/orders", icon: <Home />, desc: "View stock orders" },
     { title: "Invoices & Billing", path: "/stock/bills", icon: <Receipt />, desc: "Billing records" },
     { title: "Reports", path: "/stock/reports", icon: <BarChart3 />, desc: "Sales analytics", disabled: true },
-    { title: "Staff", path: "/stock/staff", icon: <Users />, desc: "Team management", disabled: true },
+    { title: "Stock Requests", path: "/central/central_stock_requests", icon: <Users />, desc: "Franchise requests", disabled: false },
     { title: "Settings", path: "/stock/settings", icon: <Settings />, desc: "Configuration" },
   ];
 
@@ -237,12 +255,29 @@ function StockManagerDashboard() {
               </div>
 
               <div style={styles.cardContent}>
-                <h2 style={{
-                  ...styles.cardTitle,
-                  fontSize: screenSize === 'mobile' ? '16px' : '22px'
-                }}>
-                  {item.title}
-                </h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h2 style={{
+                    ...styles.cardTitle,
+                    fontSize: screenSize === 'mobile' ? '16px' : '22px'
+                  }}>
+                    {item.title}
+                  </h2>
+                  {item.title === "Stock Requests" && pendingRequestsCount > 0 && (
+                    <span style={{
+                      background: '#ef4444',
+                      color: 'white',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      padding: '2px 8px',
+                      borderRadius: '999px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      {pendingRequestsCount}
+                    </span>
+                  )}
+                </div>
                 {screenSize !== 'mobile' && <span style={styles.cardSubtitle}>{item.desc}</span>}
               </div>
 

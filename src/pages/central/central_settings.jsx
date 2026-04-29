@@ -3,10 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../frontend_supabase/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 import {
-  ArrowLeft, Lock, LogOut, Eye, EyeOff, CreditCard, MessageCircle
+  ArrowLeft, Lock, LogOut, Eye, EyeOff, CreditCard, SendHorizontal
 } from "lucide-react";
 
-const BRAND_GREEN = "rgb(0, 100, 55)";
+import { BRAND_GREEN } from "../../utils/theme";
 const SOFT_BORDER = "rgba(0, 100, 55, 0.15)";
 
 function CentralSettings() {
@@ -20,7 +20,7 @@ function CentralSettings() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [onlinePayments, setOnlinePayments] = useState(false);
-  const [chatSupport, setChatSupport] = useState(false);
+  const [stockRequests, setStockRequests] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
 
   // FIX: Define fetchProfile BEFORE calling it in useEffect
@@ -41,19 +41,19 @@ function CentralSettings() {
     fetchProfile();
   }, [authUser]);
 
-  // Fetch central settings (online payments, chat support)
+  // Fetch central settings (online payments, stock requests)
   useEffect(() => {
     const fetchSettings = async () => {
       setSettingsLoading(true);
       const { data, error } = await supabase
         .from("central_settings")
         .select("key, enabled")
-        .in("key", ["online_payments", "chat_support"]);
+        .in("key", ["online_payments", "stock_requests"]);
 
       if (!error && data) {
         data.forEach((s) => {
           if (s.key === "online_payments") setOnlinePayments(s.enabled);
-          if (s.key === "chat_support") setChatSupport(s.enabled);
+          if (s.key === "stock_requests") setStockRequests(s.enabled);
         });
       }
       setSettingsLoading(false);
@@ -252,29 +252,29 @@ function CentralSettings() {
             </div>
           </div>
 
-          {/* 3. CHAT SUPPORT CARD */}
+          {/* 3. STOCK REQUESTS CARD */}
           <div className="bg-white rounded-[24px] md:rounded-[32px] border p-6 md:p-8 shadow-sm flex flex-col h-full min-h-[320px]" style={{ borderColor: SOFT_BORDER }}>
             <div className="flex items-center gap-4 mb-4">
               <div className="p-3 rounded-xl bg-emerald-50" style={{ color: BRAND_GREEN }}>
-                <MessageCircle className="w-6 h-6" strokeWidth={2.5} />
+                <SendHorizontal className="w-6 h-6" strokeWidth={2.5} />
               </div>
-              <h3 className="text-lg font-black uppercase tracking-tight text-black">Chat Support</h3>
+              <h3 className="text-lg font-black uppercase tracking-tight text-black">Stock Requests</h3>
             </div>
 
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed mb-6">
-              Enable or disable the live chat support feature for all franchise outlets.
+              Enable or disable the stock request portal for all franchise outlets.
             </p>
 
             <div className="flex-1 flex flex-col justify-center items-center gap-4">
               <button
-                onClick={() => !settingsLoading && handleToggle("chat_support", chatSupport, setChatSupport)}
+                onClick={() => !settingsLoading && handleToggle("stock_requests", stockRequests, setStockRequests)}
                 disabled={settingsLoading}
                 className="relative outline-none border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
                   width: 72,
                   height: 38,
                   borderRadius: 19,
-                  backgroundColor: chatSupport ? BRAND_GREEN : "#d1d5db",
+                  backgroundColor: stockRequests ? BRAND_GREEN : "#d1d5db",
                   transition: "background-color 0.3s ease",
                   padding: 0,
                 }}
@@ -282,7 +282,7 @@ function CentralSettings() {
                 <span style={{
                   position: "absolute",
                   top: 4,
-                  left: chatSupport ? 38 : 4,
+                  left: stockRequests ? 38 : 4,
                   width: 30,
                   height: 30,
                   borderRadius: 15,
@@ -292,8 +292,8 @@ function CentralSettings() {
                   display: "block",
                 }} />
               </button>
-              <span className="text-[10px] font-black uppercase tracking-[0.3em]" style={{ color: chatSupport ? BRAND_GREEN : "#9ca3af" }}>
-                {settingsLoading ? "Loading..." : chatSupport ? "Enabled" : "Disabled"}
+              <span className="text-[10px] font-black uppercase tracking-[0.3em]" style={{ color: stockRequests ? BRAND_GREEN : "#9ca3af" }}>
+                {settingsLoading ? "Loading..." : stockRequests ? "Enabled" : "Disabled"}
               </span>
             </div>
           </div>

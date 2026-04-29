@@ -104,7 +104,7 @@ const BillDetailsModal = ({ bill, onClose, onReprint, onCancelRequest }) => {
                     <span style={{ fontWeight: '600' }}>{item.item_name}</span>
                     <div style={{ fontSize: '11px', color: '#64748b' }}>Qty: {item.qty}</div>
                   </div>
-                  <span style={{ fontWeight: '700' }}>₹{item.total.toFixed(2)}</span>
+                  <span style={{ fontWeight: '700' }}>₹{(item.total || 0).toFixed(2)}</span>
                 </div>
               ))}
             </div>
@@ -121,7 +121,7 @@ const BillDetailsModal = ({ bill, onClose, onReprint, onCancelRequest }) => {
             </div>
             <div style={{ ...styles.summaryRow, fontSize: '18px', color: '#000' }}>
               <span>Total Amount</span>
-              <span>₹{bill.total.toFixed(2)}</span>
+              <span>₹{(bill.total || 0).toFixed(2)}</span>
             </div>
           </div>
         </div>
@@ -268,9 +268,9 @@ function BillingHistory() {
         address: parts.join(", "),
         subtotal: (bill.subtotal || 0).toFixed(2),
         discount: (bill.discount || 0).toFixed(2),
-        total: bill.total.toFixed(2),
+        total: (bill.total || 0).toFixed(2),
         thankYouMsg: "*** DUPLICATE RECEIPT ***\nThank You! Visit Again",
-        items: bill.bills_items_generated.map(i => ({ name: i.item_name, qty: i.qty, subtotal: i.total.toFixed(2) })),
+        items: bill.bills_items_generated.map(i => ({ name: i.item_name, qty: i.qty, subtotal: (i.total || 0).toFixed(2) })),
         billId: bill.id.toString().slice(-6).toUpperCase()
       });
     } catch { alert("Reprint failed."); }
@@ -278,7 +278,9 @@ function BillingHistory() {
 
   const confirmDelete = async () => {
     try {
-      await supabase.from("bills_generated").delete().eq("id", billToDelete);
+      const { data, error } = await supabase.from("bills_generated").delete().eq("id", billToDelete).select();
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error("Delete blocked by RLS.");
       setHistory(prev => prev.filter(b => b.id !== billToDelete));
       
       // Invalidate analytics caches
@@ -327,10 +329,10 @@ function BillingHistory() {
   };
 
   const stats = useMemo(() => {
-    const totalSales = history.reduce((sum, b) => sum + b.total, 0);
+    const totalSales = history.reduce((sum, b) => sum + (b.total || 0), 0);
     const orderCount = history.length;
-    const upiSales = history.reduce((sum, b) => (b.payment_mode === "UPI" ? sum + b.total : sum), 0);
-    const cashSales = history.reduce((sum, b) => (b.payment_mode === "CASH" ? sum + b.total : sum), 0);
+    const upiSales = history.reduce((sum, b) => (b.payment_mode === "UPI" ? sum + (b.total || 0) : sum), 0);
+    const cashSales = history.reduce((sum, b) => (b.payment_mode === "CASH" ? sum + (b.total || 0) : sum), 0);
     const totalDiscount = history.reduce((sum, b) => sum + (b.discount || 0), 0);
     return { totalSales, orderCount, upiSales, cashSales, totalDiscount };
   }, [history]);
@@ -442,7 +444,7 @@ function BillingHistory() {
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: '900', fontSize: '18px' }}>₹{bill.total.toFixed(2)}</div>
+                      <div style={{ fontWeight: '900', fontSize: '18px' }}>₹{(bill.total || 0).toFixed(2)}</div>
                       <div style={{ marginTop: '4px' }}>
                         <span style={{ ...styles.modeBadge, background: bill.payment_mode === "CASH" ? "#f0fdf4" : "#eff6ff", color: bill.payment_mode === "CASH" ? PRIMARY : "#2563eb" }}>{bill.payment_mode}</span>
                       </div>
@@ -492,7 +494,7 @@ function BillingHistory() {
                     <td style={{ ...styles.td, color: bill.discount > 0 ? DANGER : '#94a3b8', fontWeight: bill.discount > 0 ? '700' : '400' }}>
                       {bill.discount > 0 ? `-₹${bill.discount.toFixed(2)}` : '-'}
                     </td>
-                    <td style={{ ...styles.td, fontWeight: "900", fontSize: '16px' }}>₹{bill.total.toFixed(2)}</td>
+                    <td style={{ ...styles.td, fontWeight: "900", fontSize: '16px' }}>₹{(bill.total || 0).toFixed(2)}</td>
                     <td style={styles.td}>
                       <button style={styles.viewBtn} onClick={(e) => { e.stopPropagation(); startTransition(() => setSelectedBill(bill)); }}>VIEW</button>
                     </td>

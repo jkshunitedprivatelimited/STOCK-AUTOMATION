@@ -60,6 +60,7 @@ function Store() {
   // CHECKOUT STATES
   const [discountValue, setDiscountValue] = useState(0);
   const [discountType, setDiscountType] = useState("fixed");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const franchiseId = user?.franchise_id ? String(user.franchise_id) : null;
 
@@ -165,6 +166,8 @@ function Store() {
 
   /* TRANSACTION LOGIC */
   const handleCompleteTransaction = async (method) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       if (!franchiseId) throw new Error("Franchise identification failed.");
       const { data: bill, error: billError } = await supabase.from("bills_generated").insert([{
@@ -196,10 +199,6 @@ function Store() {
         if (key.startsWith("analyticsCache_")) sessionStorage.removeItem(key);
       });
 
-      setCart([]);
-      setDiscountValue(0);
-      setShowPaymentModal(false);
-
       if (isConnected) {
         try {
           let finalAddress = "";
@@ -229,9 +228,15 @@ function Store() {
       } else {
         setTimeout(() => alert("Bill saved!"), 300);
       }
+      
+      setCart([]);
+      setDiscountValue(0);
+      setShowPaymentModal(false);
     } catch (err) {
       console.error(err);
       alert(`Checkout failed: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -421,7 +426,7 @@ function Store() {
                 </div>
                 <div style={{ ...styles.summaryLine, marginTop: '5px', marginBottom: '15px' }}>
                   <span style={{ fontWeight: '900', fontSize: '20px', color: BLACK }}>Total to Pay</span>
-                  <span style={{ ...styles.grandTotal, fontSize: '24px' }}>₹{totals.subtotal.toFixed(2)}</span>
+                  <span style={{ ...styles.grandTotal, fontSize: '24px' }}>₹{totals.total.toFixed(2)}</span>
                 </div>
                 <button
                   style={styles.payBtn}
@@ -489,8 +494,8 @@ function Store() {
                   <div style={{ fontSize: isMobile ? '28px' : '42px', fontWeight: '900', color: PRIMARY }}>₹{totals.total.toFixed(2)}</div>
                 </div>
                 <div style={{ ...styles.paymentButtonRow, flexDirection: 'row' }}>
-                  <button style={{ ...styles.payMethodBtn, padding: isMobile ? '15px' : '20px' }} onClick={() => handleCompleteTransaction("CASH")}>CASH</button>
-                  <button style={{ ...styles.payMethodBtn, padding: isMobile ? '15px' : '20px', background: '#2563eb' }} onClick={() => handleCompleteTransaction("UPI")}>UPI</button>
+                  <button style={{ ...styles.payMethodBtn, padding: isMobile ? '15px' : '20px', opacity: isSubmitting ? 0.7 : 1 }} disabled={isSubmitting} onClick={() => handleCompleteTransaction("CASH")}>{isSubmitting ? "PROCESSING..." : "CASH"}</button>
+                  <button style={{ ...styles.payMethodBtn, padding: isMobile ? '15px' : '20px', background: '#2563eb', opacity: isSubmitting ? 0.7 : 1 }} disabled={isSubmitting} onClick={() => handleCompleteTransaction("UPI")}>{isSubmitting ? "PROCESSING..." : "UPI"}</button>
                 </div>
               </div>
             </div>

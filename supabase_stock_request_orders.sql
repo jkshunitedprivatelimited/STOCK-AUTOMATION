@@ -49,25 +49,39 @@ CREATE POLICY "Users can update their own request orders"
   ON stock_request_orders FOR UPDATE
   USING (auth.uid() = user_id);
 
--- Central/admin users can view all orders (role = 'central' in profiles)
+-- Central/admin users can view all orders (role = 'central' or 'stock' in profiles)
+DROP POLICY IF EXISTS "Central can view all request orders" ON stock_request_orders;
 CREATE POLICY "Central can view all request orders"
   ON stock_request_orders FOR SELECT
   USING (
     EXISTS (
       SELECT 1 FROM profiles
       WHERE profiles.id = auth.uid()
-      AND (profiles.role = 'central' OR profiles.franchise_id = 'CENTRAL')
+      AND (profiles.role IN ('central', 'stock') OR profiles.franchise_id = 'CENTRAL')
     )
   );
 
 -- Central/admin users can update all orders (status changes)
+DROP POLICY IF EXISTS "Central can update all request orders" ON stock_request_orders;
 CREATE POLICY "Central can update all request orders"
   ON stock_request_orders FOR UPDATE
   USING (
     EXISTS (
       SELECT 1 FROM profiles
       WHERE profiles.id = auth.uid()
-      AND (profiles.role = 'central' OR profiles.franchise_id = 'CENTRAL')
+      AND (profiles.role IN ('central', 'stock') OR profiles.franchise_id = 'CENTRAL')
+    )
+  );
+
+-- Central/admin users can delete all orders
+DROP POLICY IF EXISTS "Central can delete all request orders" ON stock_request_orders;
+CREATE POLICY "Central can delete all request orders"
+  ON stock_request_orders FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid()
+      AND (profiles.role IN ('central', 'stock') OR profiles.franchise_id = 'CENTRAL')
     )
   );
 

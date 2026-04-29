@@ -1,0 +1,572 @@
+{
+  "communities": {
+    "0": [
+      "central_central_invoices_centralinvoices",
+      "central_central_settings_centralsettings",
+      "central_central_staff_profiles_centralstaffprofiles",
+      "central_central_staff_profiles_fullpageinvoice",
+      "central_central_transportation_service_centraltransportationservice",
+      "central_central_transportation_service_customstyles",
+      "central_central_vendors_centralvendors",
+      "central_central_vendors_customstyles",
+      "central_central_voucher_centralvoucher",
+      "components_dashboardnavbar_dashboardnavbar",
+      "components_mobilenav_mobilenav",
+      "context_authcontext_authprovider",
+      "context_authcontext_useauth",
+      "dashboards_central_dashboard_centraldashboard",
+      "dashboards_office_staff_attendance_dashboard_getdistance",
+      "dashboards_office_staff_attendance_dashboard_officestaffattendancedashboard",
+      "dashboards_stock_dashboard_getsessionitem",
+      "dashboards_stock_dashboard_setsessionitem",
+      "dashboards_stock_dashboard_stockmanagerdashboard",
+      "franchise_franchise_settings_franchisesettingscard",
+      "landing_login_login",
+      "routes_protectedroute_protectedroute",
+      "src_components_dashboardnavbar_jsx",
+      "src_components_mobilenav_jsx",
+      "src_context_authcontext_jsx",
+      "src_pages_central_central_settings_jsx",
+      "src_pages_central_central_staff_profiles_jsx",
+      "src_pages_central_central_transportation_service_jsx",
+      "src_pages_central_central_vendors_jsx",
+      "src_pages_central_central_voucher_jsx",
+      "src_pages_dashboards_central_dashboard_jsx",
+      "src_pages_dashboards_office_staff_attendance_dashboard_jsx",
+      "src_pages_dashboards_stock_dashboard_jsx",
+      "src_pages_franchise_franchise_settings_jsx",
+      "src_pages_landing_login_jsx",
+      "src_pages_stock_stock_orders_jsx",
+      "src_pages_stock_stock_settings_jsx",
+      "src_routes_protectedroute_jsx",
+      "stock_stock_orders_formatdatetime",
+      "stock_stock_orders_stockorders",
+      "stock_stock_settings_settings"
+    ],
+    "1": [
+      "central_central_quotation_bills_amounttowords",
+      "central_central_quotation_bills_formatcurrency",
+      "central_central_quotation_bills_formatdate",
+      "central_central_quotation_bills_formattime",
+      "central_central_quotation_bills_fullpageinvoice",
+      "central_central_quotation_bills_oldquotations",
+      "printer_bluetoothprinter_printerprovider",
+      "printer_bluetoothprinter_usebluetoothprinter",
+      "src_pages_central_central_quotation_bills_jsx",
+      "src_pages_printer_bluetoothprinter_jsx",
+      "src_pages_store_store_billing_history_jsx",
+      "src_pages_store_store_new_bills_jsx",
+      "store_store_billing_history_billdetailsmodal",
+      "store_store_billing_history_billinghistory",
+      "store_store_billing_history_canceltimerbutton",
+      "store_store_new_bills_store"
+    ],
+    "2": [
+      "central_central_stock_requests_amounttowords",
+      "central_central_stock_requests_centralstockrequests",
+      "central_central_stock_requests_formatcurrency",
+      "central_central_stock_requests_getpricemultiplier",
+      "central_central_stock_requests_requestinvoice",
+      "franchise_central_franchise_stock_order_fullpageinvoice",
+      "src_pages_central_central_stock_requests_jsx",
+      "src_pages_stock_stock_invoices_jsx",
+      "stock_stock_invoices_fullpageinvoice",
+      "stock_stock_invoices_getsessionitem",
+      "stock_stock_invoices_invoicesbilling",
+      "stock_stock_invoices_setsessionitem",
+      "stock_stock_orders_fullpageinvoice"
+    ],
+    "3": [
+      "franchise_central_franchise_stock_order_getemailstyles",
+      "franchise_central_franchise_stock_order_getmoq",
+      "franchise_central_franchise_stock_order_getpricemultiplier",
+      "franchise_central_franchise_stock_order_getsessiondata",
+      "franchise_central_franchise_stock_order_loadimageasbase64",
+      "franchise_central_franchise_stock_order_loadrazorpayscript",
+      "franchise_central_franchise_stock_order_stockorder",
+      "franchise_central_franchise_stock_order_stockskeleton",
+      "franchise_central_franchise_stock_order_toastcontainer",
+      "franchise_central_franchise_stock_order_validateandclampqty",
+      "src_pages_franchise_central_franchise_stock_order_jsx"
+    ],
+    "4": [
+      "central_central_stock_master_centralstockmaster",
+      "central_central_stock_master_companybadge",
+      "central_central_stock_master_customselect",
+      "central_central_stock_master_labeledinput",
+      "central_central_stock_master_sortarrows",
+      "central_central_stock_master_stockunittoggle",
+      "central_central_stock_master_taxtoggle",
+      "src_pages_central_central_stock_master_jsx"
+    ],
+    "5": [
+      "src_pages_stock_stock_update_jsx",
+      "stock_stock_update_companybadge",
+      "stock_stock_update_customselect",
+      "stock_stock_update_labeledinput",
+      "stock_stock_update_sortarrows",
+      "stock_stock_update_stockunittoggle",
+      "stock_stock_update_stockupdate",
+      "stock_stock_update_taxtoggle"
+    ],
+    "6": [
+      "central_central_reports_calladmindeletebillitem",
+      "central_central_reports_clearreportscaches",
+      "central_central_reports_discountreevalmodal",
+      "central_central_reports_reports",
+      "central_central_reports_safegetcache",
+      "central_central_reports_safesetcache",
+      "src_pages_central_central_reports_jsx"
+    ],
+    "7": [
+      "components_errorboundary_errorboundary",
+      "components_errorboundary_errorboundary_componentdidcatch",
+      "components_errorboundary_errorboundary_constructor",
+      "components_errorboundary_errorboundary_getderivedstatefromerror",
+      "components_errorboundary_errorboundary_render",
+      "src_components_errorboundary_jsx"
+    ],
+    "8": [
+      "frontend_supabase_supabaseclient_checksupabaseconnection",
+      "frontend_supabase_supabaseclient_fetchwithretry",
+      "frontend_supabase_supabaseclient_getproxiedurl",
+      "frontend_supabase_supabaseclient_isnetworkerror",
+      "frontend_supabase_supabaseclient_resilientfetch",
+      "src_frontend_supabase_supabaseclient_js"
+    ],
+    "9": [
+      "franchise_franchise_invoices_formatdate",
+      "franchise_franchise_invoices_formattime",
+      "franchise_franchise_invoices_franchiseinvoices",
+      "franchise_franchise_invoices_fullpageinvoice",
+      "franchise_franchise_invoices_parsedate",
+      "src_pages_franchise_franchise_invoices_jsx"
+    ],
+    "10": [
+      "franchise_franchise_reports_billitems",
+      "franchise_franchise_reports_confirmdeletemodal",
+      "franchise_franchise_reports_discountreevalmodal",
+      "franchise_franchise_reports_franchiseanalytics",
+      "franchise_franchise_reports_safesetsessionstorage",
+      "src_pages_franchise_franchise_reports_jsx"
+    ],
+    "11": [
+      "central_central_staff_logins_amounttowords",
+      "central_central_staff_logins_centralstafflogins",
+      "central_central_staff_logins_formatcurrency",
+      "central_central_staff_logins_fullpageinvoice",
+      "central_central_staff_logins_parsedate",
+      "src_pages_central_central_staff_logins_jsx"
+    ],
+    "12": [
+      "supabase_functions_send_contact_enquiry_index_ts",
+      "supabase_functions_send_enquiry_email_index_ts",
+      "supabase_functions_send_invoice_email_index_ts",
+      "supabase_functions_send_monthly_report_index_ts",
+      "supabase_functions_shared_cors_ts"
+    ],
+    "13": [
+      "central_central_new_franchise_bills_amounttowords",
+      "central_central_new_franchise_bills_formatcurrency",
+      "central_central_new_franchise_bills_fullpageinvoice",
+      "central_central_new_franchise_bills_packagebills",
+      "src_pages_central_central_new_franchise_bills_jsx"
+    ],
+    "14": [
+      "central_central_invoices_amounttowords",
+      "central_central_invoices_formatcurrency",
+      "central_central_invoices_fullpageinvoice",
+      "src_pages_central_central_invoices_jsx"
+    ],
+    "15": [
+      "bulk_register_js",
+      "stock_automation_bulk_register_bulkregister",
+      "stock_automation_bulk_register_generatepassword"
+    ],
+    "16": [
+      "razorpay_webhook_index_refundpayment",
+      "razorpay_webhook_index_verifysignature",
+      "supabase_functions_razorpay_webhook_index_ts"
+    ],
+    "17": [
+      "src_app_app",
+      "src_app_jsx",
+      "src_app_settingswrapper"
+    ],
+    "18": [
+      "src_utils_formatters_js",
+      "utils_formatters_amounttowords",
+      "utils_formatters_formatcurrency"
+    ],
+    "19": [
+      "landing_legalpolicies_legalpolicies",
+      "landing_legalpolicies_policysection",
+      "src_components_landing_legalpolicies_jsx"
+    ],
+    "20": [
+      "franchise_franchise_stock_requests_getpricemultiplier",
+      "franchise_franchise_stock_requests_requestportal",
+      "src_pages_franchise_franchise_stock_requests_jsx"
+    ],
+    "21": [
+      "register_registeruser_inputgroup",
+      "register_registeruser_registeruser",
+      "src_pages_register_registeruser_jsx"
+    ],
+    "22": [
+      "central_central_internal_stock_requests_centralinternalstockrequests",
+      "central_central_internal_stock_requests_getpricemultiplier",
+      "src_pages_central_central_internal_stock_requests_jsx"
+    ],
+    "23": [
+      "check_rls_js",
+      "stock_automation_check_rls_check"
+    ],
+    "24": [
+      "stock_automation_vite_config_manualchunks",
+      "vite_config_js"
+    ],
+    "25": [
+      "api_send_monthly_report_handler",
+      "api_send_monthly_report_js"
+    ],
+    "26": [
+      "api_contact_handler",
+      "api_contact_js"
+    ],
+    "27": [
+      "components_bottomnav_bottomnav",
+      "src_components_bottomnav_jsx"
+    ],
+    "28": [
+      "landing_footer_footer",
+      "src_components_landing_footer_jsx"
+    ],
+    "29": [
+      "landing_about_about",
+      "src_components_landing_about_jsx"
+    ],
+    "30": [
+      "landing_imagedivider_imagedivider",
+      "src_components_landing_imagedivider_jsx"
+    ],
+    "31": [
+      "landing_visionmission_visionmission",
+      "src_components_landing_visionmission_jsx"
+    ],
+    "32": [
+      "landing_brands_brands",
+      "src_components_landing_brands_jsx"
+    ],
+    "33": [
+      "landing_companyinfo_companyinfo",
+      "src_components_landing_companyinfo_jsx"
+    ],
+    "34": [
+      "landing_navbar_navbar",
+      "src_components_landing_navbar_jsx"
+    ],
+    "35": [
+      "landing_hero_hero",
+      "src_components_landing_hero_jsx"
+    ],
+    "36": [
+      "landing_values_values",
+      "src_components_landing_values_jsx"
+    ],
+    "37": [
+      "landing_services_services",
+      "src_components_landing_services_jsx"
+    ],
+    "38": [
+      "landing_contact_contact",
+      "src_components_landing_contact_jsx"
+    ],
+    "39": [
+      "landing_careers_careers",
+      "src_pages_landing_careers_jsx"
+    ],
+    "40": [
+      "landing_landingpage_landingpage",
+      "src_pages_landing_landingpage_jsx"
+    ],
+    "41": [
+      "franchise_franchise_staff_login_timings_logintimings",
+      "src_pages_franchise_franchise_staff_login_timings_jsx"
+    ],
+    "42": [
+      "franchise_franchise_staff_profiles_franchiseprofiles",
+      "src_pages_franchise_franchise_staff_profiles_jsx"
+    ],
+    "43": [
+      "franchise_franchise_menus_franchisemenu",
+      "src_pages_franchise_franchise_menus_jsx"
+    ],
+    "44": [
+      "dashboards_franchise_dashboard_franchiseownerdashboard",
+      "src_pages_dashboards_franchise_dashboard_jsx"
+    ],
+    "45": [
+      "central_central_franchise_profiles_centralprofiles",
+      "src_pages_central_central_franchise_profiles_jsx"
+    ],
+    "46": [
+      "central_central_register_company_invoicedesign",
+      "src_pages_central_central_register_company_jsx"
+    ],
+    "47": [
+      "central_central_office_staff_centralofficestaff",
+      "src_pages_central_central_office_staff_jsx"
+    ],
+    "48": [
+      "central_central_master_menu_posmanagement",
+      "src_pages_central_central_master_menu_jsx"
+    ],
+    "49": [
+      "login_static_page_staticpage",
+      "src_pages_login_static_page_jsx"
+    ],
+    "50": [
+      "tailwind_config_js"
+    ],
+    "51": [
+      "eslint_config_js"
+    ],
+    "52": [
+      "postcss_config_js"
+    ],
+    "53": [
+      "supabase_functions_admin_delete_bill_item_index_ts"
+    ],
+    "54": [
+      "supabase_functions_register_user_index_ts"
+    ],
+    "55": [
+      "supabase_functions_update_password_index_ts"
+    ],
+    "56": [
+      "supabase_functions_admin_delete_user_index_ts"
+    ],
+    "57": [
+      "src_main_jsx"
+    ],
+    "58": [
+      "src_utils_logger_js"
+    ],
+    "59": [
+      "src_utils_theme_js"
+    ],
+    "60": [
+      "src_utils_headerstyles_js"
+    ]
+  },
+  "cohesion": {
+    "0": 0.05,
+    "1": 0.14,
+    "2": 0.22,
+    "3": 0.2,
+    "4": 0.25,
+    "5": 0.25,
+    "6": 0.29,
+    "7": 0.33,
+    "8": 0.47,
+    "9": 0.67,
+    "10": 0.33,
+    "11": 0.33,
+    "12": 0.4,
+    "13": 0.6,
+    "14": 0.83,
+    "15": 1.0,
+    "16": 0.67,
+    "17": 0.67,
+    "18": 0.67,
+    "19": 0.67,
+    "20": 0.67,
+    "21": 0.67,
+    "22": 0.67,
+    "23": 1.0,
+    "24": 1.0,
+    "25": 1.0,
+    "26": 1.0,
+    "27": 1.0,
+    "28": 1.0,
+    "29": 1.0,
+    "30": 1.0,
+    "31": 1.0,
+    "32": 1.0,
+    "33": 1.0,
+    "34": 1.0,
+    "35": 1.0,
+    "36": 1.0,
+    "37": 1.0,
+    "38": 1.0,
+    "39": 1.0,
+    "40": 1.0,
+    "41": 1.0,
+    "42": 1.0,
+    "43": 1.0,
+    "44": 1.0,
+    "45": 1.0,
+    "46": 1.0,
+    "47": 1.0,
+    "48": 1.0,
+    "49": 1.0,
+    "50": 1.0,
+    "51": 1.0,
+    "52": 1.0,
+    "53": 1.0,
+    "54": 1.0,
+    "55": 1.0,
+    "56": 1.0,
+    "57": 1.0,
+    "58": 1.0,
+    "59": 1.0,
+    "60": 1.0
+  },
+  "gods": [
+    {
+      "id": "context_authcontext_useauth",
+      "label": "useAuth()",
+      "degree": 24
+    },
+    {
+      "id": "central_central_stock_requests_formatcurrency",
+      "label": "formatCurrency()",
+      "degree": 7
+    },
+    {
+      "id": "central_central_stock_requests_amounttowords",
+      "label": "amountToWords()",
+      "degree": 6
+    },
+    {
+      "id": "components_errorboundary_errorboundary",
+      "label": "ErrorBoundary",
+      "degree": 5
+    },
+    {
+      "id": "franchise_franchise_invoices_formatdate",
+      "label": "formatDate()",
+      "degree": 4
+    },
+    {
+      "id": "franchise_franchise_invoices_fullpageinvoice",
+      "label": "FullPageInvoice()",
+      "degree": 4
+    },
+    {
+      "id": "printer_bluetoothprinter_usebluetoothprinter",
+      "label": "useBluetoothPrinter()",
+      "degree": 3
+    },
+    {
+      "id": "franchise_franchise_invoices_parsedate",
+      "label": "parseDate()",
+      "degree": 3
+    },
+    {
+      "id": "franchise_franchise_invoices_formattime",
+      "label": "formatTime()",
+      "degree": 3
+    },
+    {
+      "id": "franchise_franchise_invoices_franchiseinvoices",
+      "label": "FranchiseInvoices()",
+      "degree": 3
+    }
+  ],
+  "surprises": [
+    {
+      "source": "OldQuotations()",
+      "target": "useAuth()",
+      "source_files": [
+        "src/pages/central/central_quotation_bills.jsx",
+        "src/context/AuthContext.jsx"
+      ],
+      "confidence": "INFERRED",
+      "relation": "calls",
+      "why": "inferred connection - not explicitly stated in source; bridges separate communities; peripheral node `OldQuotations()` unexpectedly reaches hub `useAuth()`"
+    },
+    {
+      "source": "PackageBills()",
+      "target": "useAuth()",
+      "source_files": [
+        "src/pages/central/central_new_franchise_bills.jsx",
+        "src/context/AuthContext.jsx"
+      ],
+      "confidence": "INFERRED",
+      "relation": "calls",
+      "why": "inferred connection - not explicitly stated in source; bridges separate communities; peripheral node `PackageBills()` unexpectedly reaches hub `useAuth()`"
+    },
+    {
+      "source": "CentralStockMaster()",
+      "target": "useAuth()",
+      "source_files": [
+        "src/pages/central/central_stock_master.jsx",
+        "src/context/AuthContext.jsx"
+      ],
+      "confidence": "INFERRED",
+      "relation": "calls",
+      "why": "inferred connection - not explicitly stated in source; bridges separate communities; peripheral node `CentralStockMaster()` unexpectedly reaches hub `useAuth()`"
+    },
+    {
+      "source": "InvoicesBilling()",
+      "target": "useAuth()",
+      "source_files": [
+        "src/pages/stock/stock_invoices.jsx",
+        "src/context/AuthContext.jsx"
+      ],
+      "confidence": "INFERRED",
+      "relation": "calls",
+      "why": "inferred connection - not explicitly stated in source; bridges separate communities; peripheral node `InvoicesBilling()` unexpectedly reaches hub `useAuth()`"
+    },
+    {
+      "source": "StockUpdate()",
+      "target": "useAuth()",
+      "source_files": [
+        "src/pages/stock/stock_update.jsx",
+        "src/context/AuthContext.jsx"
+      ],
+      "confidence": "INFERRED",
+      "relation": "calls",
+      "why": "inferred connection - not explicitly stated in source; bridges separate communities; peripheral node `StockUpdate()` unexpectedly reaches hub `useAuth()`"
+    }
+  ],
+  "questions": [
+    {
+      "type": "bridge_node",
+      "question": "Why does `useAuth()` connect `Community 0` to `Community 1`, `Community 2`, `Community 4`, `Community 5`, `Community 13`?",
+      "why": "High betweenness centrality (0.190) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `formatCurrency()` connect `Community 2` to `Community 9`, `Community 3`?",
+      "why": "High betweenness centrality (0.045) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `InvoicesBilling()` connect `Community 2` to `Community 0`?",
+      "why": "High betweenness centrality (0.044) - this node is a cross-community bridge."
+    },
+    {
+      "type": "verify_inferred",
+      "question": "Are the 23 inferred relationships involving `useAuth()` (e.g. with `DashboardNavbar()` and `MobileNav()`) actually correct?",
+      "why": "`useAuth()` has 23 INFERRED edges - model-reasoned connections that need verification."
+    },
+    {
+      "type": "verify_inferred",
+      "question": "Are the 5 inferred relationships involving `formatCurrency()` (e.g. with `FullPageInvoice()` and `FullPageInvoice()`) actually correct?",
+      "why": "`formatCurrency()` has 5 INFERRED edges - model-reasoned connections that need verification."
+    },
+    {
+      "type": "verify_inferred",
+      "question": "Are the 4 inferred relationships involving `amountToWords()` (e.g. with `FullPageInvoice()` and `FullPageInvoice()`) actually correct?",
+      "why": "`amountToWords()` has 4 INFERRED edges - model-reasoned connections that need verification."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `Community 0` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.05 - nodes in this community are weakly interconnected."
+    }
+  ]
+}

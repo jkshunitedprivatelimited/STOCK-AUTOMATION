@@ -8,6 +8,7 @@ import {
     ChevronUp, ChevronDown, CheckCircle, Package, Tag, Hash,
     ShoppingCart, Edit2
 } from "lucide-react";
+import { BRAND_GREEN as BRAND_COLOR } from "../../utils/theme";
 
 // --- HELPER COMPONENTS ---
 
@@ -105,7 +106,7 @@ const CompanyBadge = ({ value }) => {
 function CentralStockMaster() {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const BRAND_COLOR = "rgb(0, 100, 55)";
+
 
     // --- STATE ---
     const [items, setItems] = useState([]);

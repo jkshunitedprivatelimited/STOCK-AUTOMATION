@@ -223,17 +223,22 @@ function FranchiseAnalytics() {
     setDeleting(true);
     try {
       // Delete child items first, then the bill itself
-      const { error: itemsError } = await supabase
+      const { data: itemsData, error: itemsError } = await supabase
         .from("bills_items_generated")
         .delete()
-        .eq("bill_id", bill.id);
+        .eq("bill_id", bill.id)
+        .select();
       if (itemsError) throw itemsError;
 
-      const { error: billError } = await supabase
+      const { data: billData, error: billError } = await supabase
         .from("bills_generated")
         .delete()
-        .eq("id", bill.id);
+        .eq("id", bill.id)
+        .select();
       if (billError) throw billError;
+      if (!billData || billData.length === 0) {
+        throw new Error("Delete blocked by RLS or record not found.");
+      }
 
       clearAnalyticsCaches();
       fetchOldestRecord(true);
@@ -258,11 +263,15 @@ function FranchiseAnalytics() {
     setDeleting(true);
     try {
       // Delete the item
-      const { error: delError } = await supabase
+      const { data: delData, error: delError } = await supabase
         .from("bills_items_generated")
         .delete()
-        .eq("id", item.id);
+        .eq("id", item.id)
+        .select();
       if (delError) throw delError;
+      if (!delData || delData.length === 0) {
+        throw new Error("Delete blocked by RLS or record not found.");
+      }
 
       // Recalculate bill totals
       const itemTotal = item.total ? Number(item.total) : (Number(item.qty ?? 0) * Number(item.price ?? 0));
@@ -310,11 +319,15 @@ function FranchiseAnalytics() {
 
     setDeleting(true);
     try {
-      const { error: delError } = await supabase
+      const { data: delData, error: delError } = await supabase
         .from("bills_items_generated")
         .delete()
-        .eq("id", item.id);
+        .eq("id", item.id)
+        .select();
       if (delError) throw delError;
+      if (!delData || delData.length === 0) {
+        throw new Error("Delete blocked by RLS or record not found.");
+      }
 
       const itemTotal = item.total ? Number(item.total) : (Number(item.qty ?? 0) * Number(item.price ?? 0));
       const newSubtotal = Number(bill.subtotal ?? 0) - itemTotal;
@@ -405,13 +418,27 @@ function FranchiseAnalytics() {
   };
 
   const processChartData = (data) => {
+    if (!data.length) return [];
     const map = {};
     data.forEach(r => {
+      const d = new Date(r.created_at);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       const amt = Number(r.total ?? r.total_amount ?? 0);
-      const dateKey = new Date(r.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-      map[dateKey] = (map[dateKey] || 0) + amt;
+      map[key] = (map[key] || 0) + amt;
     });
-    return Object.entries(map).map(([date, sales]) => ({ date, sales })).reverse();
+    // Fill every day between min and max dates so the chart has no gaps
+    const dateKeys = Object.keys(map).sort();
+    const minDate = new Date(dateKeys[0] + 'T00:00:00');
+    const maxDate = new Date(dateKeys[dateKeys.length - 1] + 'T00:00:00');
+    const result = [];
+    const cursor = new Date(minDate);
+    while (cursor <= maxDate) {
+      const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+      const label = cursor.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+      result.push({ date: label, sales: map[key] || 0 });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return result;
   };
 
   const fetchTopItems = async (ids) => {
@@ -620,26 +647,28 @@ function FranchiseAnalytics() {
                 <h3>Revenue Trend</h3>
                 <span className="badge">₹{graphData.reduce((a, b) => a + b.sales, 0).toLocaleString('en-IN')} Total</span>
               </div>
-              <div className="chart-wrapper">
-                {graphData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={graphData}>
-                      <defs>
-                        <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={PRIMARY} stopOpacity={0.2} />
-                          <stop offset="95%" stopColor={PRIMARY} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="date" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} />
-                      <YAxis fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${v}`} width={40} />
-                      <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-                      <Area type="monotone" dataKey="sales" stroke={PRIMARY} strokeWidth={2} fill="url(#colorSales)" animationDuration={1000} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="no-data">No sales data for selected period</div>
-                )}
+              <div className="chart-scroll-wrapper">
+                <div style={{ minWidth: Math.max(400, graphData.length * 55) + 'px', height: '250px' }}>
+                  {graphData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={graphData}>
+                        <defs>
+                          <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={PRIMARY} stopOpacity={0.2} />
+                            <stop offset="95%" stopColor={PRIMARY} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="date" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} />
+                        <YAxis fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${v}`} width={40} />
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                        <Area type="monotone" dataKey="sales" stroke={PRIMARY} strokeWidth={2} fill="url(#colorSales)" animationDuration={1000} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="no-data">No sales data for selected period</div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -863,6 +892,11 @@ function FranchiseAnalytics() {
         .badge { font-size: 12px; font-weight: 700; color: var(--primary); background: #ecfdf5; padding: 4px 8px; border-radius: 20px; }
         .count-badge { font-size: 10px; font-weight: 600; color: var(--text-sub); background: #f1f5f9; padding: 3px 8px; border-radius: 4px; }
         .chart-wrapper { height: 250px; padding: 10px; }
+        .chart-scroll-wrapper { overflow-x: auto; width: 100%; padding: 10px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+        .chart-scroll-wrapper::-webkit-scrollbar { height: 6px; }
+        .chart-scroll-wrapper::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 3px; }
+        .chart-scroll-wrapper::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .chart-scroll-wrapper::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         .pie-content { display: flex; flex-direction: column; padding: 16px; }
         .pie-wrapper { height: 180px; width: 100%; }
         .top-items-table { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }

@@ -2,13 +2,14 @@ import React, { useState, useEffect } from "react";
 import { supabase, fetchWithRetry } from "../../frontend_supabase/supabaseClient";
 import {
   ArrowLeft, Plus, Trash2, Edit2,
-  Search, Calendar, X, Filter, ChevronDown, ChevronUp, CheckCircle, XCircle, MoreVertical, RefreshCw, Layers, Trash, RotateCcw
+  Search, Calendar, X, Filter, ChevronDown, ChevronUp, CheckCircle, XCircle, MoreVertical, RefreshCw, Layers, Trash, RotateCcw, Edit, Save, Loader2, AlertCircle
 } from "lucide-react";
+import { BRAND_GREEN as brandGreen } from "../../utils/theme";
 import { useNavigate } from "react-router-dom";
 
 function FranchiseMenu() {
   const navigate = useNavigate();
-  const brandGreen = "rgb(0, 100, 55)";
+
 
   // State
   const [menuItems, setMenuItems] = useState([]);

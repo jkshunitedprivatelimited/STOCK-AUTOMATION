@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import {
   FileText, Users, Settings, LayoutDashboard,
   BarChart3, ChevronRight, Package, ShoppingBag,
-  Headphones, Calendar, Truck, UserCheck, Printer, Receipt, Ticket, UserCog
+  Headphones, Calendar, Truck, UserCheck, Printer, Receipt, Ticket, UserCog, ClipboardList
 } from "lucide-react";
 import { BRAND_GREEN } from "../../utils/theme";
 
@@ -18,6 +18,7 @@ function CentralDashboard() {
   const { user } = useAuth();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [profile, setProfile] = useState({ name: "User", franchise_id: "...", role: "central" });
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
 
   const today = new Date();
   const formattedDate = today.toLocaleDateString('en-US', {
@@ -47,6 +48,21 @@ function CentralDashboard() {
     getProfile();
   }, [user]);
 
+  useEffect(() => {
+    async function getPendingRequests() {
+      const { count, error } = await supabase
+        .from('stock_request_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'received');
+      if (!error && count !== null) setPendingRequestsCount(count);
+    }
+    getPendingRequests();
+    const channel = supabase.channel('central-dashboard-requests')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_request_orders' }, getPendingRequests)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
+
   // Cards grouped: Operations → Orders & Logistics → Billing → Analytics → People → Admin
   const navItems = [
     // — Operations —
@@ -56,7 +72,8 @@ function CentralDashboard() {
 
     // — Orders & Logistics —
     { title: "Internal Order", path: "/central/internal-order", icon: <ShoppingBag size={isMobile ? 20 : 24} />, desc: "Franchise requests" },
-    { title: "Stock Requests", path: "/central/central_franchise_replies", icon: <Headphones size={isMobile ? 20 : 24} />, desc: "Help desk tickets" },
+    { title: "Internal Stock Request", path: "/central/internal-stock-requests", icon: <ClipboardList size={isMobile ? 20 : 24} />, desc: "Request stock for Central" },
+    { title: "Stock Requests", path: "/central/central_stock_requests", icon: <Headphones size={isMobile ? 20 : 24} />, desc: "Help desk tickets" },
     { title: "Transportation Service", path: "/central/transportation-service", icon: <Truck size={isMobile ? 20 : 24} />, desc: "Manage delivery charges" },
 
     // — Billing —
@@ -191,9 +208,26 @@ function CentralDashboard() {
                 {item.icon}
               </div>
               <div style={styles.cardContent}>
-                <h2 style={{ ...styles.cardTitle, fontSize: isMobile ? '16px' : '22px' }}>
-                  {item.title}
-                </h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h2 style={{ ...styles.cardTitle, fontSize: isMobile ? '16px' : '22px' }}>
+                    {item.title}
+                  </h2>
+                  {item.title === "Stock Requests" && pendingRequestsCount > 0 && (
+                    <span style={{
+                      background: '#ef4444',
+                      color: 'white',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      padding: '2px 8px',
+                      borderRadius: '999px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      {pendingRequestsCount}
+                    </span>
+                  )}
+                </div>
                 {!isMobile && <span style={styles.cardSubtitle}>{item.desc}</span>}
               </div>
 

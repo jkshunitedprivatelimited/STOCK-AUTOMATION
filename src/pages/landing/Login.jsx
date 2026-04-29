@@ -45,28 +45,22 @@ function Login() {
       }
     });
 
-    // Optimized Logo Fetch
-    const fetchJkshLogo = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('companies')
-          .select('logo_url')
-          .ilike('company_name', '%JKSH%')
-          .maybeSingle();
-
-        if (error) throw error;
-
-        if (data?.logo_url) {
-          const proxiedUrl = getProxiedUrl(data.logo_url);
-          setDynamicLogo(proxiedUrl);
-          localStorage.setItem("jksh_logo_url", data.logo_url);
-        }
-      } catch (e) {
-        console.error("Failed to update logo:", e);
-      }
-    };
-
-    fetchJkshLogo();
+    // Logo fetch: only if no cached version exists
+    if (!localStorage.getItem("jksh_logo_url")) {
+      supabase
+        .from('companies')
+        .select('logo_url')
+        .ilike('company_name', '%JKSH%')
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.logo_url) {
+            const proxiedUrl = getProxiedUrl(data.logo_url);
+            setDynamicLogo(proxiedUrl);
+            localStorage.setItem("jksh_logo_url", data.logo_url);
+          }
+        })
+        .catch(() => {});
+    }
 
     return () => {
       window.removeEventListener('resize', handleResize);
@@ -119,18 +113,7 @@ function Login() {
         throw retryErr;
       }
 
-      // ── STEP 2.5: Ensure session is fully established ──
-      setStatusMsg("Securing session...");
-
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      if (!currentSession) {
-        await supabase.auth.setSession({
-          access_token: authData.session.access_token,
-          refresh_token: authData.session.refresh_token,
-        });
-      }
+      // Session is automatically established by signInWithPassword — no delay needed
 
       // ── STEP 3: Fetch profile with retry ──
       setStatusMsg("Loading your profile...");

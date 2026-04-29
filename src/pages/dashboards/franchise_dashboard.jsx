@@ -28,6 +28,7 @@ function FranchiseOwnerDashboard() {
   const [franchiseId, setFranchiseId] = useState("...");
   const [notifications, setNotifications] = useState([]);
   const [onlinePaymentsEnabled, setOnlinePaymentsEnabled] = useState(false);
+  const [stockRequestsEnabled, setStockRequestsEnabled] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -59,17 +60,19 @@ function FranchiseOwnerDashboard() {
     };
   }, []);
 
-  // Fetch central settings to check if online payments is enabled
+  // Fetch central settings to check if online payments and stock requests are enabled
   useEffect(() => {
     const fetchCentralSettings = async () => {
       const { data, error } = await supabase
         .from("central_settings")
         .select("key, enabled")
-        .eq("key", "online_payments")
-        .single();
+        .in("key", ["online_payments", "stock_requests"]);
 
       if (!error && data) {
-        setOnlinePaymentsEnabled(data.enabled);
+        data.forEach((s) => {
+          if (s.key === "online_payments") setOnlinePaymentsEnabled(s.enabled);
+          if (s.key === "stock_requests") setStockRequestsEnabled(s.enabled);
+        });
       }
     };
     fetchCentralSettings();
@@ -122,7 +125,7 @@ function FranchiseOwnerDashboard() {
   const navItems = [
     { title: "Order Stock", path: "/stock-orders", icon: <ShoppingBag size={24} />, desc: "Procure inventory", comingSoon: !onlinePaymentsEnabled },
     { title: "Invoices", path: "/franchise/invoices", icon: <FileText size={24} />, desc: "Billing history" },
-    { title: "Stock Request", path: "/franchise/requestportal", icon: <SendHorizontal size={24} />, desc: "Support & maintenance", comingSoon: true },
+    { title: "Stock Request", path: "/franchise/requestportal", icon: <SendHorizontal size={24} />, desc: "Request stock from central", comingSoon: !stockRequestsEnabled },
     { title: "Analytics", path: "/franchise/analytics", icon: <BarChart3 size={24} />, desc: "Sales performance" },
     { title: "Staff Profiles", path: "/franchise/staff", icon: <Users size={24} />, desc: "Manage employees" },
     { title: "Settings", path: "/franchise/settings", icon: <Settings size={24} />, desc: "Configure store" },
