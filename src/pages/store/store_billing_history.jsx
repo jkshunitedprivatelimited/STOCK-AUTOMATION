@@ -55,7 +55,7 @@ const CancelTimerButton = ({ createdAt, onCancel }) => {
   };
 
   if (isExpired) return null;
-
+//
   return (
     <button style={styles.cancelBtn} onClick={(e) => { e.stopPropagation(); onCancel(); }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
