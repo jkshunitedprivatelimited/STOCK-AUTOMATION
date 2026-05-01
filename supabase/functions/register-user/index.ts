@@ -1,12 +1,11 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from "@supabase/supabase-js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -44,6 +43,28 @@ serve(async (req) => {
       );
     }
 
+    // --- NEW: Validate Email Domain (MX Records Check) to prevent fake/typo domains before creating user ---
+    const domain = email.split('@')[1];
+    if (domain) {
+      try {
+        const mxRecords = await Deno.resolveDns(domain, "MX");
+        if (!mxRecords || mxRecords.length === 0) {
+          throw new Error("No MX records");
+        }
+      } catch (err) {
+        return new Response(
+          JSON.stringify({ error: `Invalid email domain (@${domain}). It seems to be misspelled or does not exist.` }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        );
+      }
+    } else {
+      return new Response(
+        JSON.stringify({ error: "Invalid email format." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
+    }
+    // -------------------------------------------------------------------------------------------------------
+
     // 4. Create the User via Admin API
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: email,
@@ -63,7 +84,7 @@ serve(async (req) => {
         const origin = req.headers.get("origin") || "https://jkshunited.com";
         const loginUrl = `${origin}/login`;
 
-        await fetch("https://api.resend.com/emails", {
+        const resendResponse = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -119,10 +140,50 @@ serve(async (req) => {
             `,
           }),
         });
-        console.log(`Explicit Resend email sent to ${email}`);
+
+        const resData = await resendResponse.json();
+
+        // If Resend synchronously rejects it (e.g. invalid format, blocked domain)
+        if (!resendResponse.ok) {
+          console.error("Resend API rejected the email:", resData);
+          // Rollback: Delete the user we just created
+          await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+          return new Response(
+            JSON.stringify({ error: `User account not created because the email is invalid (${resData.message || 'Rejected'})` }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+          );
+        }
+
+        console.log(`Explicit Resend email sent to ${email}. ID: ${resData.id}. Waiting 8s to check bounce status...`);
+        
+        // --- NEW: Wait 8 seconds and check Resend status to catch quick bounces! ---
+        if (resData.id) {
+          await new Promise(resolve => setTimeout(resolve, 8000));
+          try {
+            const statusResponse = await fetch(`https://api.resend.com/emails/${resData.id}`, {
+              headers: { "Authorization": `Bearer ${resendApiKey}` }
+            });
+            const statusData = await statusResponse.json();
+            
+            console.log(`Email Status Check: ${statusData.last_event || 'unknown'}`);
+            
+            if (statusData.last_event === 'bounced') {
+              console.error("Email bounced immediately. Rolling back user creation...");
+              await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+              return new Response(
+                JSON.stringify({ error: "User account not created because the email is invalid (Delivery Bounced)" }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+              );
+            }
+          } catch (statusErr) {
+            console.error("Failed to check email status, proceeding anyway:", statusErr);
+          }
+        }
+        // ---------------------------------------------------------------------------
+
       } catch (emailErr) {
-        console.error("Failed to explicitly send Resend email:", emailErr);
-        // Continue anyway so registration doesn't fail if just the email fails
+        console.error("Network or parsing error sending Resend email:", emailErr);
+        // Continue if it's just a network timeout, or we could also rollback here. Let's not rollback for network issues.
       }
     } else {
       console.warn("RESEND_API_KEY not found; skipping explicit Resend welcome email");
@@ -151,3 +212,4 @@ serve(async (req) => {
     );
   }
 });
+
