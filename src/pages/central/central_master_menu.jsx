@@ -23,6 +23,7 @@ function PosManagement() {
   const [selectedItems, setSelectedItems] = useState([]);
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isFranchiseDropdownOpen, setIsFranchiseDropdownOpen] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -111,7 +112,7 @@ function PosManagement() {
       // 2. Fetch franchise IDs from the profiles table
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select("franchise_id, company");
+        .select("franchise_id, company, name");
 
       if (profileError) throw profileError;
 
@@ -122,7 +123,8 @@ function PosManagement() {
           .filter(d => d.company && String(d.company).trim() !== "")
           .map(d => ({
             company_name: String(d.company).trim(),
-            franchise_id: d.franchise_id ? String(d.franchise_id).trim() : null
+            franchise_id: d.franchise_id ? String(d.franchise_id).trim() : null,
+            owner_name: d.name ? String(d.name).trim() : ""
           }));
 
         devLog("=== DEBUG 3: Cleaned allCompanyRecords ===", cleanedData);
@@ -161,7 +163,10 @@ function PosManagement() {
     const finalIds = [...new Set(matchingIds)].sort((a, b) => a.toString().localeCompare(b.toString(), undefined, { numeric: true, sensitivity: 'base' }));
 
     devLog("Final Unique IDs mapped to dropdown:", finalIds);
-    return finalIds;
+    return finalIds.map(id => {
+      const record = filteredRecords.find(p => p.franchise_id === id && p.owner_name);
+      return { id, name: record ? record.owner_name : "" };
+    });
   }, [selectedCompany, allCompanyRecords]);
 
   const getMenu = async (idOverride) => {
@@ -473,23 +478,87 @@ function PosManagement() {
 
             <div style={{ ...styles.selectWrapper, width: isMobile ? '100%' : '50%' }}>
               <label style={styles.miniLabel}>Select Franchise ID</label>
-              <select
-                style={{ ...styles.premiumSelect, opacity: !selectedCompany ? 0.5 : 1 }}
-                disabled={!selectedCompany}
-                value={viewFranchise}
-                onChange={e => {
-                  const val = e.target.value;
-                  setViewFranchise(val);
-                  getMenu(val);
-                }}
-              >
-                <option value="">
-                  {!selectedCompany
-                    ? "Select a Company First"
-                    : (filteredFranchises.length === 0 ? "No IDs assigned to this company" : "-- Choose Franchise --")}
-                </option>
-                {filteredFranchises.map(id => <option key={id} value={id}>{id}</option>)}
-              </select>
+              <div style={{ position: 'relative', width: '100%' }}>
+                <div
+                  style={{
+                    ...styles.premiumSelect,
+                    opacity: !selectedCompany ? 0.5 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    cursor: !selectedCompany ? 'not-allowed' : 'pointer'
+                  }}
+                  onClick={() => {
+                    if (selectedCompany) setIsFranchiseDropdownOpen(!isFranchiseDropdownOpen);
+                  }}
+                >
+                  {viewFranchise ? (
+                    filteredFranchises.find(f => f.id === viewFranchise)
+                      ? `${filteredFranchises.find(f => f.id === viewFranchise).name || "---"} - ${viewFranchise}`
+                      : viewFranchise
+                  ) : (
+                    !selectedCompany
+                      ? "Select a Company First"
+                      : (filteredFranchises.length === 0 ? "No IDs assigned to this company" : "-- Choose Franchise --")
+                  )}
+                </div>
+                
+                {isFranchiseDropdownOpen && (
+                  <>
+                    <div
+                      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 }}
+                      onClick={() => setIsFranchiseDropdownOpen(false)}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '52px',
+                        left: 0,
+                        width: '100%',
+                        maxHeight: '300px',
+                        overflowY: 'auto',
+                        background: '#fff',
+                        border: '2px solid #edf2f7',
+                        borderRadius: '10px',
+                        zIndex: 50,
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                      }}
+                    >
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                        <tbody>
+                          {filteredFranchises.map(f => (
+                            <tr
+                              key={f.id}
+                              style={{
+                                borderBottom: '1px solid #edf2f7',
+                                cursor: 'pointer',
+                                background: viewFranchise === f.id ? '#f1f5f9' : '#fff'
+                              }}
+                              onClick={() => {
+                                setViewFranchise(f.id);
+                                getMenu(f.id);
+                                setIsFranchiseDropdownOpen(false);
+                              }}
+                              onMouseEnter={(e) => {
+                                if (viewFranchise !== f.id) e.currentTarget.style.background = '#f8fafc';
+                              }}
+                              onMouseLeave={(e) => {
+                                if (viewFranchise !== f.id) e.currentTarget.style.background = '#fff';
+                              }}
+                            >
+                              <td style={{ padding: '12px 16px', borderRight: '1px solid #edf2f7', color: '#334155', fontWeight: '500' }}>
+                                {f.name || "---"}
+                              </td>
+                              <td style={{ padding: '12px 16px', color: '#64748b', whiteSpace: 'nowrap', width: '120px', textAlign: 'right' }}>
+                                {f.id}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </section>

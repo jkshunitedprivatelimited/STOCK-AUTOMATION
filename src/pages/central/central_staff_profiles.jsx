@@ -89,6 +89,7 @@ const CentralStaffProfiles = () => {
   const [selectedCompany, setSelectedCompany] = useState("");
   const [franchiseList, setFranchiseList] = useState([]);
   const [searchFranchiseId, setSearchFranchiseId] = useState("");
+  const [isFranchiseDropdownOpen, setIsFranchiseDropdownOpen] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [companyDetails, setCompanyDetails] = useState(null);
@@ -143,9 +144,10 @@ const CentralStaffProfiles = () => {
   // --- FETCH HELPERS ---
   const fetchCompanyList = async () => {
     try {
-      const { data, error } = await supabase.from('companies').select('company_name');
+      const { data, error } = await supabase.from('companies').select('company_name').order('company_name', { ascending: true });
       if (data && !error) {
-        const uniqueCompanies = [...new Set(data.map(c => c.company_name).filter(Boolean))];
+        const uniqueCompanies = [...new Set(data.map(c => c.company_name).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
         setCompanyList(uniqueCompanies);
       }
     } catch (err) {
@@ -157,13 +159,19 @@ const CentralStaffProfiles = () => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('franchise_id')
+        .select('franchise_id, name')
         .eq('company', companyName)
         .neq('franchise_id', null);
 
       if (data && !error) {
-        const uniqueFranchises = [...new Set(data.map(p => p.franchise_id).filter(Boolean))];
-        setFranchiseList(uniqueFranchises);
+        const uniqueIds = [...new Set(data.map(p => p.franchise_id).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+          
+        const franchisesWithNames = uniqueIds.map(id => {
+          const record = data.find(p => p.franchise_id === id && p.name);
+          return { id, name: record ? record.name : "" };
+        });
+        setFranchiseList(franchisesWithNames);
       }
     } catch (err) {
       console.error("Failed to load franchises:", err);
@@ -358,25 +366,84 @@ const CentralStaffProfiles = () => {
               </div>
 
               {/* Franchise ID Dropdown */}
-              <div style={{ position: 'relative', flex: 1 }}>
-                <select
-                  value={searchFranchiseId}
-                  onChange={(e) => setSearchFranchiseId(e.target.value)}
-                  disabled={!selectedCompany || franchiseList.length === 0}
+              <div style={{ position: 'relative', flex: 1, width: '100%' }}>
+                <div
                   style={{
                     ...styles.dropdownSelect,
                     backgroundColor: (!selectedCompany || franchiseList.length === 0) ? '#f8fafc' : 'white',
-                    cursor: (!selectedCompany || franchiseList.length === 0) ? 'not-allowed' : 'pointer'
+                    cursor: (!selectedCompany || franchiseList.length === 0) ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                  onClick={() => {
+                    if (selectedCompany && franchiseList.length > 0) setIsFranchiseDropdownOpen(!isFranchiseDropdownOpen);
                   }}
                 >
-                  <option value="" disabled>
-                    {!selectedCompany ? "Select Company First" : (franchiseList.length === 0 ? "No Franchises Found" : "Select Franchise ID")}
-                  </option>
-                  {franchiseList.map(fid => (
-                    <option key={fid} value={fid}>{fid}</option>
-                  ))}
-                </select>
+                  {searchFranchiseId ? (
+                    franchiseList.find(f => f.id === searchFranchiseId)
+                      ? `${franchiseList.find(f => f.id === searchFranchiseId).name || "---"} - ${searchFranchiseId}`
+                      : searchFranchiseId
+                  ) : (
+                    !selectedCompany ? "Select Company First" : (franchiseList.length === 0 ? "No Franchises Found" : "Select Franchise ID")
+                  )}
+                </div>
                 <ChevronDown size={16} color="#94a3b8" style={styles.dropdownArrow} />
+                
+                {isFranchiseDropdownOpen && (
+                  <>
+                    <div
+                      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 }}
+                      onClick={() => setIsFranchiseDropdownOpen(false)}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '46px',
+                        left: 0,
+                        width: '100%',
+                        maxHeight: '300px',
+                        overflowY: 'auto',
+                        background: '#fff',
+                        border: '2px solid #edf2f7',
+                        borderRadius: '10px',
+                        zIndex: 50,
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                      }}
+                    >
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                        <tbody>
+                          {franchiseList.map(f => (
+                            <tr
+                              key={f.id}
+                              style={{
+                                borderBottom: '1px solid #edf2f7',
+                                cursor: 'pointer',
+                                background: searchFranchiseId === f.id ? '#f1f5f9' : '#fff'
+                              }}
+                              onClick={() => {
+                                setSearchFranchiseId(f.id);
+                                setIsFranchiseDropdownOpen(false);
+                              }}
+                              onMouseEnter={(e) => {
+                                if (searchFranchiseId !== f.id) e.currentTarget.style.background = '#f8fafc';
+                              }}
+                              onMouseLeave={(e) => {
+                                if (searchFranchiseId !== f.id) e.currentTarget.style.background = '#fff';
+                              }}
+                            >
+                              <td style={{ padding: '12px 16px', borderRight: '1px solid #edf2f7', color: '#334155', fontWeight: '500' }}>
+                                {f.name || "---"}
+                              </td>
+                              <td style={{ padding: '12px 16px', color: '#64748b', whiteSpace: 'nowrap', width: '120px', textAlign: 'right' }}>
+                                {f.id}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
               </div>
 
             </div>

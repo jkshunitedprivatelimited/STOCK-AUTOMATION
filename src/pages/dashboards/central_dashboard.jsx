@@ -73,12 +73,12 @@ function CentralDashboard() {
     // — Orders & Logistics —
     { title: "Internal Order", path: "/central/internal-order", icon: <ShoppingBag size={isMobile ? 20 : 24} />, desc: "Franchise requests" },
     { title: "Internal Stock Request", path: "/central/internal-stock-requests", icon: <ClipboardList size={isMobile ? 20 : 24} />, desc: "Request stock for Central" },
-    { title: "Stock Requests", path: "/central/central_stock_requests", icon: <Headphones size={isMobile ? 20 : 24} />, desc: "Help desk tickets" },
+    { title: "Franchise Stock Requests", path: "/central/central_stock_requests", icon: <Headphones size={isMobile ? 20 : 24} />, desc: "Help desk tickets" },
     { title: "Transportation Service", path: "/central/transportation-service", icon: <Truck size={isMobile ? 20 : 24} />, desc: "Manage delivery charges" },
 
     // — Billing —
     { title: "Invoices", path: "/central/invoices", icon: <FileText size={isMobile ? 20 : 24} />, desc: "Billing & records" },
-    { title: "New Franchise Bills", path: "/central/package-bills", icon: <Receipt size={isMobile ? 20 : 24} />, desc: "Franchise setup billing" },
+    { title: "New Franchise Bills / WhatsApp Bills", path: "/central/central_new_bills", icon: <Receipt size={isMobile ? 20 : 24} />, desc: "Franchise setup billing" },
     { title: "Registration Bills", path: "/central/token-bills", icon: <FileText size={isMobile ? 20 : 24} />, desc: "Advanced payment registrations" },
     { title: "Vouchers", path: "/central/central_voucher", icon: <Ticket size={isMobile ? 20 : 24} />, desc: "Manage & print vouchers" },
 
@@ -86,7 +86,7 @@ function CentralDashboard() {
     { title: "Reports", path: "/central/central_reports", icon: <BarChart3 size={isMobile ? 20 : 24} />, desc: "Performance analytics" },
 
     // — People —
-    { title: "Office Staff", path: "/central/office_staff", icon: <UserCog size={isMobile ? 20 : 24} />, desc: "HQ Internal staff management" },
+    // { title: "Office Staff", path: "/central/office_staff", icon: <UserCog size={isMobile ? 20 : 24} />, desc: "HQ Internal staff management" },
     { title: "Franchise Profiles", path: "/central/central_franchise_profiles", icon: <Users size={isMobile ? 20 : 24} />, desc: "Franchise network" },
     { title: "Staff Profiles", path: "/central/central_staff_profiles", icon: <UserCheck size={isMobile ? 20 : 24} />, desc: "Employee management" },
     { title: "Register a company", path: "/central/central_register_company", icon: <Printer size={isMobile ? 20 : 24} />, desc: "Add new companies" },
@@ -212,7 +212,7 @@ function CentralDashboard() {
                   <h2 style={{ ...styles.cardTitle, fontSize: isMobile ? '16px' : '22px' }}>
                     {item.title}
                   </h2>
-                  {item.title === "Stock Requests" && pendingRequestsCount > 0 && (
+                  {item.title === "Franchise Stock Requests" && pendingRequestsCount > 0 && (
                     <span style={{
                       background: '#ef4444',
                       color: 'white',

@@ -46,7 +46,7 @@ const FranchiseReplies = lazy(() => import("./pages/central/central_stock_reques
 const CentralInternalStockRequests = lazy(() => import("./pages/central/central_internal_stock_requests"));
 const CentralStockMaster = lazy(() => import("./pages/central/central_stock_master"));
 const InvoiceDesign = lazy(() => import("./pages/central/central_register_company"));
-const PackageBills = lazy(() => import("./pages/central/central_new_franchise_bills"));
+const CentralNewBills = lazy(() => import("./pages/central/central_new_bills"));
 const OldQuotations = lazy(() => import("./pages/central/central_quotation_bills"));
 const OldTokenBills = lazy(() => import('./pages/central/central_token_bills'));
 const CentralVoucher = lazy(() => import('./pages/central/central_voucher'));
@@ -193,10 +193,10 @@ function App() {
               />
 
               <Route
-                path="/central/package-bills"
+                path="/central/central_new_bills"
                 element={
                   <ProtectedRoute allowedRoles={["central"]}>
-                    <PackageBills />
+                    <CentralNewBills />
                   </ProtectedRoute>
                 }
               />

@@ -96,6 +96,7 @@ function Reports() {
     const [search, setSearch] = useState("");
     const [selectedCompany, setSelectedCompany] = useState(() => sessionStorage.getItem("reports_selectedCompany") || "all");
     const [selectedFranchise, setSelectedFranchise] = useState(() => sessionStorage.getItem("reports_selectedFranchise") || "all");
+    const [isFranchiseDropdownOpen, setIsFranchiseDropdownOpen] = useState(false);
 
     // --- DATE FILTERS ---
     const [dateMode, setDateMode] = useState("single"); // 'single' | 'range'
@@ -163,7 +164,7 @@ function Reports() {
 
                 const { data, error } = await supabase
                     .from('profiles')
-                    .select('franchise_id')
+                    .select('franchise_id, name')
                     .eq('company', selectedCompany)
                     .neq('franchise_id', null);
 
@@ -171,10 +172,15 @@ function Reports() {
 
                 if (error) throw error;
                 if (data) {
-                    const unique = [...new Set(data.map(p => p.franchise_id).filter(Boolean))].sort((a, b) => a.toString().localeCompare(b.toString(), undefined, { numeric: true, sensitivity: 'base' }));
+                    const uniqueIds = [...new Set(data.map(p => p.franchise_id).filter(Boolean))].sort((a, b) => a.toString().localeCompare(b.toString(), undefined, { numeric: true, sensitivity: 'base' }));
 
-                    setDbFranchiseList(unique);
-                    safeSetCache(cacheKey, { data: unique, timestamp: Date.now() });
+                    const franchisesWithNames = uniqueIds.map(id => {
+                        const record = data.find(p => p.franchise_id === id && p.name);
+                        return { id, name: record ? record.name : "" };
+                    });
+
+                    setDbFranchiseList(franchisesWithNames);
+                    safeSetCache(cacheKey, { data: franchisesWithNames, timestamp: Date.now() });
                 }
             } catch (e) {
                 console.error("[FRANCHISE-DEBUG] Error fetching franchises:", e);
@@ -185,7 +191,7 @@ function Reports() {
 
     // Use only active franchise IDs from the database
     const mergedFranchiseList = useMemo(() => {
-        return [...dbFranchiseList].sort((a, b) => a.toString().localeCompare(b.toString(), undefined, { numeric: true, sensitivity: 'base' }));
+        return [...dbFranchiseList].sort((a, b) => a.id.toString().localeCompare(b.id.toString(), undefined, { numeric: true, sensitivity: 'base' }));
     }, [dbFranchiseList]);
 
     // Save dropdown selections to session storage
@@ -986,16 +992,66 @@ function Reports() {
                             {/* Franchise Select (FIXED CUTOFF) */}
                             <div className="relative h-12 md:h-14 border border-black/10 rounded-2xl px-4 flex items-center gap-3 w-full hover:border-black/30 transition-colors bg-white">
                                 <MapPin size={18} className="text-black shrink-0" />
-                                <select
-                                    className={`bg-transparent border-none outline-none text-[10px] sm:text-xs font-bold w-full appearance-none uppercase z-10 text-black truncate pr-6 ${selectedCompany === 'all' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                                    value={selectedFranchise}
-                                    onChange={(e) => setSelectedFranchise(e.target.value)}
-                                    disabled={selectedCompany === "all"}
+                                <div
+                                    className={`bg-transparent border-none outline-none text-[10px] sm:text-xs font-bold w-full appearance-none uppercase z-10 text-black flex items-center pr-6 ${selectedCompany === 'all' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                    onClick={() => {
+                                        if (selectedCompany !== "all") setIsFranchiseDropdownOpen(!isFranchiseDropdownOpen);
+                                    }}
                                 >
-                                    <option value="all">{selectedCompany === "all" ? "Select Company" : "All Branches"}</option>
-                                    {mergedFranchiseList.map(f => <option key={f} value={f}>ID: {f}</option>)}
-                                </select>
+                                    {selectedFranchise !== "all" ? (
+                                        mergedFranchiseList.find(f => f.id === selectedFranchise)
+                                            ? `${mergedFranchiseList.find(f => f.id === selectedFranchise).name || "---"} - ${selectedFranchise}`
+                                            : selectedFranchise
+                                    ) : (
+                                        selectedCompany === "all" ? "Select Company" : "All Branches"
+                                    )}
+                                </div>
                                 <ChevronDown size={14} className="absolute right-4 text-black z-0 pointer-events-none" />
+                                
+                                {isFranchiseDropdownOpen && (
+                                    <>
+                                        <div
+                                            className="fixed inset-0 z-40"
+                                            onClick={() => setIsFranchiseDropdownOpen(false)}
+                                        />
+                                        <div
+                                            className="absolute top-[52px] left-0 w-full max-h-[300px] overflow-y-auto bg-white border-2 border-slate-100 rounded-xl z-50 shadow-xl"
+                                        >
+                                            <table className="w-full border-collapse text-xs md:text-sm">
+                                                <tbody>
+                                                    <tr
+                                                        className={`border-b border-slate-100 cursor-pointer ${selectedFranchise === "all" ? "bg-slate-50" : "bg-white"} hover:bg-slate-50`}
+                                                        onClick={() => {
+                                                            setSelectedFranchise("all");
+                                                            setIsFranchiseDropdownOpen(false);
+                                                        }}
+                                                    >
+                                                        <td colSpan="2" className="p-3 font-bold text-slate-700 text-center uppercase">
+                                                            All Branches
+                                                        </td>
+                                                    </tr>
+                                                    {mergedFranchiseList.map(f => (
+                                                        <tr
+                                                            key={f.id}
+                                                            className={`border-b border-slate-100 cursor-pointer ${selectedFranchise === f.id ? "bg-slate-50" : "bg-white"} hover:bg-slate-50`}
+                                                            onClick={() => {
+                                                                setSelectedFranchise(f.id);
+                                                                setIsFranchiseDropdownOpen(false);
+                                                            }}
+                                                        >
+                                                            <td className="p-3 border-r border-slate-100 text-slate-700 font-medium">
+                                                                {f.name || "---"}
+                                                            </td>
+                                                            <td className="p-3 text-slate-500 whitespace-nowrap w-[100px] text-right font-bold uppercase">
+                                                                {f.id}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
 

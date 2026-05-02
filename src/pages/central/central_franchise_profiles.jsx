@@ -735,20 +735,7 @@ function CentralProfiles() {
                 </div>
               </div>
 
-              <div style={{ ...styles.formRow, flexDirection: isMobile ? 'column' : 'row' }}>
-                <div style={styles.inputGroup}>
-                  <label style={styles.label}>Transportation Charge (₹)</label>
-                  <input 
-                    style={styles.modalInput} 
-                    type="number"
-                    name="transportation_charge" 
-                    value={editForm.transportation_charge || ""} 
-                    onChange={handleInputChange} 
-                    placeholder="e.g. 500"
-                  />
-                </div>
-              </div>
-              {/* END OF NEW FIELDS */}
+
 
               <div style={{ ...styles.formRow, flexDirection: isMobile ? 'column' : 'row' }}>
                 <div style={styles.inputGroup}>
@@ -771,7 +758,7 @@ function CentralProfiles() {
               </div>
 
               <div style={styles.inputGroup}>
-                <label style={styles.label}>Permanent Address</label>
+                <label style={styles.label}>Street Address</label>
                 <textarea
                   style={{ ...styles.modalInput, height: '80px', resize: 'none' }}
                   name="address"

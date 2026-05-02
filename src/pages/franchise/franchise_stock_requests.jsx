@@ -133,14 +133,13 @@ const RequestPortal = () => {
 
   // Fetch my orders
   const fetchMyOrders = useCallback(async () => {
+    if (!profile?.franchise_id) return;
     setLoadingOrders(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
       const { data, error } = await supabase
         .from("stock_request_orders")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("franchise_id", profile.franchise_id)
         .in("status", ["received", "cancelled"])
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -150,7 +149,7 @@ const RequestPortal = () => {
     } finally {
       setLoadingOrders(false);
     }
-  }, []);
+  }, [profile]);
 
   useEffect(() => {
     fetchMyOrders();
@@ -296,18 +295,25 @@ const RequestPortal = () => {
     }
   };
 
-  // Cancel order
+  // Cancel order (Deletes the order entirely)
   const handleCancelOrder = async (orderId) => {
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("stock_request_orders")
-        .update({ status: "cancelled" })
-        .eq("id", orderId);
+        .delete()
+        .eq("id", orderId)
+        .select();
+        
       if (error) throw error;
-      addToast("success", "Request cancelled.");
+      
+      if (!data || data.length === 0) {
+        throw new Error("Cannot cancel orders placed by Central Admin directly. Please ask Central to cancel it.");
+      }
+      
+      addToast("success", "Request cancelled and removed.");
       fetchMyOrders();
-    } catch {
-      addToast("error", "Failed to cancel.");
+    } catch (e) {
+      addToast("error", e.message || "Failed to cancel request.");
     }
   };
 

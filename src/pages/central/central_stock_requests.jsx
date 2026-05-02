@@ -358,15 +358,15 @@ const CentralStockRequests = () => {
 
       // Batch-fetch franchise profiles for transportation charges
       if (data && data.length > 0) {
-        const uniqueUserIds = [...new Set(data.map(o => o.user_id).filter(Boolean))];
+        const uniqueFranchiseIds = [...new Set(data.map(o => o.franchise_id).filter(Boolean))];
         const { data: profilesData } = await supabase
           .from("profiles")
           .select("*")
-          .in("id", uniqueUserIds);
+          .in("franchise_id", uniqueFranchiseIds);
         if (profilesData) {
           setFranchiseProfiles(prev => {
             const updated = { ...prev };
-            profilesData.forEach(p => { updated[p.id] = p; });
+            profilesData.forEach(p => { updated[p.franchise_id] = p; });
             return updated;
           });
         }
@@ -389,11 +389,11 @@ const CentralStockRequests = () => {
   }, [fetchOrders]);
 
   // Fetch franchise profile for invoice when needed
-  const fetchFranchiseProfile = useCallback(async (userId) => {
-    if (franchiseProfiles[userId]) return franchiseProfiles[userId];
+  const fetchFranchiseProfile = useCallback(async (franchiseId) => {
+    if (franchiseProfiles[franchiseId]) return franchiseProfiles[franchiseId];
     try {
-      const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
-      if (data) setFranchiseProfiles(prev => ({ ...prev, [userId]: data }));
+      const { data } = await supabase.from("profiles").select("*").eq("franchise_id", franchiseId).single();
+      if (data) setFranchiseProfiles(prev => ({ ...prev, [franchiseId]: data }));
       return data;
     } catch { return null; }
   }, [franchiseProfiles]);
@@ -491,31 +491,80 @@ const CentralStockRequests = () => {
   // Undo order (move back to received)
   const undoOrder = async (orderId) => {
     const order = orders.find(o => o.id === orderId);
-    if (order?.status === "packed") {
-      addToast("error", "Cannot undo an accepted order because an invoice has already been generated and stocks deducted.");
+    if (!order) return;
+    
+    if (!window.confirm("Move this order back to Received? If this was accepted, its invoice will be deleted and stocks restored.")) {
       return;
     }
-    console.log("[UNDO] Button clicked. orderId:", orderId);
-    console.log("[UNDO] Current profile role:", profile?.role);
-    if (!window.confirm("Move this order back to Received?")) {
-      console.log("[UNDO] User cancelled confirm dialog");
-      return;
-    }
-    console.log("[UNDO] User confirmed. Attempting update...");
+    
     setUpdatingId(orderId);
     try {
+      if (order.status === "packed") {
+        // Try to delete the invoice associated with this order.
+        // We look for an invoice created around the same time with the same franchise_id and total amount.
+        // First, calculate the total amount of this order to find the matching invoice
+        let subtotal = 0;
+        let tax_amount = 0;
+        
+        let currentStocks = stocksData;
+        if (currentStocks.length === 0) {
+          const { data: fetchStocks } = await supabase.from('stocks').select('*');
+          if (fetchStocks) currentStocks = fetchStocks;
+        }
+        
+        const stockUpdates = [];
+        for (const reqItem of (order.items || [])) {
+          const stock = currentStocks.find(s => s.id === reqItem.stock_id);
+          if (!stock) continue;
+          
+          const qty = Number(reqItem.quantity) || 0;
+          let price = reqItem.price !== undefined && reqItem.price !== null ? Number(reqItem.price) : ((Number(stock.price) || 0) * getPriceMultiplier(stock.unit, reqItem.unit));
+          const gstRate = reqItem.gst_rate !== undefined ? Number(reqItem.gst_rate) : (Number(stock.gst_rate) || 0);
+          
+          const lineSubtotal = qty * price;
+          const lineGst = lineSubtotal * (gstRate / 100);
+          subtotal += lineSubtotal;
+          tax_amount += lineGst;
+          
+          stockUpdates.push({ id: stock.id, newQuantity: Number(stock.quantity) + qty });
+        }
+        
+        const franchiseProfile = franchiseProfiles[order.franchise_id] || {};
+        const transportationCharge = Number(order.transportation_charge) || Number(franchiseProfile?.transportation_charge) || 0;
+        const exactBill = parseFloat((subtotal + tax_amount + transportationCharge).toFixed(2));
+        const roundedBill = Math.ceil(exactBill);
+        
+        // Find the invoice to delete
+        const { data: matchedInvoices } = await supabase
+          .from("invoices")
+          .select("id")
+          .eq("franchise_id", order.franchise_id)
+          .eq("total_amount", roundedBill)
+          .order("created_at", { ascending: false })
+          .limit(1);
+          
+        if (matchedInvoices && matchedInvoices.length > 0) {
+          // Delete invoice items first (cascade should handle this, but just in case)
+          await supabase.from("invoice_items").delete().eq("invoice_id", matchedInvoices[0].id);
+          await supabase.from("invoices").delete().eq("id", matchedInvoices[0].id);
+        }
+        
+        // Restore stocks
+        for (const update of stockUpdates) {
+          await supabase.from('stocks').update({ quantity: update.newQuantity }).eq('id', update.id);
+        }
+      }
+
       const { data, error } = await supabase
         .from("stock_request_orders")
         .update({ status: "received" })
         .eq("id", orderId)
         .select();
-      console.log("[UNDO] Supabase response - data:", data, "error:", error);
+        
       if (error) throw error;
       if (!data || data.length === 0) {
-        console.warn("[UNDO] No rows updated! Possible RLS issue or orderId not found.");
         addToast("error", "No rows updated — check RLS or order ID.");
       } else {
-        console.log("[UNDO] Success! Updated row:", data[0]);
         addToast("success", "Order moved back to Received.");
       }
       fetchOrders(true);
@@ -549,7 +598,7 @@ const CentralStockRequests = () => {
       }
 
       // Fetch franchise profile for details
-      const franchiseProfile = await fetchFranchiseProfile(order.user_id) || {};
+      const franchiseProfile = await fetchFranchiseProfile(order.franchise_id) || {};
 
       let subtotal = 0;
       let tax_amount = 0;
@@ -677,7 +726,7 @@ const CentralStockRequests = () => {
 
   // Print handler
   const handlePrint = async (order) => {
-    await fetchFranchiseProfile(order.user_id);
+    await fetchFranchiseProfile(order.franchise_id);
     
     // Fetch correct company details for this order
     let printComp = companyDetails;
@@ -730,7 +779,7 @@ const CentralStockRequests = () => {
             key={index}
             order={printOrder}
             companyDetails={printCompanyDetails || companyDetails}
-            franchiseProfile={franchiseProfiles[printOrder.user_id] || null}
+            franchiseProfile={franchiseProfiles[printOrder.franchise_id] || null}
             logoBase64={printLogoBase64 || cachedLogoBase64}
             itemsChunk={chunk}
             pageIndex={index}
@@ -954,7 +1003,7 @@ const CentralStockRequests = () => {
                               totalGst += gst;
                               return { ...item, rate, gstRate, qty, sub, gst, lineTotal: sub + gst };
                             });
-                            const transportationCharge = Number(order.transportation_charge) || Number(franchiseProfiles[order.user_id]?.transportation_charge) || 0;
+                            const transportationCharge = Number(order.transportation_charge) || Number(franchiseProfiles[order.franchise_id]?.transportation_charge) || 0;
                             const exactBill = parseFloat((totalSub + totalGst + transportationCharge).toFixed(2));
                             const roundedBill = Math.ceil(exactBill);
                             const roundOff = roundedBill - exactBill;
@@ -1105,7 +1154,7 @@ const CentralStockRequests = () => {
                           totalGst += gst;
                           return { ...item, rate, gstRate, qty, sub, gst, lineTotal: sub + gst };
                         });
-                        const transportationCharge = Number(order.transportation_charge) || Number(franchiseProfiles[order.user_id]?.transportation_charge) || 0;
+                        const transportationCharge = Number(order.transportation_charge) || Number(franchiseProfiles[order.franchise_id]?.transportation_charge) || 0;
                         const exactBill = parseFloat((totalSub + totalGst + transportationCharge).toFixed(2));
                         const roundedBill = Math.ceil(exactBill);
                         const roundOff = roundedBill - exactBill;

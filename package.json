@@ -32,6 +32,7 @@
     "react-virtualized-auto-sizer": "^2.0.2",
     "react-window": "^2.2.6",
     "recharts": "^3.6.0",
+    "svix": "^1.92.2",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

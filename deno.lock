@@ -62,6 +62,8 @@
     "https://esm.sh/svix-fetch@3.0.0?target=denonext": "5a1dba6b172e83a41384b51192fe349e1efa6474c061bb82f936103190eee4b9",
     "https://esm.sh/svix@1.15.0": "fc3655a3437a78e5877949d407fd25e0859c3d72c5b77744fbfc019d4cc1fd28",
     "https://esm.sh/svix@1.15.0/denonext/svix.mjs": "020db9011aa63f0185623c7c7cc4915e366f333d0e450ca26bb0c95321e8cf66",
+    "https://esm.sh/svix@1.21.0": "c2eb9defb1133b7706d436110242f156000d5d806f280f96286312d9b430ba51",
+    "https://esm.sh/svix@1.21.0/denonext/svix.mjs": "fb57ac70b3647db6546cd6ac63d2e686b2a75fdcd2695115bcbbcabfa69d36b8",
     "https://esm.sh/tr46@0.0.3/denonext/tr46.mjs": "5753ec0a99414f4055f0c1f97691100f13d88e48a8443b00aebb90a512785fa2",
     "https://esm.sh/tr46@0.0.3?target=denonext": "19cb9be0f0d418a0c3abb81f2df31f080e9540a04e43b0f699bce1149cba0cbb",
     "https://esm.sh/tslib@2.8.1/denonext/tslib.mjs": "c38da5dd6da6281964435002ce204cd586634fe3bdfb24a0ee116f48cf3292e9",

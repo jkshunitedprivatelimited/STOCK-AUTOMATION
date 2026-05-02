@@ -571,9 +571,22 @@ function CentralInvoices() {
                             <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-slate-50/50">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                                     <div className="bg-white p-5 rounded-2xl border-l-4 shadow-sm border border-slate-100" style={{ borderLeftColor: PRIMARY }}>
-                                        <div className="flex items-center gap-3 mb-3"><Shield size={16} className="text-slate-400" /><span className="text-[10px] font-black uppercase text-slate-400">Origin Office</span></div>
-                                        <p className="text-base font-black text-slate-800">Franchise ID: {selectedInvoice.franchise_id}</p>
-                                        <p className="text-xs font-bold text-slate-500 mt-1">{selectedInvoice.branch_location || 'Main Outlets'}</p>
+                                        <div className="flex items-center gap-3 mb-3"><Shield size={16} className="text-slate-400" /><span className="text-[10px] font-black uppercase text-slate-400">Franchise Details</span></div>
+                                        <h3 className="text-base font-black text-slate-800 uppercase leading-tight mb-3">{selectedInvoice.customer_name}</h3>
+                                        
+                                        <div className="space-y-3">
+                                            <div>
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.15em] block mb-0.5">Franchise ID</span>
+                                                <p className="text-xs font-black text-slate-700">{selectedInvoice.franchise_id}</p>
+                                            </div>
+                                            <div>
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.15em] block mb-0.5">Branch Address</span>
+                                                <p className="text-[10px] font-bold text-slate-500 leading-relaxed max-w-[280px]">
+                                                    {selectedInvoice.branch_location && <span className="block text-slate-800 font-black mb-0.5">{selectedInvoice.branch_location}</span>}
+                                                    {selectedInvoice.customer_address || '—'}
+                                                </p>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div className="bg-white p-5 rounded-2xl border-l-4 shadow-sm border border-slate-100" style={{ borderLeftColor: '#3b82f6' }}>
                                         <div className="flex items-center gap-3 mb-3"><Activity size={16} className="text-slate-400" /><span className="text-[10px] font-black uppercase text-slate-400">Status</span></div>
@@ -768,7 +781,7 @@ function CentralInvoices() {
                                         <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 w-16 sticky top-0 bg-slate-50 z-20 shadow-sm">S.No</th>
                                         <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('id')}>Invoice <SortIcon columnKey="id" /></th>
                                         <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('franchise_id')}>Franchise <SortIcon columnKey="franchise_id" /></th>
-                                        <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('customer_name')}>Address <SortIcon columnKey="customer_name" /></th>
+                                        <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('customer_name')}>Name <SortIcon columnKey="customer_name" /></th>
                                         <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('status')}>Status <SortIcon columnKey="status" /></th>
                                         <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('created_at')}>Date & Time <SortIcon columnKey="created_at" /></th>
                                         <th className="p-6 text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-100 text-right cursor-pointer hover:text-black transition-colors sticky top-0 bg-slate-50 z-20 shadow-sm" onClick={() => handleSort('total_amount')}>Amount <SortIcon columnKey="total_amount" /></th>
@@ -786,8 +799,7 @@ function CentralInvoices() {
                                             <td className="p-6"><span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-[10px] font-black">#{inv.id.toString().slice(-6).toUpperCase()}</span></td>
                                             <td className="p-6"><span className="text-xs font-black text-slate-700">{inv.franchise_id}</span></td>
                                             <td className="p-6">
-                                                <div className="text-xs font-black text-slate-800">{inv.customer_name}</div>
-                                                <div className="text-[10px] font-bold text-slate-400 mt-0.5 max-w-[200px] truncate" title={inv.customer_address}>{inv.customer_address || inv.customer_phone}</div>
+                                                <div className="text-xs font-black text-slate-800 uppercase">{inv.customer_name || '—'}</div>
                                             </td>
                                             <td className="p-6"><span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase border ${getStatusStyle(inv.status)}`}>{inv.status || 'Incoming'}</span></td>
                                             <td className="p-6 text-xs font-bold text-slate-500 uppercase">{formatDateTime(inv.created_at)}</td>

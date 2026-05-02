@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Search, Truck, RefreshCw, Check, Users, IndianRupee,
-  ChevronDown, ChevronUp, Filter, X, CheckSquare, Square
+  ChevronDown, ChevronUp, Filter, X, CheckSquare, Square, Building2
 } from "lucide-react";
 import { supabase } from "../../frontend_supabase/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
@@ -31,8 +31,8 @@ const CentralTransportationService = () => {
 
 
   // Filters
-  const [filterState, setFilterState] = useState("");
-  const [filterCity, setFilterCity] = useState("");
+  const [companyList, setCompanyList] = useState([]);
+  const [filterCompany, setFilterCompany] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
 
@@ -53,7 +53,20 @@ const CentralTransportationService = () => {
   const [bulkSaving, setBulkSaving] = useState(false);
 
 
-  useEffect(() => { fetchProfiles(); }, []);
+  useEffect(() => { fetchProfiles(); fetchCompanies(); }, []);
+
+  const fetchCompanies = async () => {
+    try {
+      const { data, error } = await supabase.from('companies').select('company_name');
+      if (error) throw error;
+      if (data) {
+        const unique = [...new Set(data.map(c => c.company_name).filter(Boolean))].sort();
+        setCompanyList(unique);
+      }
+    } catch (err) {
+      console.error('Failed to fetch companies:', err);
+    }
+  };
 
 
   const fetchProfiles = async () => {
@@ -61,7 +74,7 @@ const CentralTransportationService = () => {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, name, franchise_id, role, phone, address, city, state, branch_location, transportation_charge")
+        .select("id, name, franchise_id, role, phone, address, city, state, branch_location, transportation_charge, company")
         .in("role", ["franchise", "central"])
         .order("franchise_id", { ascending: true });
       if (error) throw error;
@@ -72,12 +85,7 @@ const CentralTransportationService = () => {
   };
 
 
-  // Derived filter options
-  const stateOptions = useMemo(() => [...new Set(profiles.map(p => p.state).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })), [profiles]);
-  const cityOptions = useMemo(() => {
-    const filtered = filterState ? profiles.filter(p => p.state === filterState) : profiles;
-    return [...new Set(filtered.map(p => p.city).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-  }, [profiles, filterState]);
+  // Derived filter options — no longer needed for state/city
 
 
   // Sort handler
@@ -100,11 +108,11 @@ const CentralTransportationService = () => {
         (p.name && p.name.toLowerCase().includes(q)) ||
         (p.franchise_id && p.franchise_id.toLowerCase().includes(q)) ||
         (p.city && p.city.toLowerCase().includes(q)) ||
-        (p.state && p.state.toLowerCase().includes(q))
+        (p.state && p.state.toLowerCase().includes(q)) ||
+        (p.company && p.company.toLowerCase().includes(q))
       );
     }
-    if (filterState) list = list.filter(p => p.state === filterState);
-    if (filterCity) list = list.filter(p => p.city === filterCity);
+    if (filterCompany) list = list.filter(p => p.company && p.company.toLowerCase() === filterCompany.toLowerCase());
     list.sort((a, b) => {
       const aVal = (a[sortKey] || "").toString().toLowerCase();
       const bVal = (b[sortKey] || "").toString().toLowerCase();
@@ -116,7 +124,7 @@ const CentralTransportationService = () => {
         : bVal.localeCompare(aVal, undefined, { numeric: true, sensitivity: 'base' });
     });
     return list;
-  }, [profiles, searchTerm, filterState, filterCity, sortKey, sortDir]);
+  }, [profiles, searchTerm, filterCompany, sortKey, sortDir]);
 
 
   // Inline edit
@@ -178,8 +186,8 @@ const CentralTransportationService = () => {
   };
 
 
-  const clearFilters = () => { setFilterState(""); setFilterCity(""); setSearchTerm(""); };
-  const hasActiveFilters = filterState || filterCity || searchTerm;
+  const clearFilters = () => { setFilterCompany(""); setSearchTerm(""); };
+  const hasActiveFilters = filterCompany || searchTerm;
 
 
   const visibleIds = displayProfiles.map(p => p.id);
@@ -242,18 +250,11 @@ const CentralTransportationService = () => {
           {showFilters && (
             <div className="flex flex-col md:flex-row gap-2 p-3 bg-slate-100 rounded-xl border border-slate-200 animate-in slide-in-from-top-2 duration-200">
               <div className="relative flex-1">
-                <select value={filterState} onChange={(e) => { setFilterState(e.target.value); setFilterCity(""); }}
-                  className="w-full appearance-none bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-[#065f46] cursor-pointer pr-8">
-                  <option value="">All States</option>
-                  {stateOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              </div>
-              <div className="relative flex-1">
-                <select value={filterCity} onChange={(e) => setFilterCity(e.target.value)}
-                  className="w-full appearance-none bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-[#065f46] cursor-pointer pr-8">
-                  <option value="">All Cities</option>
-                  {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                <Building2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)}
+                  className="w-full appearance-none bg-white border border-slate-200 rounded-lg pl-9 pr-8 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-[#065f46] cursor-pointer">
+                  <option value="">All Companies</option>
+                  {companyList.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>

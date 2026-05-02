@@ -161,29 +161,44 @@ function RegisterUser() {
         role: 'franchise'
       };
 
-      // DEBUG: Verify the data is leaving React correctly
-      console.log("🚀 SENDING PAYLOAD TO SUPABASE EDGE FUNCTION:", metadataPayload);
+      // Call the edge function directly with a longer timeout (45s)
+      // because the function polls Resend for ~15s to detect email bounces.
+      // The default supabase client fetch has a 10s timeout which is too short.
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token || supabaseAnonKey;
 
-      const { data: resData, error } = await supabase.functions.invoke('register-user', {
-        body: {
-          email: emailStr.trim().toLowerCase(),
-          password: passwordStr,
-          metadata: metadataPayload
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 45000);
+
+      let resData;
+      try {
+        const response = await fetch(`${supabaseUrl}/functions/v1/register-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+            'apikey': supabaseAnonKey,
+          },
+          body: JSON.stringify({
+            email: emailStr.trim().toLowerCase(),
+            password: passwordStr,
+            metadata: metadataPayload
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        resData = await response.json();
+      } catch (fetchErr) {
+        clearTimeout(timeout);
+        if (fetchErr.name === 'AbortError') {
+          throw new Error("Registration timed out. The server took too long to respond. Please try again.");
         }
-      });
-
-      if (error) {
-        let msg = error.message || "Failed to communicate with Auth Edge Function.";
-        try {
-          if (error.context) {
-            const body = await error.context.json();
-            if (body?.error) msg = body.error;
-          }
-        } catch { /* ignore */ }
-        throw new Error(msg);
+        throw new Error("Failed to connect to the registration service. Please check your internet connection.");
       }
 
-      // Check if the edge function returned its own internal error successfully parsed mapping
+      // Handle errors returned by the edge function (bounce, invalid domain, etc.)
       if (resData?.error) {
         throw new Error(resData.error);
       }
@@ -197,21 +212,21 @@ function RegisterUser() {
           });
           if (syncError) {
             console.error('Menu sync error:', syncError);
-            alert(`✅ Franchise Created! But menu sync failed: ${syncError.message}\nYou can sync manually from Menu Management.`);
+            alert(`✅ Registration submitted! But menu sync failed: ${syncError.message}\nIf the email is valid, you can sync manually later. If invalid, the account will be deleted.`);
             navigate(-1);
             return;
           }
-          alert(`✅ Franchise Created & Menu Synced! A verification email has been sent to ${emailStr}.`);
+          alert(`✅ Registration submitted & Menu Synced!\nIf the email (${emailStr}) is invalid, the account will be automatically deleted in a few minutes.`);
         } catch (syncErr) {
-          alert(`✅ Franchise Created! But menu sync failed: ${syncErr.message}\nYou can sync manually from Menu Management.`);
+          alert(`✅ Registration submitted! But menu sync failed: ${syncErr.message}\nIf the email is valid, you can sync manually later. If invalid, the account will be deleted.`);
         }
       } else {
-        alert(`✅ Franchise Created! A verification email has been sent to ${emailStr}.`);
+        alert(`✅ Registration submitted!\nIf the email (${emailStr}) is invalid, the account will be automatically deleted in a few minutes.`);
       }
       navigate(-1);
 
     } catch (err) {
-      alert("Error: " + err.message);
+      alert("❌ Registration Failed: " + err.message);
     } finally {
       setLoading(false);
     }
