@@ -16,6 +16,8 @@ const supabaseUrl = supabaseDirectUrl;
 const MAX_RETRIES = 1;
 const BASE_DELAY = 800;
 const REQUEST_TIMEOUT = 10000;
+// Edge Functions (e.g. register-user) can take 15-40s due to email bounce detection.
+const EDGE_FUNCTION_TIMEOUT = 120000;
 
 // Rewrite supabase.co URLs to proxy (works in both dev and production)
 const SUPABASE_DOMAIN = 'vfhwuncpzbsjegmedvjr.supabase.co';
@@ -37,6 +39,10 @@ async function resilientFetch(url, options = {}) {
   const proxiedUrl = getProxiedUrl(url);
   let lastError;
 
+  // Edge Function calls get a much longer timeout (bounce detection takes 15-40s)
+  const isEdgeFunction = typeof url === 'string' && url.includes('/functions/v1/');
+  const timeout = isEdgeFunction ? EDGE_FUNCTION_TIMEOUT : REQUEST_TIMEOUT;
+
   // If supabase-js passed a pre-aborted signal, strip it and proceed
   const cleanOptions = (options.signal && options.signal.aborted)
     ? (() => { const { signal: _signal, ...rest } = options; return rest; })()
@@ -44,11 +50,11 @@ async function resilientFetch(url, options = {}) {
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      devLog(`🌐 [NET] Attempt ${attempt + 1}: ${cleanOptions.method || 'GET'} ${proxiedUrl.substring(0, 80)}...`);
+      devLog(`🌐 [NET] Attempt ${attempt + 1}: ${cleanOptions.method || 'GET'} ${proxiedUrl.substring(0, 80)}... (timeout: ${timeout / 1000}s)`);
       const response = await Promise.race([
         fetch(proxiedUrl, cleanOptions),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Request timed out")), REQUEST_TIMEOUT)
+          setTimeout(() => reject(new Error("Request timed out")), timeout)
         )
       ]);
 
@@ -71,7 +77,7 @@ async function resilientFetch(url, options = {}) {
         const response = await Promise.race([
           fetch(proxiedUrl, optsWithoutSignal),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Request timed out")), REQUEST_TIMEOUT)
+            setTimeout(() => reject(new Error("Request timed out")), timeout)
           )
         ]);
         return response;
