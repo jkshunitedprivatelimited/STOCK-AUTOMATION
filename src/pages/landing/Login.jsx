@@ -149,6 +149,13 @@ function Login() {
               const { data: franchiseInfo } = await fetchWithRetry(() =>
                 supabase.from("profiles").select("*").eq("franchise_id", staffProfile.franchise_id).maybeSingle()
               );
+
+              // ── Check if the parent franchise is disabled ──
+              if (franchiseInfo && franchiseInfo.is_active === false) {
+                await supabase.auth.signOut();
+                throw new Error("Your account is disabled, please contact the TVANAMM OFFICE.");
+              }
+
               finalProfileData = { ...staffProfile, role: "staff", ...franchiseInfo };
             } else {
               throw new Error("Valid profile not found. Please contact your administrator.");
@@ -160,6 +167,12 @@ function Login() {
           throw new Error(`Logged in but couldn't load your profile. Error: ${profileErr?.message || "Unknown"}. Try clearing your browser cache or using a different browser.`);
         }
         throw profileErr;
+      }
+
+      // ── STEP 3.5: Check active status ──
+      if (userRole !== "office_staff" && finalProfileData && finalProfileData.is_active === false) {
+        await supabase.auth.signOut();
+        throw new Error("Your account is disabled, please contact the TVANAMM OFFICE.");
       }
 
       // ── STEP 4: Navigate ──

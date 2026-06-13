@@ -64,7 +64,7 @@ export function AuthProvider({ children }) {
           const { data: storeInfo } = await fetchWithRetry(() =>
             supabase
               .from("profiles")
-              .select("company, address, city, state, pincode, phone")
+              .select("company, address, city, state, pincode, phone, is_active")
               .eq("franchise_id", staffProfile.franchise_id)
               .limit(1)
               .maybeSingle()
@@ -76,6 +76,16 @@ export function AuthProvider({ children }) {
     }
 
     if (!finalProfile) {
+      setUser(null);
+      setRole(null);
+      setProfile(null);
+      setLoading(false);
+      return null;
+    } else if (finalProfile.role !== "office_staff" && finalProfile.is_active === false) {
+      if (window.location.pathname !== '/login') {
+        await supabase.auth.signOut();
+        navigate('/login', { replace: true });
+      }
       setUser(null);
       setRole(null);
       setProfile(null);

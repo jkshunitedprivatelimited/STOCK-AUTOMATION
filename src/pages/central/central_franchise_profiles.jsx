@@ -54,6 +54,7 @@ function CentralProfiles() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [userFranchiseId, setUserFranchiseId] = useState("");
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   // Password change states
   const [newPassword, setNewPassword] = useState("");
@@ -62,6 +63,9 @@ function CentralProfiles() {
   const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [passwordMsg, setPasswordMsg] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
+  const [showToggleModal, setShowToggleModal] = useState(false);
+  const [profileToToggle, setProfileToToggle] = useState(null);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
@@ -79,6 +83,7 @@ function CentralProfiles() {
 
       if (profileRes.data?.role !== "central") return navigate("/");
 
+      setCurrentUserId(session.user.id);
       setUserFranchiseId(profileRes.data?.franchise_id || "CENTRAL-HQ");
       setProfiles(listRes.data || []);
 
@@ -290,6 +295,44 @@ function CentralProfiles() {
       alert("Update failed: " + error.message);
     }
     setSaving(false);
+  };
+
+  const confirmToggle = (profile) => {
+    if (profile.id === currentUserId) {
+      alert("You cannot disable your own account.");
+      return;
+    }
+    if (profile.role === 'stock') {
+      alert("Stock Manager accounts cannot be disabled.");
+      return;
+    }
+    setProfileToToggle(profile);
+    setShowToggleModal(true);
+  };
+
+  const handleToggleStatus = async () => {
+    if (!profileToToggle) return;
+    setTogglingId(profileToToggle.id);
+    try {
+      const newStatus = profileToToggle.is_active === false ? true : false;
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_active: newStatus })
+        .eq('id', profileToToggle.id);
+
+      if (error) throw error;
+
+      setProfiles(prev => prev.map(p => 
+        p.id === profileToToggle.id ? { ...p, is_active: newStatus } : p
+      ));
+      setShowToggleModal(false);
+      setProfileToToggle(null);
+    } catch (err) {
+      console.error("Toggle error:", err);
+      alert("Failed to update status: " + (err.message || String(err)));
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   const handlePasswordChange = async () => {
@@ -507,7 +550,12 @@ function CentralProfiles() {
                       <div style={styles.companyName}>{p.company || "No Company"}</div>
                     </div>
                   </div>
-                  <span style={{ ...styles.roleBadge, ...getRoleStyle(p.role) }}>{p.role?.toUpperCase()}</span>
+                  <div>
+                    <span style={{ ...styles.roleBadge, ...getRoleStyle(p.role) }}>{p.role?.toUpperCase()}</span>
+                    {p.is_active === false && (
+                      <span style={{ ...styles.roleBadge, background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', marginTop: '4px' }}>DISABLED</span>
+                    )}
+                  </div>
                 </div>
 
                 <div style={styles.gridInfo}>
@@ -534,13 +582,18 @@ function CentralProfiles() {
                   <span style={styles.addressText}>{p.address || "No Address Provided"}</span>
                 </div>
 
-                <div style={styles.cardActions}>
+                <div style={{ ...styles.cardActions, flexWrap: 'wrap' }}>
                   <button onClick={() => openEditModal(p)} style={styles.mobileActionBtnUpdate}>
                     <Edit2 size={14} /> UPDATE
                   </button>
                   <button onClick={() => confirmDelete(p)} style={styles.mobileActionBtnDelete}>
                     <Trash2 size={14} /> DELETE
                   </button>
+                  {p.id !== currentUserId && p.role !== 'stock' && (
+                  <button onClick={() => confirmToggle(p)} disabled={togglingId === p.id} style={{ ...styles.mobileActionBtnUpdate, background: p.is_active !== false ? '#fee2e2' : '#dcfce7', color: p.is_active !== false ? '#dc2626' : '#166534', borderColor: p.is_active !== false ? '#fca5a5' : '#bbf7d0', opacity: togglingId === p.id ? 0.5 : 1 }}>
+                    {p.is_active !== false ? <><Lock size={14} /> DISABLE</> : <><UserPlus size={14} /> ENABLE</>}
+                  </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -601,6 +654,9 @@ function CentralProfiles() {
                       <span style={{ ...styles.roleBadge, ...getRoleStyle(p.role) }}>
                         {p.role?.toUpperCase()}
                       </span>
+                      {p.is_active === false && (
+                        <span style={{ ...styles.roleBadge, background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', marginLeft: '8px' }}>DISABLED</span>
+                      )}
                     </td>
                     <td style={styles.td}>{p.phone || "—"}</td>
                     <td style={styles.td}>
@@ -610,12 +666,17 @@ function CentralProfiles() {
                     </td>
                     <td style={{ ...styles.td, textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                        <button onClick={() => openEditModal(p)} style={styles.actionIconBtn}>
+                        <button onClick={() => openEditModal(p)} style={styles.actionIconBtn} title="Edit">
                           <Edit2 size={16} color={ACTION_GREEN} />
                         </button>
-                        <button onClick={() => confirmDelete(p)} style={styles.actionIconBtn}>
+                        <button onClick={() => confirmDelete(p)} style={styles.actionIconBtn} title="Delete">
                           <Trash2 size={16} color={DANGER_RED} />
                         </button>
+                        {p.id !== currentUserId && p.role !== 'stock' && (
+                        <button onClick={() => confirmToggle(p)} disabled={togglingId === p.id} style={{ ...styles.actionIconBtn, opacity: togglingId === p.id ? 0.5 : 1 }} title={p.is_active !== false ? "Disable" : "Enable"}>
+                          {p.is_active !== false ? <Lock size={16} color={DANGER_RED} /> : <UserPlus size={16} color={ACTION_GREEN} />}
+                        </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -859,6 +920,51 @@ function CentralProfiles() {
                 style={{ ...styles.saveBtn, background: DANGER_RED, flex: 1, marginTop: 0 }}
               >
                 {deleting ? "..." : "DELETE"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DISABLE/ENABLE CONFIRMATION MODAL */}
+      {showToggleModal && (
+        <div style={styles.modalOverlay} onClick={() => setShowToggleModal(false)}>
+          <div style={{ ...styles.modal, width: isMobile ? '90%' : '420px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+            <div style={{ color: profileToToggle?.is_active !== false ? DANGER_RED : ACTION_GREEN, marginBottom: '20px' }}>
+              {profileToToggle?.is_active !== false ? <Lock size={48} style={{ margin: '0 auto' }} /> : <UserPlus size={48} style={{ margin: '0 auto' }} />}
+            </div>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: isMobile ? '16px' : '18px' }}>
+              {profileToToggle?.is_active !== false ? 'Disable Account' : 'Enable Account'}
+            </h3>
+            <p style={{ color: '#6b7280', fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>
+              {profileToToggle?.is_active !== false ? (
+                <>
+                  Are you sure you want to disable <strong>{profileToToggle?.name}</strong>
+                  {profileToToggle?.role === 'franchise' && <> ({profileToToggle?.franchise_id})</>}?
+                  {profileToToggle?.role === 'central' && (
+                    <><br /><br /><span style={{ color: DANGER_RED, fontWeight: '800' }}>⚠️ WARNING: This is a Central Admin account.</span></>  
+                  )}
+                  {profileToToggle?.role === 'franchise' && (
+                    <><br /><br /><span style={{ color: DANGER_RED, fontWeight: '700' }}>All store staff under this franchise will also be blocked from logging in.</span></>
+                  )}
+                </>
+              ) : (
+                <>Are you sure you want to re-enable <strong>{profileToToggle?.name}</strong>?<br />They will be able to log in again.</>
+              )}
+            </p>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+              <button
+                onClick={() => { setShowToggleModal(false); setProfileToToggle(null); }}
+                style={{ ...styles.saveBtn, background: '#f3f4f6', color: '#374151', flex: 1, marginTop: 0 }}
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={handleToggleStatus}
+                disabled={togglingId === profileToToggle?.id}
+                style={{ ...styles.saveBtn, background: profileToToggle?.is_active !== false ? DANGER_RED : ACTION_GREEN, flex: 1, marginTop: 0 }}
+              >
+                {togglingId === profileToToggle?.id ? '...' : (profileToToggle?.is_active !== false ? 'DISABLE' : 'ENABLE')}
               </button>
             </div>
           </div>
