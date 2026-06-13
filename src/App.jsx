@@ -51,10 +51,6 @@ const OldQuotations = lazy(() => import("./pages/central/central_quotation_bills
 const OldTokenBills = lazy(() => import('./pages/central/central_token_bills'));
 const CentralVoucher = lazy(() => import('./pages/central/central_voucher'));
 const CentralTransportationService = lazy(() => import('./pages/central/central_transportation_service'));
-const CentralOfficeStaff = lazy(() => import('./pages/central/central_office_staff'));
-
-/* OFFICE STAFF DASHBOARD */
-const OfficeStaffAttendanceDashboard = lazy(() => import('./pages/dashboards/office_staff_attendance_dashboard'));
 
 /* CONTEXTS & COMPONENTS */
 import { AuthProvider } from "./context/AuthContext";
@@ -265,15 +261,6 @@ function App() {
               />
 
               <Route
-                path="/central/office_staff"
-                element={
-                  <ProtectedRoute allowedRoles={["central"]}>
-                    <CentralOfficeStaff />
-                  </ProtectedRoute>
-                }
-              />
-
-              <Route
                 path="/central/central_staff_profiles"
                 element={
                   <ProtectedRoute allowedRoles={["central"]}>
@@ -360,16 +347,6 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={["franchise"]}>
                     <FranchiseOwnerDashboard />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* ================= OFFICE STAFF ================= */}
-              <Route
-                path="/dashboard/office_staff_attendance_dashboard"
-                element={
-                  <ProtectedRoute allowedRoles={["office_staff"]}>
-                    <OfficeStaffAttendanceDashboard />
                   </ProtectedRoute>
                 }
               />

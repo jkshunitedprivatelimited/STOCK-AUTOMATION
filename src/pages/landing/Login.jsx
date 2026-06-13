@@ -121,20 +121,9 @@ function Login() {
       let finalProfileData = null;
 
       try {
-        const { data: officeStaffProfile } = await fetchWithRetry(() =>
-          supabase.from("office_staff_profiles").select("*").eq("id", authData.user.id).maybeSingle()
+        const { data: ownerProfile } = await fetchWithRetry(() =>
+          supabase.from("profiles").select("*").eq("id", authData.user.id).maybeSingle()
         );
-
-        if (officeStaffProfile) {
-          if (loginType === "store") {
-            throw new Error("Office Staff are prohibited from accessing the STORE portal. Please switch to ADMIN.");
-          }
-          userRole = "office_staff";
-          finalProfileData = officeStaffProfile;
-        } else {
-          const { data: ownerProfile } = await fetchWithRetry(() =>
-            supabase.from("profiles").select("*").eq("id", authData.user.id).maybeSingle()
-          );
 
           if (ownerProfile && ownerProfile.role !== null && ownerProfile.role !== '') {
             userRole = ownerProfile.role;
@@ -161,7 +150,6 @@ function Login() {
               throw new Error("Valid profile not found. Please contact your administrator.");
             }
           }
-        }
       } catch (profileErr) {
         if (isNetworkError(profileErr)) {
           throw new Error(`Logged in but couldn't load your profile. Error: ${profileErr?.message || "Unknown"}. Try clearing your browser cache or using a different browser.`);
@@ -170,7 +158,7 @@ function Login() {
       }
 
       // ── STEP 3.5: Check active status ──
-      if (userRole !== "office_staff" && finalProfileData && finalProfileData.is_active === false) {
+      if (finalProfileData && finalProfileData.is_active === false) {
         await supabase.auth.signOut();
         throw new Error("Your account is disabled, please contact the TVANAMM OFFICE.");
       }
@@ -184,7 +172,7 @@ function Login() {
       if (finalLoginMode === "store") {
         navigate("/store");
       } else {
-        const routes = { central: "central", franchise: "franchiseowner", stock: "stockmanager", office_staff: "office_staff_attendance_dashboard" };
+        const routes = { central: "central", franchise: "franchiseowner", stock: "stockmanager" };
         const route = routes[userRole] || "franchiseowner";
         navigate(`/dashboard/${route}`);
       }

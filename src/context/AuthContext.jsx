@@ -30,19 +30,8 @@ export function AuthProvider({ children }) {
 
     let finalProfile = null;
 
-    let { data: officeStaff } = await fetchWithRetry(() =>
+    let { data: ownerProfile } = await fetchWithRetry(() =>
       supabase
-        .from("office_staff_profiles")
-        .select("*")
-        .eq("id", supabaseUser.id)
-        .maybeSingle()
-    );
-
-    if (officeStaff) {
-      finalProfile = { ...officeStaff, role: "office_staff" };
-    } else {
-      let { data: ownerProfile } = await fetchWithRetry(() =>
-        supabase
           .from("profiles")
           .select("*")
           .eq("id", supabaseUser.id)
@@ -73,7 +62,6 @@ export function AuthProvider({ children }) {
           finalProfile = { ...staffProfile, role: "staff", staff_profile_id: staffProfile.id, ...storeInfo };
         }
       }
-    }
 
     if (!finalProfile) {
       setUser(null);
@@ -81,7 +69,7 @@ export function AuthProvider({ children }) {
       setProfile(null);
       setLoading(false);
       return null;
-    } else if (finalProfile.role !== "office_staff" && finalProfile.is_active === false) {
+    } else if (finalProfile.is_active === false) {
       if (window.location.pathname !== '/login') {
         await supabase.auth.signOut();
         navigate('/login', { replace: true });
