@@ -24,6 +24,7 @@ function PosManagement() {
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isFranchiseDropdownOpen, setIsFranchiseDropdownOpen] = useState(false);
+  const [franchiseSearchTerm, setFranchiseSearchTerm] = useState("");
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -523,9 +524,21 @@ function PosManagement() {
                         boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
                       }}
                     >
+                      <div style={{ padding: '8px', borderBottom: '1px solid #edf2f7', position: 'sticky', top: 0, background: '#fff', zIndex: 10 }}>
+                        <input
+                          type="text"
+                          placeholder="Search Franchise ID..."
+                          autoFocus
+                          value={franchiseSearchTerm}
+                          onChange={(e) => setFranchiseSearchTerm(e.target.value)}
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '13px', boxSizing: 'border-box' }}
+                        />
+                      </div>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
                         <tbody>
-                          {filteredFranchises.map(f => (
+                          {filteredFranchises
+                            .filter(f => !franchiseSearchTerm || f.id.toLowerCase().includes(franchiseSearchTerm.toLowerCase()) || (f.name && f.name.toLowerCase().includes(franchiseSearchTerm.toLowerCase())))
+                            .map(f => (
                             <tr
                               key={f.id}
                               style={{

@@ -34,7 +34,7 @@ const Navbar = () => {
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
             <img src="/logo.jpg" alt="JKSH United Logo" className="h-10 md:h-12 w-auto object-contain rounded-full" />
             <span className={`font-bold text-xl md:text-2xl tracking-tight transition-colors duration-300 ${isScrolled ? "text-green-900" : "text-white"}`}>
-              JKSH United
+              JKSH United Pvt.Ltd
             </span>
           </div>
 

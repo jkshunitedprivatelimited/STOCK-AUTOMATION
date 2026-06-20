@@ -86,10 +86,13 @@ const CentralStaffProfiles = () => {
 
   // --- DROPDOWN STATES ---
   const [companyList, setCompanyList] = useState([]);
-  const [selectedCompany, setSelectedCompany] = useState("");
+  const [selectedCompany, setSelectedCompany] = useState(() => sessionStorage.getItem('staff_selected_company') || "");
   const [franchiseList, setFranchiseList] = useState([]);
-  const [searchFranchiseId, setSearchFranchiseId] = useState("");
+  const [searchFranchiseId, setSearchFranchiseId] = useState(() => sessionStorage.getItem('staff_selected_franchise') || "");
   const [isFranchiseDropdownOpen, setIsFranchiseDropdownOpen] = useState(false);
+  const [franchiseSearchTerm, setFranchiseSearchTerm] = useState("");
+  const [isCompanyDropdownOpen, setIsCompanyDropdownOpen] = useState(false);
+  const [companySearchTerm, setCompanySearchTerm] = useState("");
 
   const [searchTerm, setSearchTerm] = useState("");
   const [companyDetails, setCompanyDetails] = useState(null);
@@ -311,6 +314,30 @@ const CentralStaffProfiles = () => {
     setFormData({ name: "", staff_id: "", email: "", password: "", phone: "", address: "" });
   };
 
+  const handleDelete = async (profile) => {
+    if (!window.confirm(`⚠️ Are you sure you want to delete staff profile "${profile.name}"? This will also permanently delete their login logs.`)) return;
+
+    try {
+      setLoading(true);
+      // 1. Delete from Auth Users (via edge function, ignore if fails)
+      await supabase.functions.invoke('admin-delete-user', { body: { user_id: profile.id } });
+
+      // 2. Delete login logs
+      await supabase.from('login_logs').delete().eq('staff_id', profile.id);
+
+      // 3. Delete staff profile
+      const { error } = await supabase.from('staff_profiles').delete().eq('id', profile.id);
+      if (error) throw error;
+
+      alert("✅ Staff deleted successfully");
+      fetchStaffProfiles(searchFranchiseId, true);
+    } catch (err) {
+      alert("Error: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const deferredSearchTerm = useDeferredValue(searchTerm);
 
   const filteredProfiles = useMemo(() => {
@@ -348,21 +375,60 @@ const CentralStaffProfiles = () => {
             <div style={{ display: 'flex', gap: '12px', width: "100%", flex: 1, flexDirection: isMobile ? "column" : "row" }}>
 
               {/* Company Dropdown */}
-              <div style={{ position: 'relative', flex: 1 }}>
-                <select
-                  value={selectedCompany}
-                  onChange={(e) => {
-                    setSelectedCompany(e.target.value);
-                    setSearchFranchiseId(""); // Reset franchise ID when company changes
-                  }}
-                  style={styles.dropdownSelect}
+              <div style={{ position: 'relative', flex: 1, width: '100%' }}>
+                <div
+                  style={{ ...styles.dropdownSelect, display: 'flex', alignItems: 'center' }}
+                  onClick={() => setIsCompanyDropdownOpen(!isCompanyDropdownOpen)}
                 >
-                  <option value="" disabled>Select Company</option>
-                  {companyList.map(comp => (
-                    <option key={comp} value={comp}>{comp}</option>
-                  ))}
-                </select>
+                  {selectedCompany || "Select Company"}
+                </div>
                 <ChevronDown size={16} color="#94a3b8" style={styles.dropdownArrow} />
+                
+                {isCompanyDropdownOpen && (
+                  <>
+                    <div
+                      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 }}
+                      onClick={() => setIsCompanyDropdownOpen(false)}
+                    />
+                    <div
+                      style={{ position: 'absolute', top: '46px', left: 0, width: '100%', maxHeight: '300px', overflowY: 'auto', background: '#fff', border: '2px solid #edf2f7', borderRadius: '10px', zIndex: 50, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                    >
+                      <div style={{ padding: '8px', borderBottom: '1px solid #edf2f7', position: 'sticky', top: 0, background: '#fff', zIndex: 10 }}>
+                        <input
+                          type="text"
+                          placeholder="Search Company..."
+                          autoFocus
+                          value={companySearchTerm}
+                          onChange={(e) => setCompanySearchTerm(e.target.value)}
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '13px', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                        <tbody>
+                          {companyList
+                            .filter(comp => !companySearchTerm || comp.toLowerCase().includes(companySearchTerm.toLowerCase()))
+                            .map(comp => (
+                            <tr
+                              key={comp}
+                              style={{ borderBottom: '1px solid #edf2f7', cursor: 'pointer', background: selectedCompany === comp ? '#f1f5f9' : '#fff' }}
+                              onClick={() => {
+                                setSelectedCompany(comp);
+                                sessionStorage.setItem("staff_selected_company", comp);
+                                setSearchFranchiseId("");
+                                sessionStorage.removeItem("staff_selected_franchise");
+                                setIsCompanyDropdownOpen(false);
+                              }}
+                              onMouseEnter={(e) => { if (selectedCompany !== comp) e.currentTarget.style.background = '#f8fafc'; }}
+                              onMouseLeave={(e) => { if (selectedCompany !== comp) e.currentTarget.style.background = '#fff'; }}
+                            >
+                              <td style={{ padding: '12px 16px', color: '#334155', fontWeight: '500' }}>{comp}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Franchise ID Dropdown */}
@@ -410,9 +476,21 @@ const CentralStaffProfiles = () => {
                         boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
                       }}
                     >
+                      <div style={{ padding: '8px', borderBottom: '1px solid #edf2f7', position: 'sticky', top: 0, background: '#fff', zIndex: 10 }}>
+                        <input
+                          type="text"
+                          placeholder="Search Branch..."
+                          autoFocus
+                          value={franchiseSearchTerm}
+                          onChange={(e) => setFranchiseSearchTerm(e.target.value)}
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '13px', boxSizing: 'border-box' }}
+                        />
+                      </div>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
                         <tbody>
-                          {franchiseList.map(f => (
+                          {franchiseList
+                            .filter(f => !franchiseSearchTerm || f.id.toLowerCase().includes(franchiseSearchTerm.toLowerCase()) || (f.name && f.name.toLowerCase().includes(franchiseSearchTerm.toLowerCase())))
+                            .map(f => (
                             <tr
                               key={f.id}
                               style={{
@@ -422,6 +500,7 @@ const CentralStaffProfiles = () => {
                               }}
                               onClick={() => {
                                 setSearchFranchiseId(f.id);
+                                sessionStorage.setItem("staff_selected_franchise", f.id);
                                 setIsFranchiseDropdownOpen(false);
                               }}
                               onMouseEnter={(e) => {
@@ -504,8 +583,9 @@ const CentralStaffProfiles = () => {
                       <div style={styles.cardInfoRow}><MapPin size={14} color={GREEN} /> {p.address || 'No Address'}</div>
                     </div>
                     <div style={styles.cardActions}>
-                      <button onClick={() => navigate('/central/central_staff_logins', { state: { targetUserId: p.id, targetName: p.name, franchiseId: searchFranchiseId } })} style={{ ...styles.cardActionBtn, color: '#2563eb', background: '#eff6ff' }}><Clock size={16} /> LOGS</button>
+                      <button onClick={() => navigate('/central/central_staff_logins', { state: { targetUserId: p.id, targetName: p.name, targetStaffId: p.staff_id, franchiseId: searchFranchiseId } })} style={{ ...styles.cardActionBtn, color: '#2563eb', background: '#eff6ff' }}><Clock size={16} /> LOGS</button>
                       {!p.isOwner && <button onClick={() => handleOpenEdit(p)} style={{ ...styles.cardActionBtn, color: GREEN, background: `${GREEN}10` }}><Edit2 size={16} /> EDIT</button>}
+                      {!p.isOwner && <button onClick={() => handleDelete(p)} style={{ ...styles.cardActionBtn, color: '#ef4444', background: '#fef2f2' }}><Trash2 size={16} /> DELETE</button>}
                     </div>
                   </div>
                 )}
@@ -540,8 +620,9 @@ const CentralStaffProfiles = () => {
                     <td style={styles.td}>{profile.staff_id}</td>
                     <td style={styles.td}>{profile.phone}</td>
                     <td style={styles.actionTd}>
-                      <button onClick={() => navigate('/central/central_staff_logins', { state: { targetUserId: profile.id, targetName: profile.name, franchiseId: searchFranchiseId } })} style={styles.timeBtn} title="View Logs"><Clock size={16} /></button>
+                      <button onClick={() => navigate('/central/central_staff_logins', { state: { targetUserId: profile.id, targetName: profile.name, targetStaffId: profile.staff_id, franchiseId: searchFranchiseId } })} style={styles.timeBtn} title="View Logs"><Clock size={16} /></button>
                       {!profile.isOwner && <button onClick={() => handleOpenEdit(profile)} style={styles.editBtn} title="Edit"><Edit2 size={16} /></button>}
+                      {!profile.isOwner && <button onClick={() => handleDelete(profile)} style={styles.deleteBtn} title="Delete"><Trash2 size={16} /></button>}
                     </td>
                   </tr>
                 ))}
@@ -644,6 +725,7 @@ const styles = {
   actionTd: { display: 'flex', justifyContent: 'center', gap: '10px', padding: '16px' },
   timeBtn: { padding: '8px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', border: 'none', cursor: 'pointer' },
   editBtn: { padding: '8px', borderRadius: '8px', background: '#f0fdf4', color: GREEN, border: 'none', cursor: 'pointer' },
+  deleteBtn: { padding: '8px', borderRadius: '8px', background: '#fef2f2', color: '#ef4444', border: 'none', cursor: 'pointer' },
   modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
   modalContent: { background: 'white', padding: '20px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', maxHeight: '95vh', overflowY: 'auto' },
   modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },

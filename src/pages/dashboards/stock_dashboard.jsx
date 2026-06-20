@@ -49,6 +49,7 @@ function StockManagerDashboard() {
 
   const [screenSize, setScreenSize] = useState('desktop');
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
 
   // 2. DATA SYNC: Update state and session storage when user data is available
   useEffect(() => {
@@ -99,6 +100,23 @@ function StockManagerDashboard() {
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, []);
+
+  // 5. DATA: Fetch pending orders count
+  useEffect(() => {
+    async function getPendingOrders() {
+      const { count, error } = await supabase
+        .from('invoices')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'incoming');
+      if (!error && count !== null) setPendingOrdersCount(count);
+    }
+    getPendingOrders();
+    const channel = supabase.channel('stock-dashboard-orders')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices' }, getPendingOrders)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
+
 
   // --- NAVIGATION DATA ---
   const navItems = [
@@ -275,6 +293,21 @@ function StockManagerDashboard() {
                       justifyContent: 'center'
                     }}>
                       {pendingRequestsCount}
+                    </span>
+                  )}
+                  {item.title === "Orders" && pendingOrdersCount > 0 && (
+                    <span style={{
+                      background: '#ef4444',
+                      color: 'white',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      padding: '2px 8px',
+                      borderRadius: '999px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      {pendingOrdersCount}
                     </span>
                   )}
                 </div>

@@ -258,9 +258,22 @@ function InvoiceDesign() {
     }
   };
 
-  const filteredCompanies = companies.filter(c =>
-    c.company_name?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredCompanies = companies
+    .filter(c => c.company_name?.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const aName = a.company_name?.toLowerCase() || "";
+      const bName = b.company_name?.toLowerCase() || "";
+      
+      const customOrder = ["jksh", "vanamm", "leaf"];
+      const aIndex = customOrder.findIndex(str => aName.includes(str));
+      const bIndex = customOrder.findIndex(str => bName.includes(str));
+      
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      if (aIndex !== -1) return -1;
+      if (bIndex !== -1) return 1;
+      
+      return aName.localeCompare(bName);
+    });
 
   return (
     <div style={styles.page}>
