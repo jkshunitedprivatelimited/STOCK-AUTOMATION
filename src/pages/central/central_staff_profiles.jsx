@@ -83,6 +83,7 @@ const CentralStaffProfiles = () => {
 
   const [profiles, setProfiles] = useState([]);
   const [loggedInFranchiseId, setLoggedInFranchiseId] = useState("");
+  const activeFetchRef = React.useRef("");
 
   // --- DROPDOWN STATES ---
   const [companyList, setCompanyList] = useState([]);
@@ -182,6 +183,7 @@ const CentralStaffProfiles = () => {
   };
 
   const fetchStaffProfiles = async (fid, isBackgroundRefresh = false) => {
+    activeFetchRef.current = fid;
     const cacheKey = `staff_profiles_${fid}`;
     if (!isBackgroundRefresh) {
       const cachedData = sessionStorage.getItem(cacheKey);
@@ -213,7 +215,9 @@ const CentralStaffProfiles = () => {
       }
       if (staffData) combined = [...combined, ...staffData];
 
-      setProfiles(combined);
+      if (activeFetchRef.current === fid) {
+        setProfiles(combined);
+      }
       sessionStorage.setItem(cacheKey, JSON.stringify(combined));
     } catch (err) {
       console.error(err);

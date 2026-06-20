@@ -128,7 +128,7 @@ const LoginTimings = () => {
         .limit(100);
 
       if (targetUserId) {
-        query = query.or(`staff_profile_id.eq.${targetUserId},owner_profile_id.eq.${targetUserId}`);
+        query = query.or(`staff_profile_id.eq.${targetUserId},owner_profile_id.eq.${targetUserId},staff_id.eq.${targetUserId}`);
       } else if (role === 'staff') {
         query = query.eq('staff_id', uid);
       }
@@ -136,8 +136,25 @@ const LoginTimings = () => {
       const { data, error } = await query;
 
       if (!error && isMounted.current) {
-        setLogs(data || []);
-        sessionStorage.setItem(CACHE_KEY_LOGS, JSON.stringify(data || []));
+        const safeData = data || [];
+        
+        // Fetch missing staff profiles if they were not joined via staff_profile_id
+        const missingStaffIds = [...new Set(safeData.filter(d => !d.staff_profiles && d.staff_id).map(d => d.staff_id))];
+        if (missingStaffIds.length > 0) {
+          const { data: profiles } = await supabase.from('staff_profiles').select('id, name, staff_id').in('id', missingStaffIds);
+          if (profiles) {
+            const profileMap = {};
+            profiles.forEach(p => profileMap[p.id] = p);
+            safeData.forEach(d => {
+              if (!d.staff_profiles && d.staff_id && profileMap[d.staff_id]) {
+                d.staff_profiles = profileMap[d.staff_id];
+              }
+            });
+          }
+        }
+
+        setLogs(safeData);
+        sessionStorage.setItem(CACHE_KEY_LOGS, JSON.stringify(safeData));
       }
     } finally {
       if (isMounted.current) {
@@ -175,25 +192,37 @@ const LoginTimings = () => {
   };
 
   const getLogDetails = useCallback((log) => {
+    const mode = (log.login_mode || "").toUpperCase();
+
     let isOwner = false;
     let name = "Unknown";
     let id = "N/A";
 
-    if (log.owner_profile_id) {
+    if (mode === "STORE") {
+      isOwner = false;
+      name = log.staff_profiles?.name || location.state?.targetName || "Staff Member";
+      id = log.staff_profiles?.staff_id || log.staff_id || "N/A";
+    } else if (log.owner_profile_id) {
       isOwner = true;
       name = log.profiles?.name || log.profiles?.company || "Owner";
       id = "OWNER";
-    }
-    else if (log.staff_profile_id) {
+    } else if (log.staff_profile_id || log.staff_id) {
+      let profile = log.staff_profiles;
+      if (Array.isArray(profile)) profile = profile[0];
+      if (profile) {
+        name = String(profile.name || "Unknown");
+        id = String(profile.staff_id || "N/A");
+      } else {
+        name = location.state?.targetName || "Staff Member";
+        id = log.staff_id || "N/A";
+      }
       isOwner = false;
-      name = log.staff_profiles?.name || "Staff Member";
-      id = log.staff_profiles?.staff_id || "N/A";
     }
 
-    const actualMode = log.login_mode ? log.login_mode.toUpperCase() : "STORE";
+    const actualMode = mode || "STORE";
 
     return { name, id, isOwner, actualMode };
-  }, []);
+  }, [location.state?.targetName]);
 
   const calculateDurationDisplay = (startStr, endStr) => {
     if (!endStr) return "Active";
@@ -214,7 +243,14 @@ const LoginTimings = () => {
       const matchesSearch = (name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         (id || "").toLowerCase().includes(searchTerm.toLowerCase());
 
-      const logDate = new Date(log.login_at).toLocaleDateString('en-CA');
+      if (!log.login_at) return matchesSearch;
+
+      const logDateObj = new Date(log.login_at);
+      const year = logDateObj.getFullYear();
+      const month = String(logDateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(logDateObj.getDate()).padStart(2, '0');
+      const logDate = `${year}-${month}-${day}`;
+
       return matchesSearch && (filterType === 'date' ? logDate === selectedDate : (logDate >= startDate && logDate <= endDate));
     });
   }, [logs, searchTerm, filterType, selectedDate, startDate, endDate, getLogDetails]);
