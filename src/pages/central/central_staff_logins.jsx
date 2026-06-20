@@ -146,11 +146,32 @@ const CentralStaffLogins = () => {
     };
   }, [targetUserId, franchiseId, isOwner]);
 
+  const { targetName, targetStaffId } = location.state || {};
+
   const getStaffDetails = (log) => {
+    const mode = (log.login_mode || "").toUpperCase();
+
+    // Staff/Store Worker login — login_mode is always "STORE" for staff users
+    if (mode === "STORE") {
+      const staffName = log.staff_profiles?.name || targetName || "Staff Member";
+      const staffId = log.staff_profiles?.staff_id || targetStaffId || "N/A";
+      return { name: staffName, id: staffId, isOwner: false };
+    }
+
+    // Owner/Admin login — any mode that isn't "STORE"
+    if (log.owner_profile_id) {
+      return { 
+        name: log.profiles?.name || log.profiles?.company || "Owner / Admin", 
+        id: "OWNER", 
+        isOwner: true 
+      };
+    }
+
+    // Fallback for old records with no login_mode
     let profile = log.staff_profiles;
     if (Array.isArray(profile)) profile = profile[0];
     if (profile) return { name: String(profile.name || "Unknown"), id: String(profile.staff_id || "N/A"), isOwner: false };
-    return { name: "Owner / Admin", id: String(log.franchise_id || franchiseId || "ADMIN"), isOwner: true };
+    return { name: targetName || "Owner / Admin", id: String(log.franchise_id || franchiseId || "ADMIN"), isOwner: !targetUserId };
   };
 
   const calculateDurationDisplay = (startStr, endStr) => {
@@ -198,16 +219,14 @@ const CentralStaffLogins = () => {
         setCompanyDetails(compData);
       }
 
-      let resolvedIsOwner = isOwner;
-      if (specificTargetId && resolvedIsOwner === undefined && specificTargetId !== "ADMIN") {
-        const { data: staffData } = await supabase.from('staff_profiles').select('id').eq('id', specificTargetId).maybeSingle();
-        resolvedIsOwner = !staffData;
-      }
+      let query = supabase.from('login_logs').select(`
+        *,
+        staff_profiles!login_logs_staff_profile_id_fkey (name, staff_id),
+        profiles!login_logs_owner_profile_id_fkey (name, company)
+      `).eq('franchise_id', fid).order('login_at', { ascending: false });
 
-      let query = supabase.from('login_logs').select(`*, staff_profiles( name, staff_id )`).eq('franchise_id', fid).order('login_at', { ascending: false });
       if (specificTargetId) {
-        if (resolvedIsOwner || specificTargetId === "ADMIN") query = query.or(`staff_id.is.null,staff_id.eq.${specificTargetId}`);
-        else query = query.eq('staff_id', specificTargetId);
+        query = query.or(`staff_profile_id.eq.${specificTargetId},owner_profile_id.eq.${specificTargetId},staff_id.eq.${specificTargetId}`);
       }
 
       const { data, error } = await query;
@@ -367,7 +386,7 @@ const CentralStaffLogins = () => {
           ) : (
             <div style={styles.tableCard}>
               <table style={styles.table}>
-                <thead><tr><th style={styles.th}>DATE</th><th style={styles.th}>TYPE</th><th style={styles.th}>NAME</th><th style={styles.th}>ID</th><th style={styles.th}>LOGIN</th><th style={styles.th}>LOGOUT</th><th style={styles.th}>DURATION</th><th style={{ ...styles.th, textAlign: 'center' }}>ACTION</th></tr></thead>
+                <thead><tr><th style={styles.th}>DATE</th><th style={styles.th}>TYPE</th><th style={styles.th}>NAME</th><th style={styles.th}>ID</th><th style={styles.th}>LOGIN</th><th style={styles.th}>LOGOUT</th><th style={styles.th}>DURATION</th><th style={{ ...styles.th, textAlign: 'center' }}>STATUS</th></tr></thead>
                 <tbody>
                   {finalLogs.map((log) => {
                     const isLoggedOut = !!log.logout_at;
@@ -375,14 +394,19 @@ const CentralStaffLogins = () => {
                     return (
                       <tr key={log.id} style={styles.tr}>
                         <td style={styles.td}>{new Date(log.login_at).toLocaleDateString('en-GB')}</td>
-                        <td style={styles.td}><span className="font-black text-[10px]" style={{ color: isOwner ? THEME_GREEN : '#64748b' }}>{isOwner ? "OWNER" : "STAFF"}</span></td>
+                        <td style={styles.td}><span className="font-black text-[10px]" style={{ color: isOwner ? THEME_GREEN : '#64748b' }}>{isOwner ? "OWNER" : "STAFF / STORE WORKER"}</span></td>
                         <td style={{ ...styles.td, fontWeight: '800' }}>{name}</td>
                         <td style={styles.td}><span style={styles.monoBadge}>{id}</span></td>
                         <td style={{ ...styles.td, color: THEME_GREEN }}>{formatTime(log.login_at)}</td>
                         <td style={{ ...styles.td, color: '#ef4444' }}>{isLoggedOut ? formatTime(log.logout_at) : '-- : --'}</td>
                         <td style={styles.td}>{calculateDurationDisplay(log.login_at, log.logout_at)}</td>
                         <td style={{ ...styles.td, textAlign: 'center' }}>
-                          {!isLoggedOut && <button onClick={() => handleForceLogout(log.id)} style={styles.forceBtn}><PowerOff size={12} /></button>}
+                          {isLoggedOut ? <span style={styles.badgeInactive}>Completed</span> : (
+                            <div className="flex justify-center items-center gap-2">
+                              <span style={styles.badgeActive}>Active</span>
+                              <button onClick={() => handleForceLogout(log.id)} style={styles.forceBtn} title="Force Logout"><PowerOff size={12} /></button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );

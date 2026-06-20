@@ -512,11 +512,13 @@ function StockOrders() {
       message = [
         "ORDER STATUS: RECEIVED",
         "",
-        `Hello ${order.customer_name},`,
+        `Dear ${order.customer_name},`,
         "",
-        `Thank you! Your order (${order.id?.substring(0, 8)}) has been received and is being processed.`,
+        `Thank you for your order (REF: ${order.id?.substring(0, 8)}). We have successfully received it and our team is currently processing your request.`,
         "",
-        "We will update you once it is packed."
+        "You can expect your order to be delivered within 24 to 72 hours.",
+        "",
+        "We will notify you again once it has been packed and dispatched."
       ].join("\n");
     } else if (status === "packed") {
       message = [
