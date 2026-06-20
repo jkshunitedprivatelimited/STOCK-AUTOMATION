@@ -18,7 +18,8 @@ import {
   User,
   Eye,
   EyeOff,
-  Lock,
+  ToggleRight,
+  ToggleLeft,
   Download,
   Truck,
 } from "lucide-react";
@@ -590,8 +591,8 @@ function CentralProfiles() {
                     <Trash2 size={14} /> DELETE
                   </button>
                   {p.id !== currentUserId && p.role !== 'stock' && (
-                  <button onClick={() => confirmToggle(p)} disabled={togglingId === p.id} style={{ ...styles.mobileActionBtnUpdate, background: p.is_active !== false ? '#fee2e2' : '#dcfce7', color: p.is_active !== false ? '#dc2626' : '#166534', borderColor: p.is_active !== false ? '#fca5a5' : '#bbf7d0', opacity: togglingId === p.id ? 0.5 : 1 }}>
-                    {p.is_active !== false ? <><Lock size={14} /> DISABLE</> : <><UserPlus size={14} /> ENABLE</>}
+                  <button onClick={() => confirmToggle(p)} disabled={togglingId === p.id} style={{ ...styles.mobileActionBtnUpdate, background: p.is_active !== false ? '#dcfce7' : '#fee2e2', color: p.is_active !== false ? '#166534' : '#dc2626', borderColor: p.is_active !== false ? '#bbf7d0' : '#fca5a5', opacity: togglingId === p.id ? 0.5 : 1 }}>
+                    {p.is_active !== false ? <><ToggleRight size={14} /> ON</> : <><ToggleLeft size={14} /> OFF</>}
                   </button>
                   )}
                 </div>
@@ -673,8 +674,8 @@ function CentralProfiles() {
                           <Trash2 size={16} color={DANGER_RED} />
                         </button>
                         {p.id !== currentUserId && p.role !== 'stock' && (
-                        <button onClick={() => confirmToggle(p)} disabled={togglingId === p.id} style={{ ...styles.actionIconBtn, opacity: togglingId === p.id ? 0.5 : 1 }} title={p.is_active !== false ? "Disable" : "Enable"}>
-                          {p.is_active !== false ? <Lock size={16} color={DANGER_RED} /> : <UserPlus size={16} color={ACTION_GREEN} />}
+                        <button onClick={() => confirmToggle(p)} disabled={togglingId === p.id} style={{ ...styles.actionIconBtn, opacity: togglingId === p.id ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '16px', border: `1px solid ${p.is_active !== false ? '#bbf7d0' : '#fca5a5'}`, background: p.is_active !== false ? '#dcfce7' : '#fee2e2' }} title={p.is_active !== false ? "Disable" : "Enable"}>
+                          {p.is_active !== false ? <><ToggleRight size={16} color="#166534" /> <span style={{color: '#166534', fontWeight: 'bold', fontSize: '11px'}}>ON</span></> : <><ToggleLeft size={16} color="#dc2626" /> <span style={{color: '#dc2626', fontWeight: 'bold', fontSize: '11px'}}>OFF</span></>}
                         </button>
                         )}
                       </div>
@@ -931,7 +932,7 @@ function CentralProfiles() {
         <div style={styles.modalOverlay} onClick={() => setShowToggleModal(false)}>
           <div style={{ ...styles.modal, width: isMobile ? '90%' : '420px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
             <div style={{ color: profileToToggle?.is_active !== false ? DANGER_RED : ACTION_GREEN, marginBottom: '20px' }}>
-              {profileToToggle?.is_active !== false ? <Lock size={48} style={{ margin: '0 auto' }} /> : <UserPlus size={48} style={{ margin: '0 auto' }} />}
+              {profileToToggle?.is_active !== false ? <ToggleLeft size={48} style={{ margin: '0 auto' }} /> : <ToggleRight size={48} style={{ margin: '0 auto' }} />}
             </div>
             <h3 style={{ margin: '0 0 10px 0', fontSize: isMobile ? '16px' : '18px' }}>
               {profileToToggle?.is_active !== false ? 'Disable Account' : 'Enable Account'}
