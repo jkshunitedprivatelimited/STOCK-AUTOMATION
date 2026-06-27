@@ -247,27 +247,31 @@ export function PrinterProvider({ children }) {
       text += "DAY SUMMARY REPORT\n";
       text += "--------------------------------\n" + left;
       
-      text += `Date: ${reportData.date}\n`;
-      text += `Total Orders: ${reportData.totalOrders}\n`;
-      text += "--------------------------------\n";
-      
-      // Payment Summary
-      text += boldOn + "PAYMENT SUMMARY" + boldOff + "\n";
-      text += `UPI:`.padEnd(15) + `${reportData.upiSales}`.padStart(16) + "\n";
-      text += `CASH:`.padEnd(15) + `${reportData.cashSales}`.padStart(16) + "\n";
-      text += `DISCOUNT:`.padEnd(15) + `${reportData.discount}`.padStart(16) + "\n";
-      text += boldOn + `TOTAL REV:`.padEnd(15) + `${reportData.totalSales}`.padStart(16) + boldOff + "\n";
+      text += `Date ${reportData.date}\n`;
+      text += `Total Revenue Rs. ${reportData.totalSales}\n`;
+      text += `Total Orders ${reportData.totalOrders}\n`;
+      text += `Payment Split UPI: Rs. ${reportData.upiSales} | CASH: Rs. ${reportData.cashSales}\n`;
+      if (parseFloat(reportData.discount) > 0) {
+        text += `Total Discount Rs. ${reportData.discount}\n`;
+      }
       text += "--------------------------------\n";
 
       // Items Summary
       text += boldOn + "ITEMS SOLD" + boldOff + "\n";
-      text += "Item            Qty    Total\n";
+      text += "Sr. Item Name\n";
+      text += "    Price x Qty = Total\n";
       text += "--------------------------------\n";
-      reportData.items.forEach(i => {
-        const name = (i.name || "Item").slice(0, 15).padEnd(16);
-        const qty = `${i.qty}`.padEnd(6);
-        const sub = `${i.total}`.padStart(9);
-        text += `${name}${qty}${sub}\n`;
+      reportData.items.forEach((i, index) => {
+        const srNo = `${index + 1}.`.padEnd(4);
+        const name = (i.name || "Item").slice(0, 28);
+        
+        // Ensure price is safely formatted in case it's missing (should be passed from caller now)
+        const itemPrice = i.price != null ? Number(i.price).toFixed(2) : ((i.total / (i.qty || 1)).toFixed(2));
+        const itemTotal = Number(i.total).toFixed(2);
+        
+        const line2 = `    Rs.${itemPrice} x ${i.qty} = Rs.${itemTotal}`;
+        
+        text += `${srNo}${name}\n${line2}\n`;
       });
       
       text += "--------------------------------\n";

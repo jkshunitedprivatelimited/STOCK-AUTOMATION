@@ -286,16 +286,21 @@ function BillingHistory() {
       const itemMap = {};
       history.forEach(bill => {
         bill.bills_items_generated?.forEach(i => {
-          if (!itemMap[i.item_name]) itemMap[i.item_name] = { qty: 0, total: 0 };
-          itemMap[i.item_name].qty += i.qty;
-          itemMap[i.item_name].total += (i.total || 0);
+          // Fallback to calculated price if missing
+          const price = i.price != null ? Number(i.price) : (i.qty > 0 ? (i.total / i.qty) : 0);
+          const key = `${i.item_name}|${price}`;
+          
+          if (!itemMap[key]) itemMap[key] = { name: i.item_name, price: price, qty: 0, total: 0 };
+          itemMap[key].qty += i.qty;
+          itemMap[key].total += (i.total || 0);
         });
       });
       
-      const aggregatedItems = Object.keys(itemMap).map(name => ({
-        name: name,
-        qty: itemMap[name].qty,
-        total: itemMap[name].total.toFixed(2)
+      const aggregatedItems = Object.values(itemMap).map(item => ({
+        name: item.name,
+        price: item.price,
+        qty: item.qty,
+        total: item.total.toFixed(2)
       }));
 
       await printDayReport({
