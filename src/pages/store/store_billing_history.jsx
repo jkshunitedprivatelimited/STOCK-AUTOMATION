@@ -14,8 +14,11 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
-  Eye
+  Eye,
+  Download
 } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from 'jspdf-autotable';
 
 import { useBluetoothPrinter } from "../printer/BluetoothPrinter";
 import { BRAND_GREEN } from "../../utils/theme";
@@ -140,7 +143,7 @@ const BillDetailsModal = ({ bill, onClose, onReprint, onCancelRequest }) => {
 function BillingHistory() {
   const navigate = useNavigate();
   const { user, logout, loading } = useAuth();
-  const { connectPrinter, disconnectPrinter, printReceipt, isConnected, isConnecting } = useBluetoothPrinter();
+  const { connectPrinter, disconnectPrinter, printReceipt, printDayReport, isConnected, isConnecting } = useBluetoothPrinter();
 
   const [history, setHistory] = useState([]);
   // ... state ...
@@ -168,13 +171,14 @@ function BillingHistory() {
   const [storeProfile, setStoreProfile] = useState(null);
   const [staffName, setStaffName] = useState("Owner"); // Default to Owner
   const [selectedBill, setSelectedBill] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: "created_at", direction: "descending" });
+  const [sortConfig, setSortConfig] = useState({ key: "created_at", direction: "ascending" });
   const [lastCheckoutTime, setLastCheckoutTime] = useState(null);
   const [timeLeft, setTimeLeft] = useState("");
   const [canCheckout, setCanCheckout] = useState(true);
   const [dataLoading, setDataLoading] = useState(true);
   const [billToDelete, setBillToDelete] = useState(null);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [showDownloadOptions, setShowDownloadOptions] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
@@ -276,6 +280,177 @@ function BillingHistory() {
     } catch { alert("Reprint failed."); }
   };
 
+  const handlePrintDayReport = async () => {
+    if (!isConnected) return alert("Connect printer first.");
+    try {
+      const itemMap = {};
+      history.forEach(bill => {
+        bill.bills_items_generated?.forEach(i => {
+          if (!itemMap[i.item_name]) itemMap[i.item_name] = { qty: 0, total: 0 };
+          itemMap[i.item_name].qty += i.qty;
+          itemMap[i.item_name].total += (i.total || 0);
+        });
+      });
+      
+      const aggregatedItems = Object.keys(itemMap).map(name => ({
+        name: name,
+        qty: itemMap[name].qty,
+        total: itemMap[name].total.toFixed(2)
+      }));
+
+      await printDayReport({
+        company: storeProfile?.company || "STORE",
+        date: todayDisplay,
+        totalOrders: stats.orderCount,
+        upiSales: stats.upiSales.toFixed(2),
+        cashSales: stats.cashSales.toFixed(2),
+        discount: stats.totalDiscount.toFixed(2),
+        totalSales: stats.totalSales.toFixed(2),
+        items: aggregatedItems
+      });
+    } catch (err) { alert("Failed to print day report."); }
+  };
+
+  const handleDownloadPDF = () => {
+    try {
+      const doc = new jsPDF("landscape");
+      let y = 15;
+      
+      const title = (storeProfile?.company || "Store") + " - Day Summary";
+      const pageWidth = doc.internal.pageSize.getWidth();
+      
+      doc.setFontSize(18);
+      doc.text(title, pageWidth / 2, y, { align: "center" });
+      
+      const metadataTable = [
+        ['Date', todayDisplay],
+        ['Total Revenue', "Rs. " + stats.totalSales.toFixed(2)],
+        ['Total Orders', stats.orderCount.toString()],
+        ['Payment Split', `UPI: Rs. ${stats.upiSales.toFixed(2)} | CASH: Rs. ${stats.cashSales.toFixed(2)}`]
+      ];
+
+      autoTable(doc, {
+        startY: y + 8,
+        body: metadataTable,
+        theme: 'grid',
+        styles: { fontSize: 10, cellPadding: 3, textColor: [0, 0, 0] },
+        columnStyles: {
+          0: { cellWidth: 40, fontStyle: 'bold', fillColor: [240, 240, 240] },
+          1: { cellWidth: 'auto' }
+        }
+      });
+      
+      y = doc.lastAutoTable.finalY + 10;
+      
+      // We want ascending order in PDF specifically if we want time to go from morning to evening.
+      // But we just use sortedHistory (which is currently ascending because of the state change).
+      // Let's sort it explicitly ascending for the PDF just in case the user clicked to sort descending in UI.
+      const pdfHistory = [...history].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+      // 1. Calculate and Print Aggregated Items First
+      const itemMap = {};
+      pdfHistory.forEach(bill => {
+        bill.bills_items_generated?.forEach(i => {
+          // Fallback to calculated price if missing
+          const price = i.price != null ? Number(i.price) : (i.qty > 0 ? (i.total / i.qty) : 0);
+          const key = `${i.item_name}|${price}`;
+          
+          if (!itemMap[key]) itemMap[key] = { name: i.item_name, price: price, qty: 0, total: 0 };
+          itemMap[key].qty += i.qty;
+          itemMap[key].total += (i.total || 0);
+        });
+      });
+      
+      const aggregatedItemsData = Object.values(itemMap).map((item, idx) => [
+        (idx + 1).toString(),
+        item.name,
+        "Rs. " + item.price.toFixed(2),
+        item.qty.toString(),
+        "Rs. " + item.total.toFixed(2)
+      ]);
+
+      if (aggregatedItemsData.length > 0) {
+        y += 10;
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("Items Sold Today", 14, y);
+        
+        autoTable(doc, {
+          startY: y + 4,
+          head: [['Sr. No.', 'Item Name', 'Price', 'Item Qty', 'Total Amount']],
+          body: aggregatedItemsData,
+          styles: { fontSize: 9, cellPadding: 3, lineColor: [200, 200, 200], lineWidth: 0.1 },
+          headStyles: { fillColor: [4, 120, 87] }, // BRAND_GREEN
+          theme: 'grid',
+        });
+        
+        // Start "All Bills Today" on a fresh page
+        doc.addPage();
+        y = 15;
+      } else {
+        y += 10;
+      }
+      
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("All Bills Today", 14, y);
+
+      const tableData = [];
+      pdfHistory.forEach((bill, index) => {
+        const srNo = (index + 1).toString();
+        const timeStr = new Date(bill.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+        const billIdStr = "#" + bill.id.toString().slice(-6).toUpperCase();
+        const mode = bill.payment_mode || "N/A";
+        const disc = bill.discount > 0 ? "Rs." + bill.discount.toFixed(2) : "-";
+        const amount = "Rs." + (bill.total || 0).toFixed(2);
+        
+        const items = bill.bills_items_generated || [];
+        if (items.length === 0) {
+            tableData.push([srNo, timeStr, billIdStr, mode, disc, amount, "-", "-", "-"]);
+        } else {
+            items.forEach((item, i) => {
+                const itemName = item.item_name;
+                const qty = item.qty.toString();
+                const itemTotal = "Rs." + (item.total || 0).toFixed(2);
+                
+                if (i === 0) {
+                    tableData.push([
+                        { rowSpan: items.length, content: srNo, styles: { valign: 'middle', halign: 'center' } },
+                        { rowSpan: items.length, content: timeStr, styles: { valign: 'middle' } },
+                        { rowSpan: items.length, content: billIdStr, styles: { valign: 'middle' } },
+                        { rowSpan: items.length, content: mode, styles: { valign: 'middle' } },
+                        { rowSpan: items.length, content: disc, styles: { valign: 'middle' } },
+                        { rowSpan: items.length, content: amount, styles: { valign: 'middle' } },
+                        itemName, qty, itemTotal
+                    ]);
+                } else {
+                    tableData.push([itemName, qty, itemTotal]);
+                }
+            });
+        }
+      });
+
+      autoTable(doc, {
+        startY: y + 10,
+        head: [['Sr. No.', 'Time', 'Bill ID', 'Mode', 'Discount', 'Amount', 'Item Name', 'Qty', 'Item Total']],
+        body: tableData,
+        styles: { fontSize: 9, cellPadding: 3, lineColor: [200, 200, 200], lineWidth: 0.1 },
+        headStyles: { fillColor: [4, 120, 87] }, // BRAND_GREEN
+        theme: 'grid',
+        columnStyles: {
+            0: { halign: 'center' },
+            7: { halign: 'center' },
+            8: { halign: 'right' },
+        },
+      });
+      
+      doc.save("Day_Report_" + todayDisplay + ".pdf");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to generate PDF");
+    }
+  };
+
   const confirmDelete = async () => {
     try {
       const { data, error } = await supabase.from("bills_generated").delete().eq("id", billToDelete).select();
@@ -316,6 +491,7 @@ function BillingHistory() {
       let aVal = a[sortConfig.key];
       let bVal = b[sortConfig.key];
       if (sortConfig.key === 'id') { aVal = Number(aVal); bVal = Number(bVal); }
+      else if (sortConfig.key === 'created_at') { aVal = new Date(aVal).getTime(); bVal = new Date(bVal).getTime(); }
       if (aVal < bVal) return sortConfig.direction === "ascending" ? -1 : 1;
       if (aVal > bVal) return sortConfig.direction === "ascending" ? 1 : -1;
       return 0;
@@ -425,6 +601,15 @@ function BillingHistory() {
               </button>
             </div>
           </div>
+          
+          <div style={{ ...styles.actionRow, marginTop: '8px' }}>
+            <button 
+              onClick={() => setShowDownloadOptions(true)}
+              style={{ ...styles.downloadDataBtn, width: '100%' }}
+            >
+              <Download size={16} /> DOWNLOAD TODAY'S DATA
+            </button>
+          </div>
         </div>
 
         {/* Table/List Area - Fills remaining space */}
@@ -460,6 +645,9 @@ function BillingHistory() {
             <table style={styles.table}>
               <thead style={styles.stickyThead}>
                 <tr style={styles.thRow}>
+                  <th style={styles.clickableTh}>
+                    <div style={styles.thContent}>SR.NO</div>
+                  </th>
                   <th style={styles.clickableTh} onClick={() => handleSort('created_at')}>
                     <div style={styles.thContent}>TIME <SortIcon columnKey="created_at" /></div>
                   </th>
@@ -481,6 +669,9 @@ function BillingHistory() {
               <tbody>
                 {sortedHistory.map((bill, index) => (
                   <tr key={bill.id} className="anim-row" style={{ ...styles.tr, animationDelay: `${index * 0.03}s` }} onClick={() => startTransition(() => setSelectedBill(bill))}>
+                    <td style={styles.td}>
+                      <span style={{ fontWeight: '600', color: '#64748b' }}>{index + 1}</span>
+                    </td>
                     <td style={styles.td}>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontWeight: '700', fontSize: '14px' }}>{new Date(bill.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}</span>
@@ -531,6 +722,41 @@ function BillingHistory() {
           </div>
         )
       }
+
+      {showDownloadOptions && (
+        <div style={styles.modalOverlay} onClick={() => setShowDownloadOptions(false)}>
+          <div className="anim-modal" style={{ ...styles.modalContent, width: isMobile ? '85%' : '400px', padding: '25px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+            <h3 style={styles.modalTitle}>Today's Data</h3>
+            <p style={styles.modalDesc}>How would you like to get today's data?</p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <button 
+                style={{ ...styles.bigPrintBtn, background: '#10b981', margin: 0 }} 
+                onClick={() => {
+                   handlePrintDayReport();
+                   setShowDownloadOptions(false);
+                }}
+              >
+                <Printer size={18} /> PRINT VIA PRINTER
+              </button>
+              
+              <button 
+                style={{ ...styles.bigPrintBtn, background: '#2563eb', margin: 0 }} 
+                onClick={() => {
+                   handleDownloadPDF();
+                   setShowDownloadOptions(false);
+                }}
+              >
+                <Download size={18} /> DOWNLOAD AS PDF
+              </button>
+            </div>
+
+            <button style={{ ...styles.btnCancel, width: '100%', marginTop: '15px' }} onClick={() => setShowDownloadOptions(false)}>
+              CANCEL
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -614,6 +840,7 @@ const styles = {
   connectBtn: { background: PRIMARY, color: "#fff", border: "none", borderRadius: "12px", fontWeight: "800", fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' },
   connectedBadge: { background: "#10b981", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "800", fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' },
   checkoutTodayBtn: { color: "#fff", border: "none", borderRadius: "12px", fontWeight: "800", fontSize: "12px", display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  downloadDataBtn: { background: '#1e293b', color: "#fff", border: "none", borderRadius: "12px", fontWeight: "800", fontSize: "12px", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', height: '100%', padding: '12px' },
   disconnectBtn: { background: "#fee2e2", color: DANGER, border: "none", padding: '0 14px', borderRadius: "12px", height: '100%' },
   logoutBtn: { color: DANGER, border: `1.5px solid ${DANGER}`, background: 'none', borderRadius: "10px", fontWeight: "800", fontSize: "12px" },
 

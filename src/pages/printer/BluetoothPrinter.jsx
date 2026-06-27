@@ -221,11 +221,81 @@ export function PrinterProvider({ children }) {
     }
   };
 
+  const printDayReport = async (reportData) => {
+    console.group("🖨️ DAY REPORT DEBUGGER");
+    devLog("1. REPORT DATA RECEIVED:", reportData);
+
+    if (!isConnected || !characteristicRef.current) {
+      console.error("❌ ABORT: Printer not connected");
+      console.groupEnd();
+      alert("Printer not connected!");
+      return;
+    }
+
+    try {
+      const encoder = new TextEncoder();
+      const ESC = '\x1B';
+      const reset = ESC + '@';
+      const center = ESC + 'a' + '\x01';
+      const left = ESC + 'a' + '\x00';
+      const boldOn = ESC + 'E' + '\x01';
+      const boldOff = ESC + 'E' + '\x00';
+
+      let text = reset;
+
+      text += center + boldOn + (reportData.company || "STORE").toUpperCase() + boldOff + "\n";
+      text += "DAY SUMMARY REPORT\n";
+      text += "--------------------------------\n" + left;
+      
+      text += `Date: ${reportData.date}\n`;
+      text += `Total Orders: ${reportData.totalOrders}\n`;
+      text += "--------------------------------\n";
+      
+      // Payment Summary
+      text += boldOn + "PAYMENT SUMMARY" + boldOff + "\n";
+      text += `UPI:`.padEnd(15) + `${reportData.upiSales}`.padStart(16) + "\n";
+      text += `CASH:`.padEnd(15) + `${reportData.cashSales}`.padStart(16) + "\n";
+      text += `DISCOUNT:`.padEnd(15) + `${reportData.discount}`.padStart(16) + "\n";
+      text += boldOn + `TOTAL REV:`.padEnd(15) + `${reportData.totalSales}`.padStart(16) + boldOff + "\n";
+      text += "--------------------------------\n";
+
+      // Items Summary
+      text += boldOn + "ITEMS SOLD" + boldOff + "\n";
+      text += "Item            Qty    Total\n";
+      text += "--------------------------------\n";
+      reportData.items.forEach(i => {
+        const name = (i.name || "Item").slice(0, 15).padEnd(16);
+        const qty = `${i.qty}`.padEnd(6);
+        const sub = `${i.total}`.padStart(9);
+        text += `${name}${qty}${sub}\n`;
+      });
+      
+      text += "--------------------------------\n";
+      text += center + "*** END OF REPORT ***\n";
+      text += "\n\n\n\n";
+
+      const data = encoder.encode(text);
+      const CHUNK_SIZE = 20;
+      for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+        const chunk = data.slice(i, i + CHUNK_SIZE);
+        await characteristicRef.current.writeValue(chunk);
+        await new Promise(r => setTimeout(r, 35));
+      }
+      devLog("✅ DAY REPORT PRINTED");
+    } catch (err) {
+      console.error("❌ PRINT HARDWARE ERROR:", err);
+      disconnectPrinter();
+    } finally {
+      console.groupEnd();
+    }
+  };
+
   return (
     <PrinterContext.Provider value={{
       connectPrinter,
       disconnectPrinter,
       printReceipt,
+      printDayReport,
       isConnected,
       isConnecting,
       supportError
