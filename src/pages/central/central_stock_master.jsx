@@ -6,8 +6,9 @@ import {
     Edit3, Trash2, X, Plus, Search,
     Calendar, ArrowLeft, AlertTriangle, Globe, EyeOff, Info,
     ChevronUp, ChevronDown, CheckCircle, Package, Tag, Hash,
-    ShoppingCart, Edit2
+    ShoppingCart, Edit2, Download
 } from "lucide-react";
+import { exportStockSheet } from "../../utils/stockExporter";
 import { BRAND_GREEN as BRAND_COLOR } from "../../utils/theme";
 
 // --- HELPER COMPONENTS ---
@@ -597,10 +598,18 @@ function CentralStockMaster() {
                             )}
                         </div>
 
-                        <button disabled={selectedCompanies.length === 0} onClick={() => setShowLowStock(!showLowStock)} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${selectedCompanies.length === 0 ? 'opacity-50 cursor-not-allowed bg-slate-50 text-slate-400 border-slate-200' : showLowStock ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showLowStock && selectedCompanies.length > 0 ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <AlertTriangle size={14} /> Low Stock </button>
-                        <button disabled={selectedCompanies.length === 0} onClick={() => setShowAvailableOnly(!showAvailableOnly)} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${selectedCompanies.length === 0 ? 'opacity-50 cursor-not-allowed bg-slate-50 text-slate-400 border-slate-200' : showAvailableOnly ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showAvailableOnly && selectedCompanies.length > 0 ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <CheckCircle size={14} /> Available </button>
-                        <button disabled={selectedCompanies.length === 0} onClick={toggleOnline} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${selectedCompanies.length === 0 ? 'opacity-50 cursor-not-allowed bg-slate-50 text-slate-400 border-slate-200' : showOnlineOnly ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showOnlineOnly && selectedCompanies.length > 0 ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <Globe size={14} /> Online </button>
-                        <button disabled={selectedCompanies.length === 0} onClick={toggleOffline} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${selectedCompanies.length === 0 ? 'opacity-50 cursor-not-allowed bg-slate-50 text-slate-400 border-slate-200' : showOfflineOnly ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showOfflineOnly && selectedCompanies.length > 0 ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <EyeOff size={14} /> Offline </button>
+                        <button
+                            onClick={() => exportStockSheet(filteredItems, selectedCompanies)}
+                            className="whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 text-white shadow-md hover:brightness-110"
+                            style={{ backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR }}
+                        >
+                            <Download size={14} /> Export Sheet
+                        </button>
+
+                        <button onClick={() => setShowLowStock(!showLowStock)} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${showLowStock ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showLowStock ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <AlertTriangle size={14} /> Low Stock </button>
+                        <button onClick={() => setShowAvailableOnly(!showAvailableOnly)} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${showAvailableOnly ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showAvailableOnly ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <CheckCircle size={14} /> Available </button>
+                        <button onClick={toggleOnline} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${showOnlineOnly ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showOnlineOnly ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <Globe size={14} /> Online </button>
+                        <button onClick={toggleOffline} className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 ${showOfflineOnly ? "text-white shadow-md" : "bg-white text-black border-slate-200"}`} style={showOfflineOnly ? { backgroundColor: BRAND_COLOR, borderColor: BRAND_COLOR } : {}}> <EyeOff size={14} /> Offline </button>
                         
                         {(showLowStock || showAvailableOnly || showOnlineOnly || showOfflineOnly || searchTerm || selectedCategory !== "All" || selectedCompanies.length > 0) && (
                             <button onClick={clearFilters} className="whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 flex-shrink-0 bg-red-50 text-red-600 border-red-100 hover:bg-red-100">
