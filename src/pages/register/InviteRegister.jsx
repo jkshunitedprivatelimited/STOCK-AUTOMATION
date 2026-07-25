@@ -52,6 +52,8 @@ function InviteRegister() {
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState("");
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -142,6 +144,7 @@ function InviteRegister() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
             'apikey': supabaseAnonKey,
           },
           body: JSON.stringify({
@@ -172,20 +175,18 @@ function InviteRegister() {
         try {
           const { error: syncError } = await supabase.rpc('clone_franchise_menu', {
             target_id: inviteData.franchise_id.trim().toUpperCase(),
-            central_id: 'TV-1' // Assuming default central ID or logic can be adjusted
+            central_id: 'TV-1'
           });
           if (syncError) {
             console.error('Menu sync error:', syncError);
-            alert(`✅ Registration successful, but menu sync failed: ${syncError.message}. You can sync manually later.`);
           }
         } catch (syncErr) {
           console.error(syncErr);
-          alert(`✅ Registration successful, but menu sync failed. You can sync manually later.`);
         }
       }
 
-      alert(`✅ Registration Successful!\nPlease log in with your new credentials.`);
-      navigate("/login");
+      setSubmittedEmail(emailStr.trim().toLowerCase());
+      setSubmitSuccess(true);
 
     } catch (err) {
       alert("❌ Registration Failed: " + err.message);
@@ -208,6 +209,31 @@ function InviteRegister() {
         <div style={{ backgroundColor: "#fff", padding: "40px", borderRadius: "16px", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)", textAlign: "center", maxWidth: "400px" }}>
           <div style={{ color: "#ef4444", fontWeight: "700", fontSize: "20px", marginBottom: "12px" }}>Access Denied</div>
           <div style={{ color: TEXT_MUTED, fontSize: "15px" }}>{errorMsg}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (submitSuccess) {
+    return (
+      <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#f8fafc", fontFamily: '"Inter", sans-serif' }}>
+        <div style={{ backgroundColor: "#fff", padding: "48px 40px", borderRadius: "20px", boxShadow: "0 4px 24px rgba(0,0,0,0.08)", textAlign: "center", maxWidth: "460px", width: "90%" }}>
+          <div style={{ width: "64px", height: "64px", borderRadius: "50%", backgroundColor: "#f0fdf4", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px auto" }}>
+            <Mail size={32} color={PRIMARY} />
+          </div>
+          <h2 style={{ color: TEXT_MAIN, fontSize: "22px", fontWeight: "800", margin: "0 0 12px 0" }}>Registration Submitted!</h2>
+          <p style={{ color: TEXT_MUTED, fontSize: "15px", lineHeight: "1.6", margin: "0 0 8px 0" }}>
+            If <strong style={{ color: TEXT_MAIN }}>{submittedEmail}</strong> is a valid email address, you will receive a confirmation email with your login credentials shortly.
+          </p>
+          <p style={{ color: TEXT_MUTED, fontSize: "14px", lineHeight: "1.5", margin: "0 0 28px 0" }}>
+            Please check your inbox (and spam folder) for the email from <strong>JKSH United</strong>.
+          </p>
+          <button
+            onClick={() => navigate("/login")}
+            style={{ backgroundColor: PRIMARY, color: "#fff", border: "none", borderRadius: "12px", padding: "14px 32px", fontSize: "15px", fontWeight: "700", cursor: "pointer", transition: "opacity 0.2s" }}
+          >
+            Go to Login
+          </button>
         </div>
       </div>
     );
