@@ -21,6 +21,7 @@ function CentralSettings() {
   const [msg, setMsg] = useState("");
   const [onlinePayments, setOnlinePayments] = useState(false);
   const [stockRequests, setStockRequests] = useState(false);
+  const [refundEnabled, setRefundEnabled] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
 
   // FIX: Define fetchProfile BEFORE calling it in useEffect
@@ -48,12 +49,13 @@ function CentralSettings() {
       const { data, error } = await supabase
         .from("central_settings")
         .select("key, enabled")
-        .in("key", ["online_payments", "stock_requests"]);
+        .in("key", ["online_payments", "stock_requests", "refund_enabled"]);
 
       if (!error && data) {
         data.forEach((s) => {
           if (s.key === "online_payments") setOnlinePayments(s.enabled);
           if (s.key === "stock_requests") setStockRequests(s.enabled);
+          if (s.key === "refund_enabled") setRefundEnabled(s.enabled);
         });
       }
       setSettingsLoading(false);
@@ -298,7 +300,53 @@ function CentralSettings() {
             </div>
           </div>
 
-          {/* 4. LOGOUT CARD */}
+          {/* 4. REFUND OPTION CARD */}
+          <div className="bg-white rounded-[24px] md:rounded-[32px] border p-6 md:p-8 shadow-sm flex flex-col h-full min-h-[320px]" style={{ borderColor: SOFT_BORDER }}>
+            <div className="flex items-center gap-4 mb-4">
+              <div className="p-3 rounded-xl bg-amber-50 text-amber-500">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9"/><path d="M12 3v6"/><path d="M10 14h4"/><path d="M12 12v4"/></svg>
+              </div>
+              <h3 className="text-lg font-black uppercase tracking-tight text-black">Refund Option</h3>
+            </div>
+
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed mb-6">
+              Enable or disable the refund feature for supply invoices.
+            </p>
+
+            <div className="flex-1 flex flex-col justify-center items-center gap-4">
+              <button
+                onClick={() => !settingsLoading && handleToggle("refund_enabled", refundEnabled, setRefundEnabled)}
+                disabled={settingsLoading}
+                className="relative outline-none border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  width: 72,
+                  height: 38,
+                  borderRadius: 19,
+                  backgroundColor: refundEnabled ? "#f59e0b" : "#d1d5db",
+                  transition: "background-color 0.3s ease",
+                  padding: 0,
+                }}
+              >
+                <span style={{
+                  position: "absolute",
+                  top: 4,
+                  left: refundEnabled ? 38 : 4,
+                  width: 30,
+                  height: 30,
+                  borderRadius: 15,
+                  backgroundColor: "white",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.18)",
+                  transition: "left 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                  display: "block",
+                }} />
+              </button>
+              <span className="text-[10px] font-black uppercase tracking-[0.3em]" style={{ color: refundEnabled ? "#f59e0b" : "#9ca3af" }}>
+                {settingsLoading ? "Loading..." : refundEnabled ? "Enabled" : "Disabled"}
+              </span>
+            </div>
+          </div>
+
+          {/* 5. LOGOUT CARD */}
           <div className="bg-white rounded-[24px] md:rounded-[32px] border p-6 md:p-10 shadow-sm flex flex-col justify-center items-center text-center h-full min-h-[320px]" style={{ borderColor: "rgba(225, 29, 72, 0.15)" }}>
             <div className="p-6 rounded-2xl bg-rose-50 text-rose-600 mb-6 transition-transform hover:scale-110">
               <LogOut className="w-10 h-10" strokeWidth={2.5} />

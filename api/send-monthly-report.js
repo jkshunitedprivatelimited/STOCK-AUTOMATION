@@ -105,7 +105,7 @@ export default async function handler(req, res) {
 
         if (bError) throw new Error(bError.message);
 
-        const safeBills = bills || [];
+        const safeBills = (bills || []).filter(b => b.payment_mode !== "SYSTEM");
         const billIds = safeBills.map(b => b.id);
 
         // Query all items for these bills
@@ -121,11 +121,16 @@ export default async function handler(req, res) {
         }
 
         // --- CALCULATION LOGIC ---
+        const activeBills = safeBills.filter(b => !b.is_refunded);
+        const refundedBills = safeBills.filter(b => b.is_refunded);
+
         const totalBills = safeBills.length;
-        const totalAmount = safeBills.reduce((sum, b) => sum + Number(b.total ?? 0), 0);
-        const upiAmount = safeBills.filter(b => b.payment_mode?.toLowerCase() === 'upi').reduce((sum, b) => sum + Number(b.total ?? 0), 0);
-        const cashAmount = safeBills.filter(b => b.payment_mode?.toLowerCase() === 'cash').reduce((sum, b) => sum + Number(b.total ?? 0), 0);
-        const totalDiscount = safeBills.reduce((sum, b) => sum + Number(b.discount ?? 0), 0);
+        const refundCount = refundedBills.length;
+        const totalAmount = activeBills.reduce((sum, b) => sum + Number(b.total ?? 0), 0);
+        const upiAmount = activeBills.filter(b => b.payment_mode?.toLowerCase() === 'upi').reduce((sum, b) => sum + Number(b.total ?? 0), 0);
+        const cashAmount = activeBills.filter(b => b.payment_mode?.toLowerCase() === 'cash').reduce((sum, b) => sum + Number(b.total ?? 0), 0);
+        const totalDiscount = activeBills.reduce((sum, b) => sum + Number(b.discount ?? 0), 0);
+        const totalRefunds = refundedBills.reduce((sum, b) => sum + Number(b.total ?? 0), 0);
 
         // Group by Date for Day-wise summary
         const dayMap = new Map();
@@ -133,14 +138,20 @@ export default async function handler(req, res) {
         safeBills.forEach(b => {
           const dateStr = new Date(b.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
           if (!dayMap.has(dateStr)) {
-            dayMap.set(dateStr, { count: 0, total: 0, upi: 0, cash: 0, discount: 0 });
+            dayMap.set(dateStr, { count: 0, total: 0, upi: 0, cash: 0, discount: 0, refunded: 0, refundCount: 0 });
           }
           const day = dayMap.get(dateStr);
           day.count++;
-          day.total += Number(b.total ?? 0);
-          day.discount += Number(b.discount ?? 0);
-          if (b.payment_mode?.toLowerCase() === 'upi') day.upi += Number(b.total ?? 0);
-          if (b.payment_mode?.toLowerCase() === 'cash') day.cash += Number(b.total ?? 0);
+          
+          if (b.is_refunded) {
+             day.refunded += Number(b.total ?? 0);
+             day.refundCount++;
+          } else {
+             day.total += Number(b.total ?? 0);
+             day.discount += Number(b.discount ?? 0);
+             if (b.payment_mode?.toLowerCase() === 'upi') day.upi += Number(b.total ?? 0);
+             if (b.payment_mode?.toLowerCase() === 'cash') day.cash += Number(b.total ?? 0);
+          }
         });
 
         // --- BUILD CSV ---
@@ -155,19 +166,21 @@ export default async function handler(req, res) {
         csv += `"Total Bills:","${totalBills}"\n`;
         csv += `"UPI Payments (INR):","${upiAmount.toFixed(2)}"\n`;
         csv += `"Cash Payments (INR):","${cashAmount.toFixed(2)}"\n`;
-        csv += `"Total Discounts (INR):","${totalDiscount.toFixed(2)}"\n\n`;
+        csv += `"Total Discounts (INR):","${totalDiscount.toFixed(2)}"\n`;
+        csv += `"Total Refunded (INR):","${totalRefunds.toFixed(2)}"\n`;
+        csv += `"Refunded Bills:","${refundCount}"\n\n`;
 
         // 2. Day-wise Summary
         csv += `"DAY-WISE SUMMARY"\n`;
-        csv += `"Date","Total Bills","UPI Revenue","Cash Revenue","Daily Total","Daily Discounts"\n`;
+        csv += `"Date","Total Bills","UPI Revenue","Cash Revenue","Daily Total","Daily Discounts","Refunded Total"\n`;
         Array.from(dayMap.entries()).forEach(([date, stats]) => {
-          csv += `"${date}","${stats.count}","${stats.upi.toFixed(2)}","${stats.cash.toFixed(2)}","${stats.total.toFixed(2)}","${stats.discount.toFixed(2)}"\n`;
+          csv += `"${date}","${stats.count}","${stats.upi.toFixed(2)}","${stats.cash.toFixed(2)}","${stats.total.toFixed(2)}","${stats.discount.toFixed(2)}","${stats.refunded.toFixed(2)}"\n`;
         });
         csv += `\n`;
 
         // 3. Detailed Itemized Ledger
         csv += `"DETAILED CONSOLIDATED AUDIT TRAIL"\n`;
-        csv += `"S.No","Date","Time","Bill Number","Payment Mode","Item Name","Qty","Price (INR)","Item Total (INR)","Bill Discount (INR)","Bill Final Amount (INR)"\n`;
+        csv += `"S.No","Date","Time","Bill Number","Bill Status","Customer Paid Via","Refunded Via","Item Name","Qty","Price (INR)","Item Total (INR)","Bill Discount (INR)","Bill Final Amount (INR)"\n`;
 
         if (safeBills.length > 0) {
           safeBills.forEach((bill, index) => {
@@ -178,22 +191,24 @@ export default async function handler(req, res) {
             const finalTotal = Number(bill.total ?? 0).toFixed(2);
             const mode = String(bill.payment_mode || 'N/A').toUpperCase();
             const txnId = String(bill.id).replace(/"/g, '""');
+            const status = bill.is_refunded ? "REFUNDED" : "COMPLETED";
+            const refundMode = bill.is_refunded ? String(bill.refund_mode || "UNKNOWN").toUpperCase() : "N/A";
 
             const billItems = allItems.filter(item => item.bill_id === bill.id);
 
             if (billItems.length === 0) {
-              csv += `"${index + 1}","${dateStr}","${timeStr}","${txnId}","${mode}","N/A","0","0.00","0.00","${discount}","${finalTotal}"\n`;
+              csv += `"${index + 1}","${dateStr}","${timeStr}","${txnId}","${status}","${mode}","${refundMode}","N/A","0","0.00","0.00","${discount}","${finalTotal}"\n`;
             } else {
               billItems.forEach((item, i) => {
-                const itemName = String(item.item_name || 'Unknown').replace(/"/g, '""');
+                const itemName = String(item.item_name || "Unknown").replace(/"/g, '""');
                 const qty = item.qty || 0;
                 const price = Number(item.price ?? 0).toFixed(2);
                 const itemTotal = Number(item.total ?? (qty * Number(price))).toFixed(2);
 
                 if (i === 0) {
-                  csv += `"${index + 1}","${dateStr}","${timeStr}","${txnId}","${mode}","${itemName}","${qty}","${price}","${itemTotal}","${discount}","${finalTotal}"\n`;
+                  csv += `"${index + 1}","${dateStr}","${timeStr}","${txnId}","${status}","${mode}","${refundMode}","${itemName}","${qty}","${price}","${itemTotal}","${discount}","${finalTotal}"\n`;
                 } else {
-                  csv += `"" ,"" ,"" ,"" ,"" ,"${itemName}","${qty}","${price}","${itemTotal}","" ,"" \n`;
+                  csv += `"" ,"" ,"" ,"" ,"" ,"" ,"" ,"${itemName}","${qty}","${price}","${itemTotal}","" ,"" \n`;
                 }
               });
             }
@@ -215,6 +230,7 @@ export default async function handler(req, res) {
                 <tr><td style="padding: 8px 16px; background: #f3f4f6; font-weight: bold;">Total Revenue</td><td style="padding: 8px 16px;">₹${totalAmount.toFixed(2)}</td></tr>
                 <tr><td style="padding: 8px 16px; background: #f3f4f6; font-weight: bold;">UPI</td><td style="padding: 8px 16px;">₹${upiAmount.toFixed(2)}</td></tr>
                 <tr><td style="padding: 8px 16px; background: #f3f4f6; font-weight: bold;">Cash</td><td style="padding: 8px 16px;">₹${cashAmount.toFixed(2)}</td></tr>
+                <tr><td style="padding: 8px 16px; background: #f3f4f6; font-weight: bold;">Refunded</td><td style="padding: 8px 16px;">₹${totalRefunds.toFixed(2)}</td></tr>
               </table>
               <p style="color: #6b7280; font-size: 12px;">This is an automated report from JKSH United. For detailed transactions, please check the attached CSV file.</p>
             </div>

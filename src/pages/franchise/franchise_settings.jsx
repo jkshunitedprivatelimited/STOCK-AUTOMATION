@@ -14,6 +14,7 @@ function FranchiseSettingsCard() {
 
   // --- STATES ---
   const [franchiseId, setFranchiseId] = useState("...");
+  const [refundEnabled, setRefundEnabled] = useState(false);
 
   // Password Logic
   const [newPassword, setNewPassword] = useState("");
@@ -52,7 +53,7 @@ function FranchiseSettingsCard() {
     try {
       const { data } = await supabase
         .from("profiles")
-        .select("name, email, phone, franchise_id, address, branch_location, company, pincode, state, city, country, nearest_bus_stop")
+        .select("name, email, phone, franchise_id, address, branch_location, company, pincode, state, city, country, nearest_bus_stop, refund_enabled")
         .eq("id", authUser.id)
         .single();
 
@@ -72,6 +73,7 @@ function FranchiseSettingsCard() {
           nearest_bus_stop: data.nearest_bus_stop || ""
         });
         setFranchiseId(data.franchise_id);
+        setRefundEnabled(data.refund_enabled || false);
       }
     } catch (e) {
       console.error("Profile fetch error:", e);
@@ -148,6 +150,20 @@ function FranchiseSettingsCard() {
     } else {
       setPasswordMsg("Password updated successfully");
       setTimeout(() => setShowSecurityModal(false), 1500);
+    }
+  };
+
+  const handleToggleRefund = async () => {
+    const newVal = !refundEnabled;
+    setRefundEnabled(newVal);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ refund_enabled: newVal })
+      .eq("id", authUser.id);
+      
+    if (error) {
+      alert("Failed to update refund setting.");
+      setRefundEnabled(!newVal);
     }
   };
 
@@ -238,7 +254,26 @@ function FranchiseSettingsCard() {
             <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-widest">Change Password</p>
           </button>
 
-          {/* 4. LOGOUT CARD */}
+          {/* 4. REFUND OPTION CARD */}
+          <div className="bg-white rounded-[24px] md:rounded-[32px] border border-slate-200 p-8 shadow-sm flex flex-col justify-center items-center text-center transition-all hover:border-black/20 hover:-translate-y-1 hover:shadow-lg min-h-[260px]">
+            <div className={`p-4 rounded-3xl transition-all mb-6 ${refundEnabled ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400'}`}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9"/><path d="M12 3v6"/><path d="M10 14h4"/><path d="M12 12v4"/></svg>
+            </div>
+            <h3 className="text-lg font-black text-black uppercase tracking-tight mb-2">Refund Option</h3>
+            <p className="text-[10px] font-bold text-slate-400 mb-6 uppercase tracking-widest">Enable same-day refunds</p>
+            
+            <button
+              onClick={handleToggleRefund}
+              className={`relative inline-flex h-8 w-16 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${refundEnabled ? 'bg-amber-500' : 'bg-slate-200'}`}
+            >
+              <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${refundEnabled ? 'translate-x-3.5' : '-translate-x-3.5'}`} />
+            </button>
+            <span className={`mt-3 text-[10px] font-black uppercase tracking-widest ${refundEnabled ? 'text-amber-500' : 'text-slate-400'}`}>
+              {refundEnabled ? "Enabled" : "Disabled"}
+            </span>
+          </div>
+
+          {/* 5. LOGOUT CARD */}
           <button
             onClick={handleLogout}
             className="bg-white rounded-[24px] md:rounded-[32px] border p-8 shadow-sm flex flex-col justify-center items-center text-center transition-all hover:bg-rose-50 hover:-translate-y-1 hover:shadow-lg active:scale-95 group min-h-[260px]"

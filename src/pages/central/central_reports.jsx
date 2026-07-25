@@ -258,7 +258,7 @@ function Reports() {
             };
 
             // Merge Data & Attach Company Name
-            const enrichedBills = (billsReq.data || []).map(bill => {
+            const enrichedBills = (billsReq.data || []).filter(b => b.payment_mode !== "SYSTEM").map(bill => {
                 const profile = findProfileForRecord(bill);
                 return {
                     ...bill,
@@ -381,10 +381,14 @@ function Reports() {
         const isStore = activeTab === "store";
 
         // Calculate stats for export summary
-        const eTotalSales = filteredData.reduce((sum, b) => sum + Number(b.total ?? b.total_amount ?? 0), 0);
-        const eUpiSales = filteredData.reduce((sum, b) => ((b.payment_mode || "").toUpperCase() === "UPI" ? sum + Number(b.total ?? b.total_amount ?? 0) : sum), 0);
-        const eCashSales = filteredData.reduce((sum, b) => ((b.payment_mode || "").toUpperCase() === "CASH" ? sum + Number(b.total ?? b.total_amount ?? 0) : sum), 0);
-        const eTotalDiscount = filteredData.reduce((sum, b) => sum + Number(b.discount ?? 0), 0);
+        const activeData = filteredData.filter(b => !b.is_refunded);
+        const refundedData = filteredData.filter(b => b.is_refunded);
+
+        const eTotalSales = activeData.reduce((sum, b) => sum + Number(b.total ?? b.total_amount ?? 0), 0);
+        const eUpiSales = activeData.reduce((sum, b) => ((b.payment_mode || "").toUpperCase() === "UPI" ? sum + Number(b.total ?? b.total_amount ?? 0) : sum), 0);
+        const eCashSales = activeData.reduce((sum, b) => ((b.payment_mode || "").toUpperCase() === "CASH" ? sum + Number(b.total ?? b.total_amount ?? 0) : sum), 0);
+        const eTotalDiscount = activeData.reduce((sum, b) => sum + Number(b.discount ?? 0), 0);
+        const eTotalRefunds = refundedData.reduce((sum, b) => sum + Number(b.total ?? b.total_amount ?? 0), 0);
         const eTotalOrders = filteredData.length;
 
         let csvContent = "data:text/csv;charset=utf-8,";
@@ -397,13 +401,14 @@ function Reports() {
             csvContent += `UPI Amount (INR),${eUpiSales.toFixed(2)}\n`;
             csvContent += `Cash Amount (INR),${eCashSales.toFixed(2)}\n`;
             csvContent += `Total Discount (INR),${eTotalDiscount.toFixed(2)}\n`;
+            csvContent += `Total Refunded (INR),${eTotalRefunds.toFixed(2)}\n`;
         }
         csvContent += "\n";
 
         csvContent += `=== DETAILED TRANSACTIONS ===\n`;
         let headers = [];
         if (isStore) {
-            headers = ["S.No", "Company", "Bill/Invoice ID", "Franchise ID", "Branch Name", "Date", "Time", "Payment Mode", "Discount (INR)", "Total Amount (INR)"];
+            headers = ["S.No", "Company", "Bill/Invoice ID", "Franchise ID", "Branch Name", "Date", "Time", "Bill Status", "Customer Paid Via", "Refunded Via", "Discount (INR)", "Total Amount (INR)"];
         } else {
             headers = ["S.No", "Company", "Bill/Invoice ID", "Franchise ID", "Branch Name", "Date", "Time", "Total Amount (INR)"];
         }
@@ -419,7 +424,9 @@ function Reports() {
             if (isStore) {
                 const mode = item.payment_mode || "N/A";
                 const discount = item.discount || 0;
-                return [index + 1, company, id, fid, name, dateObj.toLocaleDateString('en-IN'), dateObj.toLocaleTimeString('en-US'), mode, discount, amount].join(",");
+                const status = item.is_refunded ? "REFUNDED" : "COMPLETED";
+                const refundMode = item.is_refunded ? (item.refund_mode || "UNKNOWN") : "N/A";
+                return [index + 1, company, id, fid, name, dateObj.toLocaleDateString('en-IN'), dateObj.toLocaleTimeString('en-US'), status, mode, refundMode, discount, amount].join(",");
             } else {
                 return [index + 1, company, id, fid, name, dateObj.toLocaleDateString('en-IN'), dateObj.toLocaleTimeString('en-US'), amount].join(",");
             }
@@ -772,7 +779,7 @@ function Reports() {
     const totalPages = Math.ceil(sortedData.length / itemsPerPage);
 
     const itemPieData = useMemo(() => {
-        const validIds = new Set(filteredData.map(b => b.id));
+        const validIds = new Set(filteredData.filter(b => !b.is_refunded).map(b => b.id));
         const itemsToProcess = activeTab === "store" ? rawData.billItems : rawData.invoiceItems;
         const key = activeTab === "store" ? "bill_id" : "invoice_id";
         const counts = {};
@@ -787,7 +794,9 @@ function Reports() {
     const chartData = useMemo(() => {
         if (!filteredData.length) return [];
         const daily = {};
-        const sorted = [...filteredData].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        const activeData = filteredData.filter(d => !d.is_refunded);
+        const sorted = [...activeData].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        if (!sorted.length) return [];
         sorted.forEach(item => {
             const d = new Date(item.created_at);
             const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -815,12 +824,18 @@ function Reports() {
     }, [chartData]);
 
     const stats = useMemo(() => {
-        const totalSales = filteredData.reduce((sum, b) => sum + Number(b.total ?? b.total_amount ?? 0), 0);
-        const upiSales = filteredData.reduce((sum, b) => ((b.payment_mode || "").toUpperCase() === "UPI" ? sum + Number(b.total ?? b.total_amount ?? 0) : sum), 0);
-        const cashSales = filteredData.reduce((sum, b) => ((b.payment_mode || "").toUpperCase() === "CASH" ? sum + Number(b.total ?? b.total_amount ?? 0) : sum), 0);
-        const totalDiscount = filteredData.reduce((sum, b) => sum + Number(b.discount ?? 0), 0);
+        const activeData = filteredData.filter(b => !b.is_refunded);
+        const refundedData = filteredData.filter(b => b.is_refunded);
+
+        const totalSales = activeData.reduce((sum, b) => sum + Number(b.total ?? b.total_amount ?? 0), 0);
+        const upiSales = activeData.reduce((sum, b) => ((b.payment_mode || "").toUpperCase() === "UPI" ? sum + Number(b.total ?? b.total_amount ?? 0) : sum), 0);
+        const cashSales = activeData.reduce((sum, b) => ((b.payment_mode || "").toUpperCase() === "CASH" ? sum + Number(b.total ?? b.total_amount ?? 0) : sum), 0);
+        const totalDiscount = activeData.reduce((sum, b) => sum + Number(b.discount ?? 0), 0);
+        const totalRefunds = refundedData.reduce((sum, b) => sum + Number(b.total ?? b.total_amount ?? 0), 0);
+        
         const totalOrders = filteredData.length;
-        return { totalSales, upiSales, cashSales, totalDiscount, totalOrders };
+        const refundCount = refundedData.length;
+        return { totalSales, upiSales, cashSales, totalDiscount, totalOrders, totalRefunds, refundCount };
     }, [filteredData]);
 
     // --- DATA DELETION COUNTDOWN BANNER ---
@@ -1156,6 +1171,11 @@ function Reports() {
                                         <span className="text-[10px] font-black text-black/40 uppercase tracking-widest mb-1">CASH SALES</span>
                                         <span className="text-xl md:text-2xl font-black text-emerald-600">₹{stats.cashSales.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                                     </div>
+                                    <div className="bg-white p-5 rounded-2xl border border-black/10 shadow-sm flex flex-col items-center justify-center text-center col-span-2">
+                                        <span className="text-[10px] font-black text-black/40 uppercase tracking-widest mb-1">REFUNDED</span>
+                                        <span className="text-xl md:text-2xl font-black text-red-500">₹{stats.totalRefunds.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                                        <span className="text-[10px] font-bold text-red-400 mt-1">({stats.refundCount} {stats.refundCount === 1 ? 'Bill' : 'Bills'})</span>
+                                    </div>
                                 </>
                             )}
                         </div>
@@ -1230,7 +1250,7 @@ function Reports() {
                                 {paginatedData.length === 0 ? (
                                     <tr><td colSpan="7" className="p-10 text-center text-black/40">No records found.</td></tr>
                                 ) : paginatedData.map((item, index) => (
-                                    <tr key={item.id} onClick={() => openDetails(item)} className="hover:bg-black/5 cursor-pointer transition-colors">
+                                    <tr key={item.id} onClick={() => openDetails(item)} className={`hover:bg-black/5 cursor-pointer transition-colors ${item.is_refunded ? 'opacity-60' : ''}`}>
                                         <td className="p-5 text-black/40">{(page - 1) * itemsPerPage + index + 1}</td>
                                         <td className="p-5">
                                             <span className="bg-black/5 text-black px-2 py-1 rounded-md text-[10px]">#{item.id.toString().slice(-8)}</span>
@@ -1246,7 +1266,7 @@ function Reports() {
                                                 </span>
                                             </td>
                                         )}
-                                        <td className="p-5 text-right font-black" style={{ color: PRIMARY }}>₹{(item.total || item.total_amount || 0).toFixed(2)}</td>
+                                        <td className={`p-5 text-right font-black ${item.is_refunded ? 'line-through text-red-500' : ''}`} style={{ color: item.is_refunded ? 'inherit' : PRIMARY }}>₹{(item.total || item.total_amount || 0).toFixed(2)}</td>
                                         <td className="p-5 text-center">
                                             <div className="flex items-center justify-center gap-2">
                                                 <button
@@ -1256,13 +1276,20 @@ function Reports() {
                                                 >
                                                     <Eye size={14} />
                                                 </button>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); setBillToDelete(item); }}
-                                                    className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
-                                                    title={activeTab === "store" ? "Delete Bill" : "Delete Invoice"}
-                                                >
-                                                    <Trash2 size={14} />
-                                                </button>
+                                                {!item.is_refunded && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setBillToDelete(item); }}
+                                                        className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+                                                        title={activeTab === "store" ? "Delete Bill" : "Delete Invoice"}
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                )}
+                                                {item.is_refunded && (
+                                                    <span className="px-2 py-1 rounded-md text-[10px] font-black uppercase inline-block bg-amber-50 text-amber-600">
+                                                        REFUNDED
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -1275,7 +1302,7 @@ function Reports() {
                         {paginatedData.length === 0 ? (
                             <div className="p-10 text-center text-black/40 text-xs font-bold uppercase">No records found.</div>
                         ) : paginatedData.map((item, index) => (
-                            <div key={item.id} onClick={() => openDetails(item)} className="bg-white p-5 rounded-3xl border border-black/10 shadow-sm active:scale-95 transition-transform shrink-0">
+                            <div key={item.id} onClick={() => openDetails(item)} className={`bg-white p-5 rounded-3xl border border-black/10 shadow-sm active:scale-95 transition-transform shrink-0 ${item.is_refunded ? 'opacity-60' : ''}`}>
                                 <div className="flex justify-between items-start mb-3">
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">
@@ -1292,18 +1319,25 @@ function Reports() {
                                             </div>
                                         )}
                                     </div>
-                                    <p className="text-lg font-black" style={{ color: PRIMARY }}>₹{(item.total || item.total_amount || 0).toFixed(2)}</p>
+                                    <p className={`text-lg font-black ${item.is_refunded ? 'line-through text-red-500' : ''}`} style={{ color: item.is_refunded ? 'inherit' : PRIMARY }}>₹{(item.total || item.total_amount || 0).toFixed(2)}</p>
                                 </div>
                                 <div className="flex justify-between items-center text-[10px] font-bold text-black/40 uppercase border-t border-black/5 pt-3">
                                     <span>{new Date(item.created_at).toLocaleDateString()}</span>
                                     <div className="flex items-center gap-3">
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); setBillToDelete(item); }}
-                                            className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
-                                            title={activeTab === "store" ? "Delete Bill" : "Delete Invoice"}
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
+                                        {!item.is_refunded && (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setBillToDelete(item); }}
+                                                className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+                                                title={activeTab === "store" ? "Delete Bill" : "Delete Invoice"}
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
+                                        {item.is_refunded && (
+                                            <span className="px-2 py-1 rounded-md text-[10px] font-black uppercase inline-block bg-amber-50 text-amber-600">
+                                                REFUNDED
+                                            </span>
+                                        )}
                                         <span>Tap for details &rarr;</span>
                                     </div>
                                 </div>

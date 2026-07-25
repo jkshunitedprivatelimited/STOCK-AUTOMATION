@@ -194,9 +194,9 @@ function Store() {
       const { error: itemsError } = await supabase.from("bills_items_generated").insert(billItems);
       if (itemsError) throw new Error(`Items Error: ${itemsError.message}`);
 
-      // Invalidate analytics caches
+      // Clear caches
       Object.keys(sessionStorage).forEach(key => {
-        if (key.startsWith("analyticsCache_")) sessionStorage.removeItem(key);
+        if (key.startsWith("analyticsCache_") || key.startsWith("analytics_data_")) sessionStorage.removeItem(key);
       });
 
       if (isConnected) {

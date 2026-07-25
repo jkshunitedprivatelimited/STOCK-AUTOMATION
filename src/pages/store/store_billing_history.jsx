@@ -14,7 +14,8 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
-  Eye
+  Eye,
+  RotateCcw
 } from "lucide-react";
 
 import { useBluetoothPrinter } from "../printer/BluetoothPrinter";
@@ -66,8 +67,11 @@ const CancelTimerButton = ({ createdAt, onCancel }) => {
   );
 };
 
-const BillDetailsModal = ({ bill, onClose, onReprint, onCancelRequest }) => {
+const BillDetailsModal = ({ bill, onClose, onReprint, onCancelRequest, onRefundRequest, refundEnabled }) => {
   if (!bill) return null;
+
+  const isToday = new Date(bill.created_at).toDateString() === new Date().toDateString();
+  const canRefund = refundEnabled && !bill.is_refunded && isToday;
 
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
@@ -130,7 +134,10 @@ const BillDetailsModal = ({ bill, onClose, onReprint, onCancelRequest }) => {
           <button style={styles.bigPrintBtn} onClick={(e) => onReprint(e, bill)}>
             <Receipt size={18} /> REPRINT RECEIPT
           </button>
-          <CancelTimerButton createdAt={bill.created_at} onCancel={() => onCancelRequest(bill.id)} />
+          
+          <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+            {!bill.is_refunded && <CancelTimerButton createdAt={bill.created_at} onCancel={() => onCancelRequest(bill.id)} />}
+          </div>
         </div>
       </div>
     </div>
@@ -176,6 +183,10 @@ function BillingHistory() {
   const [billToDelete, setBillToDelete] = useState(null);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  
+  // Refund States
+  const [refundEnabled, setRefundEnabled] = useState(false);
+  const [billToRefund, setBillToRefund] = useState(null);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -202,9 +213,12 @@ function BillingHistory() {
     const fetchProfile = async () => {
       if (!franchiseId) return;
       try {
-        const { data, error } = await supabase.from('profiles').select('company, address, city').eq('franchise_id', franchiseId).limit(1).maybeSingle();
+        const { data, error } = await supabase.from('profiles').select('company, address, city, refund_enabled').eq('franchise_id', franchiseId).limit(1).maybeSingle();
         if (error) throw error;
-        if (data) setStoreProfile(data);
+        if (data) {
+          setStoreProfile(data);
+          setRefundEnabled(data.refund_enabled || false);
+        }
       } catch (err) { console.error(err.message); }
     };
     fetchProfile();
@@ -221,21 +235,18 @@ function BillingHistory() {
         const lastTime = lastClose?.created_at ? new Date(lastClose.created_at) : null;
         setLastCheckoutTime(lastTime);
 
-        // Strict Today Filter
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
+        // Fetch last 24 hours to handle midnight crossovers
+        const fetchStart = new Date();
+        fetchStart.setHours(fetchStart.getHours() - 24);
 
         let query = supabase.from("bills_generated")
           .select("*, bills_items_generated(*)")
           .eq("franchise_id", franchiseId)
-          .gte("created_at", todayStart.toISOString())
-          .lte("created_at", todayEnd.toISOString())
+          .gte("created_at", fetchStart.toISOString())
           .order("created_at", { ascending: false });
 
         const { data: bills } = await query;
-        if (bills) setHistory(bills);
+        if (bills) setHistory(bills.filter(b => b.payment_mode !== "SYSTEM"));
       } catch (err) { console.error(err.message); } finally { setDataLoading(false); }
     };
     initializeData();
@@ -285,12 +296,40 @@ function BillingHistory() {
       
       // Invalidate analytics caches
       Object.keys(sessionStorage).forEach(key => {
-        if (key.startsWith("analyticsCache_")) sessionStorage.removeItem(key);
+        if (key.startsWith("analyticsCache_") || key.startsWith("analytics_data_")) sessionStorage.removeItem(key);
       });
       
       setBillToDelete(null);
       setSelectedBill(null);
     } catch { alert("Error deleting."); }
+  };
+
+  const confirmRefund = async (refundMode) => {
+    try {
+      const { data, error } = await supabase.from("bills_generated").update({ 
+        is_refunded: true,
+        refunded_at: new Date().toISOString(),
+        refunded_by: user.id,
+        refund_mode: refundMode
+      }).eq("id", billToRefund.id).select();
+      
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error("Refund blocked by RLS.");
+      
+      // Update local state
+      setHistory(prev => prev.map(b => b.id === billToRefund.id ? { ...b, is_refunded: true, refund_mode: refundMode } : b));
+      
+      // Invalidate analytics caches
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.startsWith("analyticsCache_") || key.startsWith("analytics_data_")) sessionStorage.removeItem(key);
+      });
+      
+      setBillToRefund(null);
+      setSelectedBill(null);
+    } catch (err) {
+      console.error("Refund error:", err);
+      alert("Error processing refund: " + (err.message || "Unknown error"));
+    }
   };
 
   const confirmCheckoutAction = async () => {
@@ -329,12 +368,24 @@ function BillingHistory() {
   };
 
   const stats = useMemo(() => {
-    const totalSales = history.reduce((sum, b) => sum + (b.total || 0), 0);
-    const orderCount = history.length;
-    const upiSales = history.reduce((sum, b) => (b.payment_mode === "UPI" ? sum + (b.total || 0) : sum), 0);
-    const cashSales = history.reduce((sum, b) => (b.payment_mode === "CASH" ? sum + (b.total || 0) : sum), 0);
-    const totalDiscount = history.reduce((sum, b) => sum + (b.discount || 0), 0);
-    return { totalSales, orderCount, upiSales, cashSales, totalDiscount };
+    // Only calculate stats for today (from midnight) so the 24h rolling bills don't inflate today's numbers
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const todayBills = history.filter(b => new Date(b.created_at) >= todayStart);
+    
+    const activeBills = todayBills.filter(b => !b.is_refunded);
+    const refundedBills = todayBills.filter(b => b.is_refunded);
+    
+    const totalSales = activeBills.reduce((sum, b) => sum + (b.total || 0), 0);
+    const orderCount = todayBills.length;
+    const refundCount = refundedBills.length;
+    const totalRefunds = refundedBills.reduce((sum, b) => sum + (b.total || 0), 0);
+    const upiSales = activeBills.reduce((sum, b) => (b.payment_mode?.toUpperCase() === "UPI" ? sum + (b.total || 0) : sum), 0);
+    const cashSales = activeBills.reduce((sum, b) => (b.payment_mode?.toUpperCase() === "CASH" ? sum + (b.total || 0) : sum), 0);
+    const totalDiscount = activeBills.reduce((sum, b) => sum + (b.discount || 0), 0);
+    
+    return { totalSales, orderCount, upiSales, cashSales, totalDiscount, totalRefunds, refundCount };
   }, [history]);
 
   if (loading || dataLoading) return <div style={styles.loader}><Loader2 className="animate-spin" size={40} /><span>Loading...</span></div>;
@@ -382,6 +433,11 @@ function BillingHistory() {
                 <span style={styles.statLabel}>LOGGED IN AS</span>
                 <span style={{ ...styles.statValue, fontSize: '16px', color: '#64748b', wordBreak: 'break-word' }}>{staffName}</span>
               </div>
+              <div style={styles.statBox}>
+                <span style={styles.statLabel}>REFUND AMOUNT</span>
+                <span style={{ ...styles.statValue, color: '#f59e0b' }}>₹{stats.totalRefunds.toFixed(0)}</span>
+                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold', marginTop: '2px' }}>({stats.refundCount} Refunded {stats.refundCount === 1 ? 'Bill' : 'Bills'})</span>
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: isMobile ? '8px' : '15px', width: '100%' }}>
@@ -428,7 +484,7 @@ function BillingHistory() {
         </div>
 
         {/* Table/List Area - Fills remaining space */}
-        <div style={{ ...styles.tableWrapper, background: isMobile ? 'transparent' : '#fff' }}>
+        <div style={{ ...styles.tableWrapper, background: isMobile ? 'transparent' : '#f8fafc' }}>
           {isMobile ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 15px 15px 15px' }}>
               {sortedHistory.map((bill, index) => (
@@ -444,12 +500,21 @@ function BillingHistory() {
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: '900', fontSize: '18px' }}>₹{(bill.total || 0).toFixed(2)}</div>
+                      <div style={{ fontWeight: '900', fontSize: '18px', textDecoration: bill.is_refunded ? 'line-through' : 'none', color: bill.is_refunded ? '#94a3b8' : '#000' }}>₹{(bill.total || 0).toFixed(2)}</div>
                       <div style={{ marginTop: '4px' }}>
                         <span style={{ ...styles.modeBadge, background: bill.payment_mode === "CASH" ? "#f0fdf4" : "#eff6ff", color: bill.payment_mode === "CASH" ? PRIMARY : "#2563eb" }}>{bill.payment_mode}</span>
                       </div>
                     </div>
-                    <div style={{ marginLeft: '15px', color: '#94a3b8' }}>
+                    <div style={{ marginLeft: '15px', color: '#94a3b8', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      {bill.is_refunded ? (
+                         <span style={{ ...styles.modeBadge, background: "#fef3c7", color: "#d97706", fontSize: '10px' }}>{bill.refund_mode ? `REFUNDED VIA ${bill.refund_mode}` : "REFUNDED"}</span>
+                      ) : (
+                        refundEnabled && new Date(bill.created_at).toDateString() === new Date().toDateString() && (
+                          <div onClick={(e) => { e.stopPropagation(); setBillToRefund(bill); }} style={{ color: '#f59e0b', display: 'flex', alignItems: 'center', fontSize: '12px', fontWeight: 'bold' }}>
+                            REFUND
+                          </div>
+                        )
+                      )}
                       <Eye size={20} />
                     </div>
                   </div>
@@ -457,9 +522,19 @@ function BillingHistory() {
               ))}
             </div>
           ) : (
-            <table style={styles.table}>
-              <thead style={styles.stickyThead}>
-                <tr style={styles.thRow}>
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '24px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
+                <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: '#0f172a' }}>Transaction Table</h3>
+                  <span style={{ background: '#f1f5f9', padding: '6px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: '700', color: '#64748b' }}>{sortedHistory.length} Records</span>
+                </div>
+                <div style={{ overflowY: 'auto', flex: 1, padding: '0 24px' }} className="custom-scrollbar">
+                <table style={styles.table}>
+                  <thead style={styles.stickyThead}>
+                    <tr style={styles.thRow}>
+                  <th style={styles.clickableTh}>
+                    <div style={styles.thContent}>SR.NO</div>
+                  </th>
                   <th style={styles.clickableTh} onClick={() => handleSort('created_at')}>
                     <div style={styles.thContent}>TIME <SortIcon columnKey="created_at" /></div>
                   </th>
@@ -481,6 +556,9 @@ function BillingHistory() {
               <tbody>
                 {sortedHistory.map((bill, index) => (
                   <tr key={bill.id} className="anim-row" style={{ ...styles.tr, animationDelay: `${index * 0.03}s` }} onClick={() => startTransition(() => setSelectedBill(bill))}>
+                    <td style={{ ...styles.td, fontWeight: 'bold', color: '#64748b' }}>
+                      {index + 1}
+                    </td>
                     <td style={styles.td}>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontWeight: '700', fontSize: '14px' }}>{new Date(bill.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}</span>
@@ -491,17 +569,33 @@ function BillingHistory() {
                     <td style={styles.td}>
                       <span style={{ ...styles.modeBadge, background: bill.payment_mode === "CASH" ? "#f0fdf4" : "#eff6ff", color: bill.payment_mode === "CASH" ? PRIMARY : "#2563eb", fontSize: '12px' }}>{bill.payment_mode}</span>
                     </td>
-                    <td style={{ ...styles.td, color: bill.discount > 0 ? DANGER : '#94a3b8', fontWeight: bill.discount > 0 ? '700' : '400' }}>
+                    <td style={{ ...styles.td, color: bill.discount > 0 ? DANGER : '#94a3b8', fontWeight: bill.discount > 0 ? '700' : '400', textDecoration: bill.is_refunded ? 'line-through' : 'none' }}>
                       {bill.discount > 0 ? `-₹${bill.discount.toFixed(2)}` : '-'}
                     </td>
-                    <td style={{ ...styles.td, fontWeight: "900", fontSize: '16px' }}>₹{(bill.total || 0).toFixed(2)}</td>
+                    <td style={{ ...styles.td, fontWeight: "900", fontSize: '16px', textDecoration: bill.is_refunded ? 'line-through' : 'none', color: bill.is_refunded ? '#94a3b8' : '#000' }}>₹{(bill.total || 0).toFixed(2)}</td>
                     <td style={styles.td}>
-                      <button style={styles.viewBtn} onClick={(e) => { e.stopPropagation(); startTransition(() => setSelectedBill(bill)); }}>VIEW</button>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button style={styles.viewBtn} onClick={(e) => { e.stopPropagation(); startTransition(() => setSelectedBill(bill)); }}>VIEW</button>
+                        {bill.is_refunded ? (
+                          <span style={{ ...styles.modeBadge, background: "#fef3c7", color: "#d97706", fontSize: '12px', display: 'flex', alignItems: 'center' }}>
+                            {bill.refund_mode ? `REFUNDED VIA ${bill.refund_mode}` : "REFUNDED"}
+                          </span>
+                        ) : (
+                          refundEnabled && bill.payment_mode !== "SYSTEM" && (new Date() - new Date(bill.created_at)) <= 24 * 60 * 60 * 1000 && (
+                            <button style={{ ...styles.viewBtn, backgroundColor: '#f59e0b', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => { e.stopPropagation(); setBillToRefund(bill); }}>
+                              REFUND
+                            </button>
+                          )
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          </div>
           )}
         </div>
       </div>
@@ -511,23 +605,42 @@ function BillingHistory() {
         onClose={() => setSelectedBill(null)}
         onReprint={handleReprint}
         onCancelRequest={(id) => { setBillToDelete(id); setSelectedBill(null); }}
+        onRefundRequest={(bill) => { setBillToRefund(bill); setSelectedBill(null); }}
+        refundEnabled={refundEnabled}
       />
 
       {
-        (billToDelete || showCheckoutModal) && (
+        (billToDelete || showCheckoutModal || billToRefund) && (
           <div style={styles.modalOverlay}>
             <div className="anim-modal" style={{ ...styles.modalContent, width: isMobile ? '85%' : '400px', padding: '25px', textAlign: 'center' }}>
               <div style={styles.warningIconWrapper}>
-                {billToDelete ? <AlertTriangle size={40} color={DANGER} /> : <LogOut size={40} color={PRIMARY} />}
+                {billToDelete ? <AlertTriangle size={40} color={DANGER} /> : 
+                 billToRefund ? <RotateCcw size={40} color="#f59e0b" /> :
+                 <LogOut size={40} color={PRIMARY} />}
               </div>
-              <h3 style={styles.modalTitle}>{billToDelete ? "Cancel Order?" : "Close Shift?"}</h3>
-              <p style={styles.modalDesc}>{billToDelete ? "This will permanently delete the order." : "You won't be able to bill again for 12 hours."}</p>
-              <div style={styles.modalActions}>
-                <button style={styles.btnCancel} onClick={() => { setBillToDelete(null); setShowCheckoutModal(false); }}>NO</button>
-                <button style={{ ...styles.btnConfirmDelete, background: billToDelete ? DANGER : PRIMARY }}
-                  onClick={billToDelete ? confirmDelete : confirmCheckoutAction}>YES, PROCEED</button>
+              <h3 style={styles.modalTitle}>
+                {billToDelete ? "Cancel Order?" : 
+                 billToRefund ? "Refund Bill?" : "Close Shift?"}
+              </h3>
+              <p style={styles.modalDesc}>
+                {billToDelete ? "This will permanently delete the order." : 
+                 billToRefund ? `Are you sure you want to refund Bill #${billToRefund.id.toString().slice(-6).toUpperCase()} for ₹${(billToRefund.total || 0).toFixed(2)}? This cannot be undone.` :
+                 "You won't be able to bill again for 12 hours."}
+              </p>
+                {billToRefund ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                     <button style={{ ...styles.btnConfirmDelete, background: "#059669", padding: '14px' }} onClick={() => confirmRefund("CASH")}>REFUND VIA CASH</button>
+                     <button style={{ ...styles.btnConfirmDelete, background: "#2563eb", padding: '14px' }} onClick={() => confirmRefund("UPI")}>REFUND VIA UPI</button>
+                     <button style={styles.btnCancel} onClick={() => setBillToRefund(null)}>CANCEL</button>
+                  </div>
+                ) : (
+                  <div style={styles.modalActions}>
+                    <button style={styles.btnCancel} onClick={() => { setBillToDelete(null); setShowCheckoutModal(false); }}>NO</button>
+                    <button style={{ ...styles.btnConfirmDelete, background: billToDelete ? DANGER : PRIMARY }}
+                      onClick={billToDelete ? confirmDelete : confirmCheckoutAction}>YES, PROCEED</button>
+                  </div>
+                )}
               </div>
-            </div>
           </div>
         )
       }
@@ -568,8 +681,8 @@ const styles = {
   modeBadge: { padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase' },
 
   table: { width: "100%", borderCollapse: "collapse", background: '#fff' },
-  stickyThead: { position: 'sticky', top: "125px", zIndex: 30, background: '#f8fafc' }, // Adjusted for topBar + toggleBar
-  thRow: { background: "#f8fafc", borderBottom: `2px solid ${BORDER}` },
+  stickyThead: { position: 'sticky', top: "0px", zIndex: 30, background: '#f8fafc' },
+  thRow: { background: "#f8fafc", borderBottom: '2px solid #e2e8f0' },
 
   clickableTh: {
     padding: "15px 20px",
