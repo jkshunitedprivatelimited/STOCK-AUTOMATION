@@ -62,6 +62,11 @@ function Store() {
   const [discountType, setDiscountType] = useState("fixed");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // DAY CLOSE STATES
+  const [lastCheckoutTime, setLastCheckoutTime] = useState(null);
+  const [canBill, setCanBill] = useState(true);
+  const [timeLeft, setTimeLeft] = useState("");
+
   const franchiseId = user?.franchise_id ? String(user.franchise_id) : null;
 
   useEffect(() => {
@@ -80,25 +85,56 @@ function Store() {
     return () => { document.body.style.overflow = "auto"; };
   }, [isMobile, showMobileCart, showPaymentModal]);
 
-  /* 1. FETCH STORE PROFILE */
+  /* 1. FETCH STORE PROFILE AND DAY CLOSE STATUS */
   useEffect(() => {
-    const fetchProfile = async () => {
+    const fetchProfileAndStatus = async () => {
       if (!franchiseId) return;
       try {
-        const { data, error } = await supabase
+        const { data: profile, error: profileErr } = await supabase
           .from('profiles')
           .select('company, address, city')
           .eq('franchise_id', franchiseId)
           .limit(1)
           .maybeSingle();
-        if (error) throw error;
-        if (data) setStoreProfile(data);
+        if (profileErr) throw profileErr;
+        if (profile) setStoreProfile(profile);
+
+        const { data: lastClose, error: closeErr } = await supabase
+          .from("bills_generated")
+          .select("created_at")
+          .eq("franchise_id", franchiseId)
+          .eq("is_day_closed", true)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (closeErr) throw closeErr;
+        setLastCheckoutTime(lastClose?.created_at ? new Date(lastClose.created_at) : null);
       } catch (err) {
-        console.error("Profile Load Exception:", err.message);
+        console.error("Initial Load Exception:", err.message);
       }
     };
-    fetchProfile();
+    fetchProfileAndStatus();
   }, [franchiseId]);
+
+  /* 1A. DAY CLOSE TIMER LOGIC */
+  useEffect(() => {
+    if (!lastCheckoutTime) { setCanBill(true); setTimeLeft(""); return; }
+    const timer = setInterval(() => {
+      const now = new Date();
+      const diff = now - lastCheckoutTime;
+      const remaining = 12 * 60 * 60 * 1000 - diff;
+      if (remaining > 0) {
+        setCanBill(false);
+        const h = Math.floor(remaining / (1000 * 60 * 60));
+        const m = Math.floor((remaining / (1000 * 60)) % 60);
+        const s = Math.floor((remaining / 1000) % 60);
+        setTimeLeft(`${h}h ${m}m ${s}s`);
+      } else { setCanBill(true); setTimeLeft(""); clearInterval(timer); }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lastCheckoutTime]);
+
 
   /* 2. FETCH MENU ITEMS */
   useEffect(() => {
@@ -244,6 +280,15 @@ function Store() {
     <div style={styles.loader}>
       <Loader2 className="animate-spin" size={30} color={PRIMARY} />
       <span style={{ fontWeight: '900', color: BLACK }}>Securing Connection...</span>
+    </div>
+  );
+
+  if (!canBill) return (
+    <div style={styles.loader}>
+      <Loader2 size={40} color={PRIMARY} />
+      <span style={{ fontWeight: '900', color: BLACK, fontSize: '20px' }}>SHIFT CLOSED</span>
+      <span style={{ color: '#64748b' }}>You cannot bill again for {timeLeft}</span>
+      <button style={{ ...styles.payBtn, width: '200px', marginTop: '20px' }} onClick={() => navigate("/history")}>GO TO HISTORY</button>
     </div>
   );
 

@@ -32,9 +32,9 @@ const CancelTimerButton = ({ createdAt, onCancel }) => {
   useEffect(() => {
     const calculateTimeLeft = () => {
       const createdTime = new Date(createdAt).getTime();
-      const fiveMinutesLater = createdTime + (25 * 60 * 1000);
+      const timeLimit = createdTime + (25 * 60 * 1000);
       const now = new Date().getTime();
-      const diff = fiveMinutesLater - now;
+      const diff = timeLimit - now;
       if (diff <= 0) {
         setIsExpired(true);
         setTimeLeft(0);
@@ -69,9 +69,6 @@ const CancelTimerButton = ({ createdAt, onCancel }) => {
 
 const BillDetailsModal = ({ bill, onClose, onReprint, onCancelRequest, onRefundRequest, refundEnabled }) => {
   if (!bill) return null;
-
-  const isToday = new Date(bill.created_at).toDateString() === new Date().toDateString();
-  const canRefund = refundEnabled && !bill.is_refunded && isToday;
 
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
@@ -335,8 +332,12 @@ function BillingHistory() {
   const confirmCheckoutAction = async () => {
     const nextDate = new Date();
     nextDate.setDate(nextDate.getDate() + 1);
+    
+    // Safely get local YYYY-MM-DD
+    const localBusinessDate = nextDate.toLocaleDateString("en-CA"); // Outputs standard YYYY-MM-DD in local time
+    
     const { error } = await supabase.from("bills_generated").insert({
-      franchise_id: franchiseId, subtotal: 0, tax: 0, total: 0, discount: 0, payment_mode: "SYSTEM", is_day_closed: true, business_date: nextDate.toISOString().split("T")[0],
+      franchise_id: franchiseId, subtotal: 0, tax: 0, total: 0, discount: 0, payment_mode: "SYSTEM", is_day_closed: true, business_date: localBusinessDate,
     });
     if (!error) window.location.reload();
   };
