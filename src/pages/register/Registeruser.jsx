@@ -43,7 +43,7 @@ const InputGroup = ({ icon: Icon, children, isFocused, label, isMobile }) => (
 
 function RegisterUser() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState("invite"); // 'invite' or 'manual'
+  const [mode, setMode] = useState("manual"); // 'invite' or 'manual' (Temporarily set to manual)
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
@@ -292,25 +292,27 @@ function RegisterUser() {
 
       <div style={{ ...styles.mainContent, padding: isMobile ? "12px" : "32px" }}>
         
-        {/* Mode Toggle Tabs */}
-        <div style={{ maxWidth: "850px", margin: "0 auto 24px auto", display: "flex", gap: "12px", background: "#fff", padding: "8px", borderRadius: "16px", border: `1px solid ${BORDER}` }}>
-          <button 
-            type="button" 
-            onClick={() => setMode('invite')} 
-            style={{ ...styles.tabButton, backgroundColor: mode === 'invite' ? PRIMARY : 'transparent', color: mode === 'invite' ? '#fff' : TEXT_MUTED }}
-          >
-            <Link size={18} style={{ marginRight: "8px" }} />
-            Generate Invite Link
-          </button>
-          <button 
-            type="button" 
-            onClick={() => setMode('manual')} 
-            style={{ ...styles.tabButton, backgroundColor: mode === 'manual' ? PRIMARY : 'transparent', color: mode === 'manual' ? '#fff' : TEXT_MUTED }}
-          >
-            <User size={18} style={{ marginRight: "8px" }} />
-            Register Manually
-          </button>
-        </div>
+        {/* Mode Toggle Tabs (Temporarily disabled) */}
+        {false && (
+          <div style={{ maxWidth: "850px", margin: "0 auto 24px auto", display: "flex", gap: "12px", background: "#fff", padding: "8px", borderRadius: "16px", border: `1px solid ${BORDER}` }}>
+            <button 
+              type="button" 
+              onClick={() => setMode('invite')} 
+              style={{ ...styles.tabButton, backgroundColor: mode === 'invite' ? PRIMARY : 'transparent', color: mode === 'invite' ? '#fff' : TEXT_MUTED }}
+            >
+              <Link size={18} style={{ marginRight: "8px" }} />
+              Generate Invite Link
+            </button>
+            <button 
+              type="button" 
+              onClick={() => setMode('manual')} 
+              style={{ ...styles.tabButton, backgroundColor: mode === 'manual' ? PRIMARY : 'transparent', color: mode === 'manual' ? '#fff' : TEXT_MUTED }}
+            >
+              <User size={18} style={{ marginRight: "8px" }} />
+              Register Manually
+            </button>
+          </div>
+        )}
 
         <div style={{ ...styles.formCard, padding: isMobile ? "24px 16px" : "40px", borderRadius: isMobile ? "20px" : "16px" }}>
 
