@@ -10,7 +10,6 @@ import {
   XCircle,
   AlertTriangle,
   X,
-  LogOut,
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
@@ -173,12 +172,8 @@ function BillingHistory() {
   const [staffName, setStaffName] = useState("Owner"); // Default to Owner
   const [selectedBill, setSelectedBill] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: "created_at", direction: "descending" });
-  const [lastCheckoutTime, setLastCheckoutTime] = useState(null);
-  const [timeLeft, setTimeLeft] = useState("");
-  const [canCheckout, setCanCheckout] = useState(true);
   const [dataLoading, setDataLoading] = useState(true);
   const [billToDelete, setBillToDelete] = useState(null);
-  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
   // Refund States
@@ -228,9 +223,6 @@ function BillingHistory() {
       if (!franchiseId) return;
       setDataLoading(true);
       try {
-        const { data: lastClose } = await supabase.from("bills_generated").select("created_at").eq("franchise_id", franchiseId).eq("is_day_closed", true).order("created_at", { ascending: false }).limit(1).maybeSingle();
-        const lastTime = lastClose?.created_at ? new Date(lastClose.created_at) : null;
-        setLastCheckoutTime(lastTime);
 
         // Fetch last 24 hours to handle midnight crossovers
         const fetchStart = new Date();
@@ -249,22 +241,7 @@ function BillingHistory() {
     initializeData();
   }, [franchiseId]);
 
-  useEffect(() => {
-    if (!lastCheckoutTime) { setCanCheckout(true); setTimeLeft(""); return; }
-    const timer = setInterval(() => {
-      const now = new Date();
-      const diff = now - lastCheckoutTime;
-      const remaining = 12 * 60 * 60 * 1000 - diff;
-      if (remaining > 0) {
-        setCanCheckout(false);
-        const h = Math.floor(remaining / (1000 * 60 * 60));
-        const m = Math.floor((remaining / (1000 * 60)) % 60);
-        const s = Math.floor((remaining / 1000) % 60);
-        setTimeLeft(`${h}h ${m}m ${s}s`);
-      } else { setCanCheckout(true); setTimeLeft(""); clearInterval(timer); }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [lastCheckoutTime]);
+
 
   const handleReprint = async (e, bill) => {
     if (e) e.stopPropagation();
@@ -329,18 +306,6 @@ function BillingHistory() {
     }
   };
 
-  const confirmCheckoutAction = async () => {
-    const nextDate = new Date();
-    nextDate.setDate(nextDate.getDate() + 1);
-    
-    // Safely get local YYYY-MM-DD
-    const localBusinessDate = nextDate.toLocaleDateString("en-CA"); // Outputs standard YYYY-MM-DD in local time
-    
-    const { error } = await supabase.from("bills_generated").insert({
-      franchise_id: franchiseId, subtotal: 0, tax: 0, total: 0, discount: 0, payment_mode: "SYSTEM", is_day_closed: true, business_date: localBusinessDate,
-    });
-    if (!error) window.location.reload();
-  };
 
   const handleSort = (key) => {
     let direction = "ascending";
@@ -475,12 +440,6 @@ function BillingHistory() {
                 </button>
               )}
             </div>
-            <div style={styles.flexButtonWrapper}>
-              <button onClick={() => canCheckout && setShowCheckoutModal(true)} disabled={!canCheckout}
-                style={{ ...styles.checkoutTodayBtn, width: '100%', background: canCheckout ? PRIMARY : '#94a3b8', opacity: canCheckout ? 1 : 0.7 }}>
-                {canCheckout ? "CHECKOUT" : `CLOSED (${timeLeft})`}
-              </button>
-            </div>
           </div>
         </div>
 
@@ -611,22 +570,19 @@ function BillingHistory() {
       />
 
       {
-        (billToDelete || showCheckoutModal || billToRefund) && (
+        (billToDelete || billToRefund) && (
           <div style={styles.modalOverlay}>
             <div className="anim-modal" style={{ ...styles.modalContent, width: isMobile ? '85%' : '400px', padding: '25px', textAlign: 'center' }}>
               <div style={styles.warningIconWrapper}>
                 {billToDelete ? <AlertTriangle size={40} color={DANGER} /> : 
-                 billToRefund ? <RotateCcw size={40} color="#f59e0b" /> :
-                 <LogOut size={40} color={PRIMARY} />}
+                 <RotateCcw size={40} color="#f59e0b" />}
               </div>
               <h3 style={styles.modalTitle}>
-                {billToDelete ? "Cancel Order?" : 
-                 billToRefund ? "Refund Bill?" : "Close Shift?"}
+                {billToDelete ? "Cancel Order?" : "Refund Bill?"}
               </h3>
               <p style={styles.modalDesc}>
                 {billToDelete ? "This will permanently delete the order." : 
-                 billToRefund ? `Are you sure you want to refund Bill #${billToRefund.id.toString().slice(-6).toUpperCase()} for ₹${(billToRefund.total || 0).toFixed(2)}? This cannot be undone.` :
-                 "You won't be able to bill again for 12 hours."}
+                 `Are you sure you want to refund Bill #${billToRefund.id.toString().slice(-6).toUpperCase()} for ₹${(billToRefund.total || 0).toFixed(2)}? This cannot be undone.`}
               </p>
                 {billToRefund ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -636,9 +592,9 @@ function BillingHistory() {
                   </div>
                 ) : (
                   <div style={styles.modalActions}>
-                    <button style={styles.btnCancel} onClick={() => { setBillToDelete(null); setShowCheckoutModal(false); }}>NO</button>
+                    <button style={styles.btnCancel} onClick={() => { setBillToDelete(null); }}>NO</button>
                     <button style={{ ...styles.btnConfirmDelete, background: billToDelete ? DANGER : PRIMARY }}
-                      onClick={billToDelete ? confirmDelete : confirmCheckoutAction}>YES, PROCEED</button>
+                      onClick={billToDelete ? confirmDelete : null}>YES</button>
                   </div>
                 )}
               </div>
@@ -727,7 +683,6 @@ const styles = {
   flexButtonWrapper: { flex: 1, display: 'flex', height: '100%' },
   connectBtn: { background: PRIMARY, color: "#fff", border: "none", borderRadius: "12px", fontWeight: "800", fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' },
   connectedBadge: { background: "#10b981", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "800", fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' },
-  checkoutTodayBtn: { color: "#fff", border: "none", borderRadius: "12px", fontWeight: "800", fontSize: "12px", display: 'flex', alignItems: 'center', justifyContent: 'center' },
   disconnectBtn: { background: "#fee2e2", color: DANGER, border: "none", padding: '0 14px', borderRadius: "12px", height: '100%' },
   logoutBtn: { color: DANGER, border: `1.5px solid ${DANGER}`, background: 'none', borderRadius: "10px", fontWeight: "800", fontSize: "12px" },
 

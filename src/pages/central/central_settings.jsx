@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../frontend_supabase/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 import {
-  ArrowLeft, Lock, LogOut, Eye, EyeOff, CreditCard, SendHorizontal
+  ArrowLeft, Lock, LogOut, Eye, EyeOff, CreditCard, SendHorizontal, Info, X, AlertTriangle
 } from "lucide-react";
 
 import { BRAND_GREEN } from "../../utils/theme";
@@ -23,6 +23,7 @@ function CentralSettings() {
   const [stockRequests, setStockRequests] = useState(false);
   const [refundEnabled, setRefundEnabled] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
+  const [showRefundInfo, setShowRefundInfo] = useState(false);
 
   // FIX: Define fetchProfile BEFORE calling it in useEffect
   useEffect(() => {
@@ -63,7 +64,20 @@ function CentralSettings() {
     fetchSettings();
   }, []);
 
+  // Disable background scrolling when modal is open
+  useEffect(() => {
+    if (showRefundInfo) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [showRefundInfo]);
+
   const handleToggle = async (key, currentValue, setter) => {
+    setSettingsLoading(true);
     const newValue = !currentValue;
     setter(newValue);
 
@@ -75,6 +89,7 @@ function CentralSettings() {
       setter(currentValue);
       console.error("Failed to update setting:", error);
     }
+    setSettingsLoading(false);
   };
 
   const handleChangePassword = async () => {
@@ -301,7 +316,13 @@ function CentralSettings() {
           </div>
 
           {/* 4. REFUND OPTION CARD */}
-          <div className="bg-white rounded-[24px] md:rounded-[32px] border p-6 md:p-8 shadow-sm flex flex-col h-full min-h-[320px]" style={{ borderColor: SOFT_BORDER }}>
+          <div className="bg-white rounded-[24px] md:rounded-[32px] border p-6 md:p-8 shadow-sm flex flex-col h-full min-h-[320px] relative" style={{ borderColor: SOFT_BORDER }}>
+            <button 
+              onClick={() => setShowRefundInfo(true)}
+              className="absolute top-6 right-6 text-slate-400 hover:text-indigo-600 transition-colors p-2 rounded-full hover:bg-indigo-50"
+            >
+              <Info size={24} strokeWidth={2.5} />
+            </button>
             <div className="flex items-center gap-4 mb-4">
               <div className="p-3 rounded-xl bg-amber-50 text-amber-500">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9"/><path d="M12 3v6"/><path d="M10 14h4"/><path d="M12 12v4"/></svg>
@@ -367,6 +388,78 @@ function CentralSettings() {
 
         </div>
       </div>
+      {/* --- REFUND INFO MODAL --- */}
+      {showRefundInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-slate-900/40 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <Info size={24} strokeWidth={2.5} />
+                </div>
+                <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Refund Feature Guide</h2>
+              </div>
+              <button onClick={() => setShowRefundInfo(false)} className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full transition-colors">
+                <X size={20} className="text-black" />
+              </button>
+            </div>
+            
+            <div className="p-6 md:p-8 overflow-y-auto flex-1 text-slate-600 text-sm text-left">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Left Column */}
+                <div className="space-y-6">
+                  <section>
+                    <h3 className="font-black text-black mb-2 uppercase tracking-wide text-xs">Purpose</h3>
+                    <p className="leading-relaxed">The Refund Feature allows franchises to process refunds for bills generated on the <strong>same day</strong> (within the last 24 hours). This is useful for accidental billings, customer returns, or payment mode corrections.</p>
+                  </section>
+
+                  <section>
+                    <h3 className="font-black text-black mb-2 uppercase tracking-wide text-xs">How It Works</h3>
+                    <ol className="list-decimal pl-5 space-y-2">
+                      <li><strong>Enable</strong> the feature here in Settings to allow franchises to use it.</li>
+                      <li>At the store, they can go to <strong>Billing History</strong>.</li>
+                      <li>Tap any bill generated in the last 24 hours.</li>
+                      <li>A yellow <strong>"Refund"</strong> button will appear at the bottom of the bill details.</li>
+                      <li>They tap it and choose whether the refund was given via <strong>CASH</strong> or <strong>UPI</strong>.</li>
+                      <li>The bill is marked as refunded and its amount is subtracted from their daily stats.</li>
+                    </ol>
+                  </section>
+                </div>
+
+                {/* Right Column */}
+                <div className="space-y-6">
+                  <section>
+                    <h3 className="font-black text-black mb-2 uppercase tracking-wide text-xs">Example Scenario</h3>
+                    <p className="bg-slate-50 p-4 rounded-xl border border-slate-100 italic leading-relaxed">
+                      A customer pays ₹500 via UPI, but the cashier accidentally selects Cash on the POS. They can go to History, refund the Cash bill (recording the refund mode), and then create a new correct bill for ₹500 UPI.
+                    </p>
+                  </section>
+
+                  <section className="bg-rose-50 p-4 rounded-xl border border-rose-100 text-rose-800">
+                    <h3 className="font-black mb-2 uppercase tracking-wide text-xs flex items-center gap-2">
+                      <AlertTriangle size={14} /> Important Limitations
+                    </h3>
+                    <ul className="list-disc pl-5 space-y-2">
+                      <li>Refunds cannot be undone.</li>
+                      <li>Only bills less than 24 hours old can be refunded.</li>
+                      <li>Refunded amounts are permanently deducted from daily reports.</li>
+                    </ul>
+                  </section>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100 shrink-0">
+              <button 
+                onClick={() => setShowRefundInfo(false)}
+                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-black transition-colors"
+              >
+                Got It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

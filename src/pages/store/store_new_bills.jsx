@@ -62,11 +62,6 @@ function Store() {
   const [discountType, setDiscountType] = useState("fixed");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // DAY CLOSE STATES
-  const [lastCheckoutTime, setLastCheckoutTime] = useState(null);
-  const [canBill, setCanBill] = useState(true);
-  const [timeLeft, setTimeLeft] = useState("");
-
   const franchiseId = user?.franchise_id ? String(user.franchise_id) : null;
 
   useEffect(() => {
@@ -85,9 +80,9 @@ function Store() {
     return () => { document.body.style.overflow = "auto"; };
   }, [isMobile, showMobileCart, showPaymentModal]);
 
-  /* 1. FETCH STORE PROFILE AND DAY CLOSE STATUS */
+  /* 1. FETCH STORE PROFILE */
   useEffect(() => {
-    const fetchProfileAndStatus = async () => {
+    const fetchProfile = async () => {
       if (!franchiseId) return;
       try {
         const { data: profile, error: profileErr } = await supabase
@@ -98,42 +93,12 @@ function Store() {
           .maybeSingle();
         if (profileErr) throw profileErr;
         if (profile) setStoreProfile(profile);
-
-        const { data: lastClose, error: closeErr } = await supabase
-          .from("bills_generated")
-          .select("created_at")
-          .eq("franchise_id", franchiseId)
-          .eq("is_day_closed", true)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        
-        if (closeErr) throw closeErr;
-        setLastCheckoutTime(lastClose?.created_at ? new Date(lastClose.created_at) : null);
       } catch (err) {
         console.error("Initial Load Exception:", err.message);
       }
     };
-    fetchProfileAndStatus();
+    fetchProfile();
   }, [franchiseId]);
-
-  /* 1A. DAY CLOSE TIMER LOGIC */
-  useEffect(() => {
-    if (!lastCheckoutTime) { setCanBill(true); setTimeLeft(""); return; }
-    const timer = setInterval(() => {
-      const now = new Date();
-      const diff = now - lastCheckoutTime;
-      const remaining = 12 * 60 * 60 * 1000 - diff;
-      if (remaining > 0) {
-        setCanBill(false);
-        const h = Math.floor(remaining / (1000 * 60 * 60));
-        const m = Math.floor((remaining / (1000 * 60)) % 60);
-        const s = Math.floor((remaining / 1000) % 60);
-        setTimeLeft(`${h}h ${m}m ${s}s`);
-      } else { setCanBill(true); setTimeLeft(""); clearInterval(timer); }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [lastCheckoutTime]);
 
 
   /* 2. FETCH MENU ITEMS */
@@ -283,14 +248,7 @@ function Store() {
     </div>
   );
 
-  if (!canBill) return (
-    <div style={styles.loader}>
-      <Loader2 size={40} color={PRIMARY} />
-      <span style={{ fontWeight: '900', color: BLACK, fontSize: '20px' }}>SHIFT CLOSED</span>
-      <span style={{ color: '#64748b' }}>You cannot bill again for {timeLeft}</span>
-      <button style={{ ...styles.payBtn, width: '200px', marginTop: '20px' }} onClick={() => navigate("/history")}>GO TO HISTORY</button>
-    </div>
-  );
+
 
   return (
     <div style={{
