@@ -600,7 +600,9 @@ function CentralProfiles() {
             ))}
           </div>
         ) : (
-          <div style={styles.tableWrapper}>
+          <>
+            <h2 style={{ ...styles.heading, textAlign: 'left', marginBottom: '12px' }}>Users Table</h2>
+            <div style={styles.tableWrapper}>
             <table style={styles.table}>
               <thead>
                 <tr style={styles.thRow}>
@@ -685,6 +687,7 @@ function CentralProfiles() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
@@ -996,9 +999,9 @@ const styles = {
   dateText: { fontSize: "12px", fontWeight: "700", color: "#4b5563", textTransform: "uppercase" },
   searchWrapper: { display: "flex", flex: 1, alignItems: "center", gap: "12px", background: "#f9fafb", border: `1.5px solid ${BORDER}`, borderRadius: "16px", padding: "0 16px", height: "46px" },
   searchInput: { border: "none", background: "none", padding: "14px 0", outline: "none", fontSize: "14px", width: "100%", fontWeight: "500", textOverflow: "ellipsis" },
-  tableWrapper: { border: `1px solid ${BORDER}`, borderRadius: "24px", overflow: "hidden" },
+  tableWrapper: { border: `1px solid ${BORDER}`, borderRadius: "24px", overflowY: "auto", maxHeight: "600px" },
   table: { width: "100%", borderCollapse: "collapse", textAlign: "left" },
-  thRow: { background: "#f3f4f6", borderBottom: `2px solid ${PRIMARY}` },
+  thRow: { position: 'sticky', top: 0, background: "#f3f4f6", borderBottom: `2px solid ${PRIMARY}`, zIndex: 2 },
   th: { padding: "18px 24px", fontSize: "11px", fontWeight: "900", color: PRIMARY, letterSpacing: "1.5px" },
   sortableDiv: { cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", userSelect: "none" },
   tr: { borderTop: `1px solid ${BORDER}`, transition: "background-color 0.2s ease" },

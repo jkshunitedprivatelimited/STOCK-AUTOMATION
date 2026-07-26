@@ -54,6 +54,7 @@ function InviteRegister() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -115,6 +116,37 @@ function InviteRegister() {
 
     if (!emailStr || !passwordStr) return alert("Email and Password are required.");
 
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    if (!otpSent) {
+      setLoading(true);
+      try {
+        const response = await fetch(`${supabaseUrl}/functions/v1/send-otp`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+            'apikey': supabaseAnonKey,
+          },
+          body: JSON.stringify({ email: emailStr.trim().toLowerCase() }),
+        });
+        const resData = await response.json();
+        if (resData?.error) throw new Error(resData.error);
+        
+        setOtpSent(true);
+        alert("✅ Verification code sent! Please check your email.");
+      } catch (err) {
+        alert("❌ Failed to send code: " + err.message);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    const otpValue = data.get("otp");
+    if (!otpValue) return alert("Please enter the verification code sent to your email.");
+
     setLoading(true);
     try {
       const metadataPayload = {
@@ -131,9 +163,6 @@ function InviteRegister() {
         transportation_charge: inviteData.transportation_charge,
         role: 'franchise'
       };
-
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
       
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 45000);
@@ -150,7 +179,8 @@ function InviteRegister() {
           body: JSON.stringify({
             email: emailStr.trim().toLowerCase(),
             password: passwordStr,
-            metadata: metadataPayload
+            metadata: metadataPayload,
+            otp: otpValue.trim()
           }),
           signal: controller.signal,
         });
@@ -340,12 +370,22 @@ function InviteRegister() {
             <div style={{ marginBottom: "24px" }}>
               <InputGroup icon={MapPin} isFocused={focusedField === "nearestBusStop"} label="Nearest Bus Stop *" isMobile={isMobile}>
                 <input name="nearestBusStop" required placeholder="e.g. Jubilee Hills Checkpost" style={styles.cleanInput}
-                  onFocus={() => setFocusedField("nearestBusStop")} onBlur={() => setFocusedField(null)} />
+                  onFocus={() => setFocusedField("nearestBusStop")} onBlur={() => setFocusedField(null)} disabled={otpSent} />
               </InputGroup>
             </div>
 
+            {otpSent && (
+              <div style={{ marginBottom: "24px", padding: "16px", backgroundColor: "#f0fdf4", border: `1.5px dashed ${PRIMARY}`, borderRadius: "12px" }}>
+                <InputGroup icon={KeyRound} isFocused={focusedField === "otp"} label="6-Digit Verification Code *" isMobile={isMobile}>
+                  <input name="otp" required placeholder="123456" maxLength={6} style={{ ...styles.cleanInput, fontWeight: "bold", letterSpacing: "2px" }}
+                    onFocus={() => setFocusedField("otp")} onBlur={() => setFocusedField(null)} />
+                </InputGroup>
+                <p style={{ margin: "8px 0 0 0", fontSize: "13px", color: TEXT_MUTED }}>We sent a code to your email. Please enter it here.</p>
+              </div>
+            )}
+
             <button type="submit" disabled={loading} style={{ ...styles.button, padding: isMobile ? "18px" : "16px" }}>
-              {loading ? <Loader2 className="animate-spin" size={20} /> : "Complete Registration"}
+              {loading ? <Loader2 className="animate-spin" size={20} /> : (otpSent ? "Verify & Complete Registration" : "Send Verification Code")}
             </button>
           </form>
 

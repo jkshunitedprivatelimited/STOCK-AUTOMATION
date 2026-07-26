@@ -1,14 +1,14 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-function jsonResponse(body: Record<string, unknown>) {
+function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
-    status: 200,
+    status,
   });
 }
 
@@ -21,41 +21,109 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!supabaseUrl || !supabaseServiceKey) {
-      return jsonResponse({ error: "Missing Supabase internal environment variables." });
+      return jsonResponse({ error: "Missing Supabase internal environment variables." }, 500);
     }
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const { email, password, metadata } = await req.json();
-    if (!email || !password || !metadata) {
-      return jsonResponse({ error: "Missing email, password, or metadata." });
-    }
-
-    // 1. Validate Email Domain (MX Records Check)
-    const domain = email.split('@')[1];
-    if (!domain) {
-      return jsonResponse({ error: "Invalid email format." });
-    }
-
+    let body;
     try {
-      const mxRecords = await Deno.resolveDns(domain, "MX");
-      if (!mxRecords || mxRecords.length === 0) throw new Error("No MX records");
-    } catch (_err) {
-      return jsonResponse({ error: `Invalid email domain (@${domain}). It seems to be misspelled or does not exist.` });
+      body = await req.json();
+    } catch (e) {
+      return jsonResponse({ error: "Invalid JSON request body." }, 400);
     }
 
-    // 2. Send email via Resend BEFORE creating the user
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    const { email, password, metadata, otp } = body;
+    if (!email || !password || !metadata) {
+      return jsonResponse({ error: "Missing email, password, or metadata." }, 400);
+    }
 
+    const authHeader = req.headers.get("Authorization");
+    let isCentralAdmin = false;
+    
+    if (authHeader) {
+      const supabaseClientAuth = createClient(supabaseUrl, supabaseServiceKey, {
+        global: { headers: { Authorization: authHeader } }
+      });
+      const { data: { user } } = await supabaseClientAuth.auth.getUser();
+      if (user && user.user_metadata?.role === 'central') {
+        isCentralAdmin = true;
+        console.log(`[register-user] Central admin detected. Bypassing OTP for ${email}`);
+      }
+    }
+
+    // 1. Verify OTP (if not central admin)
+    if (!isCentralAdmin) {
+      if (!otp) {
+        return jsonResponse({ error: "Missing OTP." }, 400);
+      }
+
+      const { data: otpData, error: otpError } = await supabaseAdmin
+        .from('otp_requests')
+        .select('*')
+        .eq('email', email)
+        .single();
+
+      if (otpError || !otpData) {
+        return jsonResponse({ error: "No OTP found for this email. Please request a new one." }, 400);
+      }
+
+      // 1a. Check expiration first
+      if (new Date() > new Date(otpData.expires_at)) {
+        await supabaseAdmin.from('otp_requests').delete().eq('email', email);
+        return jsonResponse({ error: "OTP code has expired. Please request a new one." }, 400);
+      }
+
+      // 1b. Check validity
+      if (otpData.otp_code !== otp) {
+        const newAttemptsCount = (otpData.attempts_count || 0) + 1;
+        if (newAttemptsCount >= 5) {
+          await supabaseAdmin.from('otp_requests').delete().eq('email', email);
+          return jsonResponse({ error: "Too many failed attempts. OTP has been invalidated. Please request a new one." }, 400);
+        } else {
+          await supabaseAdmin.from('otp_requests').update({ attempts_count: newAttemptsCount }).eq('email', email);
+          return jsonResponse({ error: `Invalid OTP code. You have ${5 - newAttemptsCount} attempts remaining.` }, 400);
+        }
+      }
+
+      // OTP is valid. Delete it so it can't be reused.
+      await supabaseAdmin.from('otp_requests').delete().eq('email', email);
+      console.log(`[register-user] OTP verified for ${email}.`);
+    }
+
+    // 2. Prevent Privilege Escalation
+    // Force the role to 'franchise' unless a central admin is creating the account.
+    // This prevents a malicious user from injecting { role: 'central' } in the payload.
+    let safeMetadata = { ...metadata };
+    if (!isCentralAdmin) {
+      safeMetadata.role = 'franchise'; // Only admins can assign other roles
+    }
+
+    // 2. Create the user
+    console.log(`[register-user] Creating user ${email}...`);
+
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: safeMetadata,
+    });
+
+    if (authError) {
+      console.error("[register-user] Auth error:", authError);
+      return jsonResponse({ error: authError.message || "Failed to create user account." }, 500);
+    }
+
+    // 3. Send Welcome Email (Optional since they already verified, but keeping it for franchise details)
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
     if (resendApiKey) {
       const origin = req.headers.get("origin") || "https://jkshunited.com";
       const loginUrl = `${origin}/login`;
-      let resendEmailId: string | null = null;
-
+      
       try {
-        const resendResponse = await fetch("https://api.resend.com/emails", {
+        await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -96,74 +164,9 @@ Deno.serve(async (req) => {
 </div>`,
           }),
         });
-
-        const resData = await resendResponse.json();
-
-        if (!resendResponse.ok) {
-          console.error("[register-user] Resend rejected:", resData);
-          return jsonResponse({ error: `Cannot register: Email rejected (${resData.message || 'Rejected by mail server'})` });
-        }
-
-        resendEmailId = resData.id;
-        console.log(`[register-user] Email queued. Resend ID: ${resendEmailId}`);
-
-      } catch (emailErr) {
-        console.error("[register-user] Network error:", emailErr);
-        return jsonResponse({ error: "Cannot register: Failed to send email. Check your internet and try again." });
+      } catch (e) {
+        console.error("Welcome email failed", e);
       }
-
-      // 3. BOUNCE DETECTION: Wait 15 seconds first (let the bounce happen), then check every 3s
-      //    Total wait: 15 + (3 × 8) = 39 seconds max
-      if (resendEmailId) {
-        console.log(`[register-user] Waiting 15s for delivery/bounce for ${email}...`);
-        await new Promise(resolve => setTimeout(resolve, 15000));
-
-        for (let attempt = 1; attempt <= 8; attempt++) {
-          try {
-            const statusResponse = await fetch(`https://api.resend.com/emails/${resendEmailId}`, {
-              headers: { "Authorization": `Bearer ${resendApiKey}` }
-            });
-            const statusData = await statusResponse.json();
-            const lastEvent = statusData.last_event || "unknown";
-
-            console.log(`[register-user] Check ${attempt}/8 for ${email}: ${lastEvent}`);
-
-            if (lastEvent === "bounced") {
-              console.error(`[register-user] BOUNCE DETECTED for ${email}. Aborting.`);
-              return jsonResponse({ error: "Cannot register: This email address does not exist or cannot receive emails (Delivery Bounced). Please use a valid email." });
-            }
-
-            if (lastEvent === "delivered") {
-              console.log(`[register-user] Email DELIVERED to ${email}. Creating user.`);
-              break;
-            }
-          } catch (pollErr) {
-            console.error(`[register-user] Check ${attempt} failed:`, pollErr);
-          }
-
-          // Don't wait after the last attempt
-          if (attempt < 8) {
-            await new Promise(resolve => setTimeout(resolve, 3000));
-          }
-        }
-      }
-    } else {
-      console.warn("[register-user] RESEND_API_KEY not set; skipping email check.");
-    }
-
-    // 4. No bounce detected. Create the user.
-    console.log(`[register-user] No bounce for ${email}. Creating user...`);
-
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: metadata,
-    });
-
-    if (authError) {
-      console.error("[register-user] Auth error:", authError);
-      return jsonResponse({ error: authError.message || "Failed to create user account." });
     }
 
     console.log(`[register-user] ✅ User created: ${authData.user.id}`);
@@ -175,6 +178,6 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error("[register-user] Fatal:", error);
-    return jsonResponse({ error: error instanceof Error ? error.message : String(error) });
+    return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, 500);
   }
 });
