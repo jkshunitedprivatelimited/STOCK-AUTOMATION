@@ -42,17 +42,52 @@ Deno.serve(async (req) => {
 
     const authHeader = req.headers.get("Authorization");
     let isCentralAdmin = false;
+
+    console.log(`[register-user] Auth header present: ${!!authHeader}`);
     
-    if (authHeader) {
-      const supabaseClientAuth = createClient(supabaseUrl, supabaseServiceKey, {
-        global: { headers: { Authorization: authHeader } }
-      });
-      const { data: { user } } = await supabaseClientAuth.auth.getUser();
-      if (user && user.user_metadata?.role === 'central') {
-        isCentralAdmin = true;
-        console.log(`[register-user] Central admin detected. Bypassing OTP for ${email}`);
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const jwt = authHeader.replace('Bearer ', '');
+      console.log(`[register-user] JWT token length: ${jwt.length}`);
+      
+      // Use the admin client's getUser with the JWT token directly
+      const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(jwt);
+      const user = userData?.user;
+      
+      console.log(`[register-user] getUser error: ${JSON.stringify(userError)}`);
+      console.log(`[register-user] User found: ${!!user}, User ID: ${user?.id}`);
+      console.log(`[register-user] User metadata role: ${user?.user_metadata?.role}`);
+      
+      if (user) {
+        const tokenRole = user.user_metadata?.role;
+        if (tokenRole && tokenRole.toLowerCase() === 'central') {
+          isCentralAdmin = true;
+          console.log(`[register-user] Central admin detected via user_metadata.`);
+        } else {
+          // Fallback: Check profiles table
+          const { data: profile, error: profileError } = await supabaseAdmin
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          console.log(`[register-user] Profile query error: ${JSON.stringify(profileError)}`);
+          console.log(`[register-user] Profile data: ${JSON.stringify(profile)}`);
+            
+          if (profile && profile.role && profile.role.toLowerCase() === 'central') {
+            isCentralAdmin = true;
+            console.log(`[register-user] Central admin detected via profiles table.`);
+          } else {
+            console.log(`[register-user] User ${user.id} is NOT central. Metadata role: ${tokenRole}, Profile role: ${profile?.role}`);
+          }
+        }
+      } else {
+        console.log(`[register-user] getUser returned no user. Token may be invalid or expired.`);
       }
+    } else {
+      console.log(`[register-user] No valid Bearer auth header found.`);
     }
+
+    console.log(`[register-user] Final isCentralAdmin: ${isCentralAdmin}`);
 
     // 1. Verify OTP (if not central admin)
     if (!isCentralAdmin) {

@@ -212,7 +212,16 @@ function RegisterUser() {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
       const { data: { session } } = await supabase.auth.getSession();
-      const accessToken = session?.access_token || supabaseAnonKey;
+      const accessToken = session?.access_token;
+
+      // DEBUG: Log auth state
+      console.log('[register-user DEBUG] Session exists:', !!session);
+      console.log('[register-user DEBUG] Access token exists:', !!accessToken);
+      console.log('[register-user DEBUG] Using anon key fallback:', !accessToken);
+
+      if (!accessToken) {
+        throw new Error("Your session has expired. Please log in again and retry.");
+      }
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 45000);
