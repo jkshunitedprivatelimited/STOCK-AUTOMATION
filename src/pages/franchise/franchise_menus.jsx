@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { supabase, fetchWithRetry } from "../../frontend_supabase/supabaseClient";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   ArrowLeft, Plus, Trash2, Edit2,
-  Search, Calendar, X, Filter, ChevronDown, ChevronUp, CheckCircle, XCircle, MoreVertical, RefreshCw, Layers, Trash, RotateCcw, Edit, Save, Loader2, AlertCircle
+  Search, Calendar, X, Filter, ChevronDown, ChevronUp, CheckCircle, XCircle, MoreVertical, RefreshCw, Layers, Trash, RotateCcw, Edit, Save, Loader2, AlertCircle, Download
 } from "lucide-react";
 import { BRAND_GREEN as brandGreen } from "../../utils/theme";
 import { useNavigate } from "react-router-dom";
@@ -198,7 +200,35 @@ function FranchiseMenu() {
       setMenuItems(prev => prev.filter(item => item.id !== id));
     } catch (err) {
       console.error("[handleDelete] Unexpected error:", err);
-      alert("Unexpected error deleting item: " + (err?.message || String(err)));
+      alert("Unexpected error: " + (err?.message || String(err)));
+    }
+  };
+
+  const handleToggleActive = async (id, currentStatus) => {
+    try {
+      const { data, error } = await supabase
+        .from("menus")
+        .update({ is_active: !currentStatus })
+        .eq("id", id)
+        .select();
+
+      if (error) {
+        console.error("[handleToggleActive] Supabase Error:", error);
+        alert("Error updating status: " + (error.message || JSON.stringify(error)));
+        return;
+      }
+      
+      if (!data || data.length === 0) {
+        alert("Update failed: Blocked by RLS policies.");
+        return;
+      }
+
+      setMenuItems(prev => prev.map(item => 
+        item.id === id ? { ...item, is_active: !currentStatus } : item
+      ));
+    } catch (err) {
+      console.error("[handleToggleActive] Catch block error:", err);
+      alert("Error updating status: " + (err?.message || String(err)));
     }
   };
 
@@ -379,6 +409,53 @@ function FranchiseMenu() {
     }
   };
   
+  const handleDownloadMenu = () => {
+    if (filteredItems.length === 0) {
+      alert("No items available to download.");
+      return;
+    }
+
+    const doc = new jsPDF();
+    const tableColumn = ["S/N", "Item Description", "Category", "Price (Rs)", "Status"];
+    const tableRows = [];
+
+    // Sort items by Category first, then by Item Name for a clean, organized PDF
+    const sortedItems = [...filteredItems].sort((a, b) => {
+      const catCompare = a.category.localeCompare(b.category);
+      if (catCompare !== 0) return catCompare;
+      return a.item_name.localeCompare(b.item_name);
+    });
+
+    sortedItems.forEach((item, index) => {
+      const itemData = [
+        index + 1,
+        item.item_name,
+        item.category,
+        `Rs ${parseFloat(item.price).toFixed(2)}`,
+        item.is_active ? "Active" : "Inactive"
+      ];
+      tableRows.push(itemData);
+    });
+
+    doc.setFontSize(16);
+    const title = selectedCategory === 'ALL' ? "Franchise Menu - All Items" : `Franchise Menu - ${selectedCategory}`;
+    doc.text(title, 14, 15);
+    
+    doc.setFontSize(10);
+    doc.text(`Total Items: ${filteredItems.length}`, 14, 22);
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 25,
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [22, 163, 74] }
+    });
+    
+    const fileName = selectedCategory === 'ALL' ? "Franchise_Menu_All.pdf" : `Franchise_Menu_${selectedCategory}.pdf`;
+    doc.save(fileName);
+  };
+
   const handleSelectAll = (e) => {
     if (e.target.checked) {
       setSelectedItems(filteredItems.map(item => item.id));
@@ -483,12 +560,27 @@ function FranchiseMenu() {
           <div className="flex flex-wrap gap-3">
             {selectedCategory === 'ALL' ? (
               filteredItems.length > 0 && (
-                <button onClick={handleDeleteWholeMenu} className="px-4 py-2 bg-red-50 text-red-600 rounded-lg font-bold text-xs uppercase tracking-wider border border-red-100 hover:bg-red-100 transition-colors">
-                  Delete Whole Menu
-                </button>
+                <>
+                  <button onClick={handleDownloadMenu} className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-lg font-bold text-xs uppercase tracking-wider border border-emerald-100 hover:bg-emerald-100 transition-colors">
+                    <Download size={16} /> Download Whole Menu (PDF)
+                  </button>
+                  <button onClick={handleDeleteWholeMenu} className="px-4 py-2 bg-red-50 text-red-600 rounded-lg font-bold text-xs uppercase tracking-wider border border-red-100 hover:bg-red-100 transition-colors">
+                    Delete Whole Menu
+                  </button>
+                </>
               )
             ) : (
               <>
+                {filteredItems.length > 0 && (
+                  <div className="group relative flex">
+                    <button onClick={handleDownloadMenu} className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-lg font-bold text-xs uppercase tracking-wider border border-emerald-100 hover:bg-emerald-100 transition-colors">
+                      <Download size={16} /> Download {selectedCategory} (PDF)
+                    </button>
+                    <div className="absolute top-full left-0 mt-2 hidden group-hover:block w-max max-w-xs bg-black text-white text-xs px-3 py-2 rounded shadow-lg z-50">
+                      Switch to 'ALL' category to download the whole menu.
+                    </div>
+                  </div>
+                )}
                 <button onClick={handleDeleteCategory} className="px-4 py-2 bg-red-50 text-red-600 rounded-lg font-bold text-xs uppercase tracking-wider border border-red-100 hover:bg-red-100 transition-colors">
                   Delete Category
                 </button>
@@ -542,7 +634,7 @@ function FranchiseMenu() {
                   <tr><td colSpan="5" className="py-20 text-center text-black font-medium animate-pulse uppercase tracking-widest">Loading...</td></tr>
                 ) : filteredItems.length > 0 ? (
                   filteredItems.map((item, index) => (
-                    <tr key={item.id} className="group hover:bg-gray-50 transition-colors">
+                    <tr key={item.id} className={`group hover:bg-gray-50 transition-colors ${item.is_active ? '' : 'opacity-60 grayscale'}`}>
                       <td className="px-4 py-5 text-center border-r border-black/5">
                         <input 
                           type="checkbox" 
@@ -560,10 +652,31 @@ function FranchiseMenu() {
                       </td>
                       <td className="px-6 py-5 border-r border-black/5 font-mono font-bold text-black text-lg">₹{parseFloat(item.price).toFixed(2)}</td>
                       <td className="px-6 py-5 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button onClick={() => handleOpenModal(item)} className="p-2 rounded-lg text-green-600 hover:bg-green-50"><Edit2 size={18} /></button>
+                        <div className="flex items-center justify-center gap-3">
+                          {/* Toggle Switch */}
+                          <div className="flex items-center gap-2" title={item.is_active ? "Click to Deactivate" : "Click to Activate"}>
+                            <button 
+                              onClick={() => handleToggleActive(item.id, item.is_active)} 
+                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out border border-black/10 ${item.is_active ? 'bg-emerald-500' : 'bg-gray-200'}`}
+                            >
+                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${item.is_active ? 'translate-x-4' : 'translate-x-0'}`} />
+                            </button>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider w-6 text-left ${item.is_active ? 'text-emerald-700' : 'text-gray-500'}`}>
+                              {item.is_active ? 'ON' : 'OFF'}
+                            </span>
+                          </div>
+                          
                           <div className="w-px h-4 bg-black/10"></div>
-                          <button onClick={() => handleDelete(item.id)} className="p-2 rounded-lg text-red-600 hover:bg-red-50"><Trash2 size={18} /></button>
+
+                          {/* Actions */}
+                          <div className="flex gap-1">
+                            <button onClick={() => handleOpenModal(item)} className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors" title="Edit Item">
+                              <Edit2 size={16} />
+                            </button>
+                            <button onClick={() => handleDelete(item.id)} className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors" title="Delete Item">
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -587,7 +700,7 @@ function FranchiseMenu() {
                   <div
                     key={item.id}
                     onClick={() => toggleItem(item.id)}
-                    className={`bg-white border border-black/10 rounded-xl overflow-hidden transition-all duration-300 ${isExpanded ? 'shadow-md ring-1 ring-black/5' : 'shadow-sm'}`}
+                    className={`bg-white border border-black/10 rounded-xl overflow-hidden transition-all duration-300 ${isExpanded ? 'shadow-md ring-1 ring-black/5' : 'shadow-sm'} ${item.is_active ? '' : 'opacity-60 grayscale'}`}
                   >
                     {/* Header Row (Always Visible) */}
                     <div className="p-4 flex items-center justify-between">
@@ -626,19 +739,38 @@ function FranchiseMenu() {
 
                     {/* Expandable Action Row */}
                     {isExpanded && (
-                      <div className="px-4 pb-4 pt-0 flex gap-2 animate-in slide-in-from-top-2 duration-200">
+                      <div className="px-4 pb-4 pt-0 flex flex-col gap-2 animate-in slide-in-from-top-2 duration-200">
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleOpenModal(item); }}
-                          className="flex-1 flex items-center justify-center gap-2 p-3 bg-green-50 text-green-700 rounded-xl font-bold text-xs uppercase tracking-wider active:scale-95 transition-transform"
+                          onClick={(e) => { e.stopPropagation(); handleToggleActive(item.id, item.is_active); }}
+                          className={`w-full flex items-center justify-between p-3 rounded-xl font-bold text-xs uppercase tracking-wider active:scale-95 transition-transform border ${
+                            item.is_active 
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
+                              : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                          }`}
                         >
-                          <Edit2 size={16} /> Edit
+                          <span className="flex items-center gap-2">
+                            {item.is_active ? <CheckCircle size={16} /> : <XCircle size={16} />}
+                            {item.is_active ? "Status: ON" : "Status: OFF"}
+                          </span>
+                          <div className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out border border-black/10 ${item.is_active ? 'bg-emerald-500' : 'bg-gray-300'}`}>
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${item.is_active ? 'translate-x-4' : 'translate-x-0'}`} />
+                          </div>
                         </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
-                          className="flex-1 flex items-center justify-center gap-2 p-3 bg-red-50 text-red-600 rounded-xl font-bold text-xs uppercase tracking-wider active:scale-95 transition-transform"
-                        >
-                          <Trash2 size={16} /> Delete
-                        </button>
+                        
+                        <div className="flex gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleOpenModal(item); }}
+                            className="flex-1 flex items-center justify-center gap-2 p-3 bg-blue-50 text-blue-700 rounded-xl font-bold text-xs uppercase tracking-wider active:scale-95 transition-transform border border-blue-100"
+                          >
+                            <Edit2 size={16} /> Edit
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
+                            className="flex-1 flex items-center justify-center gap-2 p-3 bg-red-50 text-red-600 rounded-xl font-bold text-xs uppercase tracking-wider active:scale-95 transition-transform border border-red-100"
+                          >
+                            <Trash2 size={16} /> Delete
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

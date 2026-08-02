@@ -118,7 +118,8 @@ function Store() {
             category: item.category ? item.category.trim().toUpperCase() : "UNCATEGORIZED"
           }));
           setMenuItems(normalizedData);
-          setCategories(["All", ...new Set(normalizedData.map(item => item.category))]);
+          const uniqueCategories = [...new Set(normalizedData.map(item => item.category))].sort((a, b) => a.localeCompare(b));
+          setCategories(["All", ...uniqueCategories]);
         }
       } catch (err) {
         console.error("Menu Load Error:", err.message);
@@ -307,6 +308,9 @@ function Store() {
                   </button>
                 )}
               </div>
+            </div>
+            <div style={{ marginBottom: "6px" }}>
+              <span style={{ fontSize: isMobile ? "9px" : "10px", fontWeight: "900", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "1.5px" }}>Categories (A-Z)</span>
             </div>
             <div style={styles.categoryRow}>
               {categories.map(cat => (
