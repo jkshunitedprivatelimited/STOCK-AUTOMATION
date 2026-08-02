@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../../frontend_supabase/supabaseClient";
 import { devLog } from "../../utils/logger";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download, CheckCircle, XCircle } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from 'jspdf-autotable';
 
 const GREEN = "rgb(0,100,55)";
 const LIGHT_GREEN = "rgba(0,100,55,0.05)";
@@ -247,6 +249,85 @@ function PosManagement() {
       }
     }
   };
+  const handleToggleActive = async (id, currentStatus) => {
+    try {
+      const { error } = await supabase
+        .from('menus')
+        .update({ is_active: !currentStatus })
+        .eq('id', id);
+
+      if (error) throw error;
+      setMenus(prev => prev.map(item => item.id === id ? { ...item, is_active: !currentStatus } : item));
+    } catch (error) {
+      console.error("Error toggling status:", error.message);
+      showToast("Failed to update status", "error");
+    }
+  };
+
+  const handleDownloadMenu = () => {
+    try {
+      const doc = new jsPDF();
+      
+      const franchiseName = allCompanyRecords.find(f => f.franchise_id === viewFranchise)?.company_name || "Central";
+      
+      doc.setFontSize(20);
+      doc.text(`${franchiseName} Menu`, 14, 22);
+      
+      doc.setFontSize(11);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30);
+      if (selectedCategory !== 'All') {
+        doc.text(`Category: ${selectedCategory}`, 14, 36);
+      }
+
+      const exportItems = [...filteredMenus].sort((a, b) => {
+        const catA = a.category ? a.category.toUpperCase() : "UNCATEGORIZED";
+        const catB = b.category ? b.category.toUpperCase() : "UNCATEGORIZED";
+        if (catA < catB) return -1;
+        if (catA > catB) return 1;
+        return a.item_name.localeCompare(b.item_name);
+      });
+
+      const tableColumn = ["S/N", "Category", "Item Description", "Price", "Status"];
+      const tableRows = [];
+
+      exportItems.forEach((item, index) => {
+        const itemData = [
+          (index + 1).toString().padStart(2, '0'),
+          item.category ? item.category.toUpperCase() : "UNCATEGORIZED",
+          item.item_name,
+          `Rs. ${parseFloat(item.price).toFixed(2)}`,
+          item.is_active ? "Active" : "Inactive"
+        ];
+        tableRows.push(itemData);
+      });
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: selectedCategory !== 'All' ? 42 : 36,
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [0, 100, 55], textColor: 255, fontStyle: 'bold' },
+        columnStyles: {
+          0: { cellWidth: 15, halign: 'center' },
+          1: { cellWidth: 40 },
+          2: { cellWidth: 'auto' },
+          3: { cellWidth: 25, halign: 'right' },
+          4: { cellWidth: 25, halign: 'center' }
+        },
+        alternateRowStyles: { fillColor: [245, 245, 245] }
+      });
+
+      const safeFranchiseName = franchiseName.replace(/[^a-z0-9]/gi, '_');
+      doc.save(`${safeFranchiseName}_Menu_Export_${new Date().toISOString().split('T')[0]}.pdf`);
+      showToast("Menu downloaded successfully!", "success");
+    } catch (error) {
+      console.error("PDF Generation Error:", error);
+      showToast("Failed to generate PDF", "error");
+    }
+  };
+
 
   const deleteItem = async (id) => {
     const confirmed = await showConfirm("Are you sure you want to delete this item?");
@@ -629,19 +710,41 @@ function PosManagement() {
                 disabled={!viewFranchise}
               />
             </div>
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              style={{
-                ...styles.addBtn,
-                width: isMobile ? '100%' : 'auto',
-                background: !viewFranchise ? '#f5f5f5' : GREEN,
-                color: !viewFranchise ? '#aaa' : '#fff',
-                cursor: !viewFranchise ? 'not-allowed' : 'pointer'
-              }}
-              disabled={!viewFranchise}
-            >
-              + Add Item
-            </button>
+            <div style={{ display: 'flex', gap: '8px', width: isMobile ? '100%' : 'auto', flexDirection: isMobile ? 'column' : 'row' }}>
+              <button
+                onClick={handleDownloadMenu}
+                style={{
+                  ...styles.addBtn,
+                  width: isMobile ? '100%' : 'auto',
+                  background: !viewFranchise ? '#f5f5f5' : '#1e293b',
+                  color: !viewFranchise ? '#aaa' : '#fff',
+                  cursor: !viewFranchise ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                disabled={!viewFranchise}
+                title="Download current menu as PDF"
+              >
+                <Download size={16} style={{ marginRight: '6px' }} /> Download Menu
+              </button>
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                style={{
+                  ...styles.addBtn,
+                  width: isMobile ? '100%' : 'auto',
+                  background: !viewFranchise ? '#f5f5f5' : GREEN,
+                  color: !viewFranchise ? '#aaa' : '#fff',
+                  cursor: !viewFranchise ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                disabled={!viewFranchise}
+              >
+                + Add Item
+              </button>
+            </div>
           </div>
         </section>
 
@@ -722,7 +825,7 @@ function PosManagement() {
 
                   <div style={styles.itemsWrapper}>
                     {groupedMenu[cat].map(item => (
-                      <div key={item.id} style={styles.premiumItemRow}>
+                      <div key={item.id} style={{ ...styles.premiumItemRow, opacity: item.is_active ? 1 : 0.6, filter: item.is_active ? 'none' : 'grayscale(100%)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, overflow: 'hidden' }}>
                           <input
                             type="checkbox"
@@ -737,13 +840,29 @@ function PosManagement() {
                             </div>
                           </div>
                         </div>
-                        <div style={styles.itemActions}>
-                          <button onClick={() => { setEditingItem(item); setIsEditModalOpen(true); }} style={styles.iconBtn}>Edit</button>
-                          <button onClick={() => deleteItem(item.id)} style={styles.deleteBtn} title="Delete Item">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={DANGER} strokeWidth="2">
-                              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                            </svg>
-                          </button>
+                        <div style={{ ...styles.itemActions, gap: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} title={item.is_active ? "Click to Deactivate" : "Click to Activate"}>
+                            <button 
+                              onClick={() => handleToggleActive(item.id, item.is_active)} 
+                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out border border-black/10 ${item.is_active ? 'bg-emerald-500' : 'bg-gray-200'}`}
+                            >
+                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${item.is_active ? 'translate-x-4' : 'translate-x-0'}`} />
+                            </button>
+                            <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px', width: '24px', textAlign: 'left', color: item.is_active ? '#15803d' : '#6b7280' }}>
+                              {item.is_active ? 'ON' : 'OFF'}
+                            </span>
+                          </div>
+
+                          <div style={{ width: '1px', height: '16px', background: '#e5e7eb' }}></div>
+                          
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button onClick={() => { setEditingItem(item); setIsEditModalOpen(true); }} style={styles.iconBtn}>Edit</button>
+                            <button onClick={() => deleteItem(item.id)} style={styles.deleteBtn} title="Delete Item">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={DANGER} strokeWidth="2">
+                                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
