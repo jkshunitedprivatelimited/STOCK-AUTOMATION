@@ -85,20 +85,21 @@ function Store() {
     const fetchProfile = async () => {
       if (!franchiseId) return;
       try {
-        const { data, error } = await supabase
+        const { data: profile, error: profileErr } = await supabase
           .from('profiles')
           .select('company, address, city')
           .eq('franchise_id', franchiseId)
           .limit(1)
           .maybeSingle();
-        if (error) throw error;
-        if (data) setStoreProfile(data);
+        if (profileErr) throw profileErr;
+        if (profile) setStoreProfile(profile);
       } catch (err) {
-        console.error("Profile Load Exception:", err.message);
+        console.error("Initial Load Exception:", err.message);
       }
     };
     fetchProfile();
   }, [franchiseId]);
+
 
   /* 2. FETCH MENU ITEMS */
   useEffect(() => {
@@ -117,7 +118,8 @@ function Store() {
             category: item.category ? item.category.trim().toUpperCase() : "UNCATEGORIZED"
           }));
           setMenuItems(normalizedData);
-          setCategories(["All", ...new Set(normalizedData.map(item => item.category))]);
+          const uniqueCategories = [...new Set(normalizedData.map(item => item.category))].sort((a, b) => a.localeCompare(b));
+          setCategories(["All", ...uniqueCategories]);
         }
       } catch (err) {
         console.error("Menu Load Error:", err.message);
@@ -194,9 +196,9 @@ function Store() {
       const { error: itemsError } = await supabase.from("bills_items_generated").insert(billItems);
       if (itemsError) throw new Error(`Items Error: ${itemsError.message}`);
 
-      // Invalidate analytics caches
+      // Clear caches
       Object.keys(sessionStorage).forEach(key => {
-        if (key.startsWith("analyticsCache_")) sessionStorage.removeItem(key);
+        if (key.startsWith("analyticsCache_") || key.startsWith("analytics_data_")) sessionStorage.removeItem(key);
       });
 
       if (isConnected) {
@@ -246,6 +248,8 @@ function Store() {
       <span style={{ fontWeight: '900', color: BLACK }}>Securing Connection...</span>
     </div>
   );
+
+
 
   return (
     <div style={{
@@ -304,6 +308,9 @@ function Store() {
                   </button>
                 )}
               </div>
+            </div>
+            <div style={{ marginBottom: "6px" }}>
+              <span style={{ fontSize: isMobile ? "9px" : "10px", fontWeight: "900", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "1.5px" }}>Categories (A-Z)</span>
             </div>
             <div style={styles.categoryRow}>
               {categories.map(cat => (

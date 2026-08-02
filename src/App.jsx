@@ -7,6 +7,7 @@ const LandingPage = lazy(() => import("./pages/landing/LandingPage"));
 const Careers = lazy(() => import("./pages/landing/Careers"));
 const Login = lazy(() => import("./pages/landing/Login"));
 const RegisterUser = lazy(() => import("./pages/register/Registeruser"));
+const InviteRegister = lazy(() => import("./pages/register/InviteRegister"));
 
 /* STORE */
 const Store = lazy(() => import("./pages/store/store_new_bills"));
@@ -122,6 +123,7 @@ function App() {
               <Route path="/" element={<LandingPage />} />
               <Route path="/careers" element={<Careers />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/invite-setup/:token" element={<InviteRegister />} />
 
               {/* ================= STORE MODE ================= */}
               <Route

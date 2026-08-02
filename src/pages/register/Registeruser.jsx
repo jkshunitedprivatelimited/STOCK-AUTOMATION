@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../frontend_supabase/supabaseClient";
 import {
   Eye, EyeOff, ArrowLeft, MapPin, Building2, User,
-  Phone, Mail, KeyRound, Sparkles, Map, Loader2, RefreshCw, IndianRupee
+  Phone, Mail, KeyRound, Sparkles, Map, Loader2, RefreshCw, IndianRupee, Link, Copy, CheckCircle2
 } from "lucide-react";
 import { BRAND_GREEN, BRAND_GREEN_LIGHT } from "../../utils/theme";
 
@@ -43,10 +43,12 @@ const InputGroup = ({ icon: Icon, children, isFocused, label, isMobile }) => (
 
 function RegisterUser() {
   const navigate = useNavigate();
+  const [mode, setMode] = useState("manual"); // 'invite' or 'manual' (Temporarily set to manual)
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const [adminId, setAdminId] = useState("...");
+  const [adminUserId, setAdminUserId] = useState(null);
   const [suggestedId, setSuggestedId] = useState("");
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [companiesList, setCompaniesList] = useState([]);
@@ -55,6 +57,11 @@ function RegisterUser() {
 
   const [selectedCompany, setSelectedCompany] = useState("");
   const [franchiseId, setFranchiseId] = useState("");
+  const [inviteTransportCharge, setInviteTransportCharge] = useState("");
+  const [inviteSyncMenu, setInviteSyncMenu] = useState(true);
+
+  const [inviteLink, setInviteLink] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -82,6 +89,7 @@ function RegisterUser() {
   const getAdminProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
+      setAdminUserId(user.id);
       const { data } = await supabase.from('profiles').select('franchise_id').eq('id', user.id).maybeSingle();
       if (data) setAdminId(data.franchise_id);
     }
@@ -115,14 +123,57 @@ function RegisterUser() {
             }
           });
         }
-        setSuggestedId(`${prefix}${maxNum + 1}`);
+        const newId = `${prefix}${maxNum + 1}`;
+        setSuggestedId(newId);
+        if (mode === 'invite') {
+          setFranchiseId(newId);
+        }
       } catch (err) { console.error(err); }
     };
     fetchNextId();
-  }, [selectedCompany]);
+  }, [selectedCompany, mode]);
 
   const applySuggestion = () => {
     setFranchiseId(suggestedId);
+  };
+
+  const generateInvite = async () => {
+    if (!selectedCompany) return alert("Please select a Brand.");
+    if (!franchiseId) return alert("Franchise ID is not ready.");
+
+    setLoading(true);
+    try {
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour from now
+
+      const { data, error } = await supabase
+        .from('franchise_invites')
+        .insert({
+          company_name: selectedCompany,
+          franchise_id: franchiseId,
+          transportation_charge: inviteTransportCharge ? parseFloat(inviteTransportCharge) : null,
+          sync_menu: inviteSyncMenu,
+          expires_at: expiresAt,
+          created_by: adminUserId
+        })
+        .select('id')
+        .single();
+
+      if (error) throw error;
+
+      const link = `${window.location.origin}/invite-setup/${data.id}`;
+      setInviteLink(link);
+    } catch (err) {
+      console.error(err);
+      alert("Error generating invite: " + err.message + "\n\nMake sure the franchise_invites table is created in Supabase.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(inviteLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleSubmit = async (e) => {
@@ -131,13 +182,11 @@ function RegisterUser() {
     const form = e.target;
     const data = new FormData(form);
     
-    // Extract standard native data
     const companyStr = data.get("company") || selectedCompany;
     const franchiseIdStr = data.get("franchise_id") || franchiseId;
     const emailStr = data.get("email");
     const passwordStr = data.get("password");
 
-    // Strict Validation
     if (!companyStr) return alert("Please select a Brand.");
     if (!franchiseIdStr) return alert("Please confirm the Franchise ID.");
     if (!emailStr) return alert("Email is required.");
@@ -145,7 +194,6 @@ function RegisterUser() {
 
     setLoading(true);
     try {
-      // 1. Build the payload exactly matching the SQL Trigger
       const metadataPayload = {
         name: (data.get("name") || "").trim(),
         phone: (data.get("phone") || "").trim(),
@@ -161,13 +209,19 @@ function RegisterUser() {
         role: 'franchise'
       };
 
-      // Call the edge function directly with a longer timeout (45s)
-      // because the function polls Resend for ~15s to detect email bounces.
-      // The default supabase client fetch has a 10s timeout which is too short.
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
       const { data: { session } } = await supabase.auth.getSession();
-      const accessToken = session?.access_token || supabaseAnonKey;
+      const accessToken = session?.access_token;
+
+      // DEBUG: Log auth state
+      console.log('[register-user DEBUG] Session exists:', !!session);
+      console.log('[register-user DEBUG] Access token exists:', !!accessToken);
+      console.log('[register-user DEBUG] Using anon key fallback:', !accessToken);
+
+      if (!accessToken) {
+        throw new Error("Your session has expired. Please log in again and retry.");
+      }
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 45000);
@@ -198,12 +252,10 @@ function RegisterUser() {
         throw new Error("Failed to connect to the registration service. Please check your internet connection.");
       }
 
-      // Handle errors returned by the edge function (bounce, invalid domain, etc.)
       if (resData?.error) {
         throw new Error(resData.error);
       }
 
-      // --- Menu Sync: clone central menu to the new franchise if toggle is ON ---
       if (syncMenu) {
         try {
           const { error: syncError } = await supabase.rpc('clone_franchise_menu', {
@@ -248,164 +300,277 @@ function RegisterUser() {
       </div>
 
       <div style={{ ...styles.mainContent, padding: isMobile ? "12px" : "32px" }}>
+        
+        {/* Mode Toggle Tabs (Temporarily disabled) */}
+        {false && (
+          <div style={{ maxWidth: "850px", margin: "0 auto 24px auto", display: "flex", gap: "12px", background: "#fff", padding: "8px", borderRadius: "16px", border: `1px solid ${BORDER}` }}>
+            <button 
+              type="button" 
+              onClick={() => setMode('invite')} 
+              style={{ ...styles.tabButton, backgroundColor: mode === 'invite' ? PRIMARY : 'transparent', color: mode === 'invite' ? '#fff' : TEXT_MUTED }}
+            >
+              <Link size={18} style={{ marginRight: "8px" }} />
+              Generate Invite Link
+            </button>
+            <button 
+              type="button" 
+              onClick={() => setMode('manual')} 
+              style={{ ...styles.tabButton, backgroundColor: mode === 'manual' ? PRIMARY : 'transparent', color: mode === 'manual' ? '#fff' : TEXT_MUTED }}
+            >
+              <User size={18} style={{ marginRight: "8px" }} />
+              Register Manually
+            </button>
+          </div>
+        )}
+
         <div style={{ ...styles.formCard, padding: isMobile ? "24px 16px" : "40px", borderRadius: isMobile ? "20px" : "16px" }}>
 
-          <form onSubmit={handleSubmit}>
-            <div style={styles.sectionHeader}>
-              <Building2 size={18} color={PRIMARY} />
-              <h2 style={styles.sectionTitle}>Brand Identity</h2>
-            </div>
+          {mode === 'invite' ? (
+            // ================= INVITE MODE =================
+            <div>
+              <div style={styles.sectionHeader}>
+                <Building2 size={18} color={PRIMARY} />
+                <h2 style={styles.sectionTitle}>Generate Franchise Invite</h2>
+              </div>
+              <p style={{ color: TEXT_MUTED, fontSize: "14px", marginBottom: "24px" }}>
+                Select a brand to automatically generate a secure invite link. The franchise owner will be able to fill out their own details securely.
+              </p>
 
-            <div style={isMobile ? styles.flexColumn : styles.gridRowThree}>
-              <InputGroup isFocused={focusedField === "company"} label="Select Brand *" isMobile={isMobile}>
-                <select name="company" required value={selectedCompany} onChange={(e) => setSelectedCompany(e.target.value)} style={styles.selectInput}
-                  onFocus={() => setFocusedField("company")} onBlur={() => setFocusedField(null)}>
-                  <option value="">Choose...</option>
-                  {companiesList.map((compName, idx) => (
-                    <option key={idx} value={compName}>{compName}</option>
-                  ))}
-                </select>
-              </InputGroup>
+              <div style={isMobile ? styles.flexColumn : styles.gridRowTwo}>
+                <InputGroup isFocused={focusedField === "company"} label="Select Brand *" isMobile={isMobile}>
+                  <select name="company" required value={selectedCompany} onChange={(e) => setSelectedCompany(e.target.value)} style={styles.selectInput}
+                    onFocus={() => setFocusedField("company")} onBlur={() => setFocusedField(null)}>
+                    <option value="">Choose...</option>
+                    {companiesList.map((compName, idx) => (
+                      <option key={idx} value={compName}>{compName}</option>
+                    ))}
+                  </select>
+                </InputGroup>
 
-              <div style={styles.suggestionWrapper}>
-                <label style={styles.inputLabel}>Suggested ID</label>
-                <div style={{ ...styles.suggestionBox, height: isMobile ? "52px" : "48px" }} onClick={applySuggestion}>
-                  <Sparkles size={16} style={{ marginRight: '8px' }} />
-                  {suggestedId || "Select Brand First"}
-                </div>
+                <InputGroup isFocused={focusedField === "franchise_id"} label="Auto-Assigned ID *" isMobile={isMobile}>
+                  <input name="franchise_id" required value={franchiseId} readOnly placeholder="Select brand first" style={{ ...styles.cleanInput, color: PRIMARY, fontWeight: "600" }} />
+                </InputGroup>
               </div>
 
-              <InputGroup isFocused={focusedField === "franchise_id"} label="Confirm ID *" isMobile={isMobile}>
-                <input name="franchise_id" required value={franchiseId} placeholder="e.g. TV-10" onChange={(e) => setFranchiseId(e.target.value)} style={styles.cleanInput}
-                  onFocus={() => setFocusedField("franchise_id")} onBlur={() => setFocusedField(null)} />
-              </InputGroup>
-            </div>
-
-            <div style={styles.divider}></div>
-
-            <div style={styles.sectionHeader}>
-              <User size={18} color={PRIMARY} />
-              <h2 style={styles.sectionTitle}>Owner Details</h2>
-            </div>
-
-            <div style={isMobile ? styles.flexColumn : styles.gridRowTwo}>
-              <InputGroup icon={User} isFocused={focusedField === "name"} label="Full Name *" isMobile={isMobile}>
-                <input name="name" required placeholder="Enter name" style={styles.cleanInput}
-                  onFocus={() => setFocusedField("name")} onBlur={() => setFocusedField(null)} />
-              </InputGroup>
-              <InputGroup icon={Phone} isFocused={focusedField === "phone"} label="Phone *" isMobile={isMobile}>
-                <input name="phone" required placeholder="+91" type="tel" style={styles.cleanInput}
-                  onFocus={() => setFocusedField("phone")} onBlur={() => setFocusedField(null)} />
-              </InputGroup>
-            </div>
-
-            <div style={isMobile ? styles.flexColumn : styles.gridRowTwo}>
-              <InputGroup icon={Mail} isFocused={focusedField === "email"} label="Email *" isMobile={isMobile}>
-                <input name="email" required type="email" placeholder="email@domain.com" style={styles.cleanInput}
-                  onFocus={() => setFocusedField("email")} onBlur={() => setFocusedField(null)} />
-              </InputGroup>
-              <InputGroup icon={KeyRound} isFocused={focusedField === "password"} label="Password *" isMobile={isMobile}>
-                <input name="password" required type={showPassword ? "text" : "password"} placeholder="••••••••" style={styles.cleanInput}
-                  onFocus={() => setFocusedField("password")} onBlur={() => setFocusedField(null)} />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </InputGroup>
-            </div>
-
-            <div style={styles.divider}></div>
-
-            <div style={styles.sectionHeader}>
-              <MapPin size={18} color={PRIMARY} />
-              <h2 style={styles.sectionTitle}>Location</h2>
-            </div>
-
-            <div style={isMobile ? styles.flexColumn : styles.gridRowTwo}>
-              <InputGroup isFocused={focusedField === "branch_location"} label="Branch Name *" isMobile={isMobile}>
-                <input name="branch_location" required placeholder="e.g. Madhapur" style={styles.cleanInput}
-                  onFocus={() => setFocusedField("branch_location")} onBlur={() => setFocusedField(null)} />
-              </InputGroup>
-              <InputGroup icon={Map} isFocused={focusedField === "addressLine"} label="Street Address *" isMobile={isMobile}>
-                <input name="addressLine" required placeholder="Door No, Street..." style={styles.cleanInput}
-                  onFocus={() => setFocusedField("addressLine")} onBlur={() => setFocusedField(null)} />
-              </InputGroup>
-            </div>
-
-            <div style={isMobile ? styles.flexColumn : styles.gridRowThree}>
-              <InputGroup isFocused={focusedField === "city"} label="City *" isMobile={isMobile}>
-                <input name="city" required placeholder="City" style={styles.cleanInput}
-                  onFocus={() => setFocusedField("city")} onBlur={() => setFocusedField(null)} />
-              </InputGroup>
-              <InputGroup isFocused={focusedField === "state"} label="State *" isMobile={isMobile}>
-                <select name="state" required style={styles.selectInput}
-                  onFocus={() => setFocusedField("state")} onBlur={() => setFocusedField(null)}>
-                  <option value="">Select...</option>
-                  {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </InputGroup>
-              <InputGroup isFocused={focusedField === "pincode"} label="Pincode *" isMobile={isMobile}>
-                <input name="pincode" required placeholder="6 Digits" maxLength={6} type="number" style={styles.cleanInput}
-                  onFocus={() => setFocusedField("pincode")} onBlur={() => setFocusedField(null)} />
-              </InputGroup>
-            </div>
-
-            <div style={{ marginBottom: "24px" }}>
-              <InputGroup icon={MapPin} isFocused={focusedField === "nearestBusStop"} label="Nearest Bus Stop *" isMobile={isMobile}>
-                <input name="nearestBusStop" required placeholder="e.g. Jubilee Hills Checkpost" style={styles.cleanInput}
-                  onFocus={() => setFocusedField("nearestBusStop")} onBlur={() => setFocusedField(null)} />
-              </InputGroup>
-            </div>
-
-            <div style={{ marginBottom: "24px" }}>
-              <InputGroup icon={IndianRupee} isFocused={focusedField === "transportation_charge"} label="Transportation Charge (Optional)" isMobile={isMobile}>
-                <input name="transportation_charge" placeholder="0" type="number" min="0" step="0.01" style={styles.cleanInput}
-                  onFocus={() => setFocusedField("transportation_charge")} onBlur={() => setFocusedField(null)} />
-              </InputGroup>
-            </div>
-
-            <div style={styles.divider}></div>
-
-            <div style={styles.sectionHeader}>
-              <RefreshCw size={18} color={PRIMARY} />
-              <h2 style={styles.sectionTitle}>Menu Sync</h2>
-            </div>
-
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "16px 20px", borderRadius: "12px", marginBottom: "24px",
-              border: `1.5px solid ${syncMenu ? PRIMARY : BORDER}`,
-              backgroundColor: syncMenu ? "#f0fdf4" : "#fcfcfd",
-              transition: "all 0.25s ease",
-              cursor: "pointer"
-            }} onClick={() => setSyncMenu(!syncMenu)}>
-              <div>
-                <div style={{ fontSize: "15px", fontWeight: "700", color: TEXT_MAIN, marginBottom: "4px" }}>
-                  {syncMenu ? "Sync Menu from Central (TV-1)" : "Don't Sync Menu"}
-                </div>
-                <div style={{ fontSize: "12px", color: TEXT_MUTED }}>
-                  {syncMenu ? "The central menu will be cloned to this branch on creation" : "No menu will be copied — you can sync later from Menu Management"}
-                </div>
+              <div style={isMobile ? styles.flexColumn : styles.gridRowTwo}>
+                <InputGroup icon={IndianRupee} isFocused={focusedField === "inviteTransportCharge"} label="Transportation Charge (Optional)" isMobile={isMobile}>
+                  <input value={inviteTransportCharge} onChange={(e) => setInviteTransportCharge(e.target.value)} placeholder="0" type="number" min="0" step="0.01" style={styles.cleanInput}
+                    onFocus={() => setFocusedField("inviteTransportCharge")} onBlur={() => setFocusedField(null)} />
+                </InputGroup>
               </div>
+
               <div style={{
-                width: "50px", height: "28px", borderRadius: "14px",
-                backgroundColor: syncMenu ? PRIMARY : "#cbd5e1",
-                position: "relative", transition: "background-color 0.25s ease",
-                flexShrink: 0, marginLeft: "16px"
-              }}>
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "16px 20px", borderRadius: "12px", marginBottom: "24px",
+                border: `1.5px solid ${inviteSyncMenu ? PRIMARY : BORDER}`,
+                backgroundColor: inviteSyncMenu ? "#f0fdf4" : "#fcfcfd",
+                transition: "all 0.25s ease",
+                cursor: "pointer"
+              }} onClick={() => setInviteSyncMenu(!inviteSyncMenu)}>
+                <div>
+                  <div style={{ fontSize: "15px", fontWeight: "700", color: TEXT_MAIN, marginBottom: "4px" }}>
+                    {inviteSyncMenu ? "Sync Menu from Central (TV-1)" : "Don't Sync Menu"}
+                  </div>
+                  <div style={{ fontSize: "12px", color: TEXT_MUTED }}>
+                    {inviteSyncMenu ? "The central menu will be automatically cloned when they register" : "No menu will be copied for this franchise"}
+                  </div>
+                </div>
                 <div style={{
-                  width: "22px", height: "22px", borderRadius: "50%",
-                  backgroundColor: "#fff", position: "absolute", top: "3px",
-                  left: syncMenu ? "25px" : "3px",
-                  transition: "left 0.25s ease",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.2)"
-                }} />
+                  width: "50px", height: "28px", borderRadius: "14px",
+                  backgroundColor: inviteSyncMenu ? PRIMARY : "#cbd5e1",
+                  position: "relative", transition: "background-color 0.25s ease",
+                  flexShrink: 0, marginLeft: "16px"
+                }}>
+                  <div style={{
+                    width: "22px", height: "22px", borderRadius: "50%",
+                    backgroundColor: "#fff", position: "absolute", top: "3px",
+                    left: inviteSyncMenu ? "25px" : "3px",
+                    transition: "left 0.25s ease",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.2)"
+                  }} />
+                </div>
               </div>
-            </div>
 
-            <button type="submit" disabled={loading} style={{ ...styles.button, padding: isMobile ? "18px" : "16px" }}>
-              {loading ? <Loader2 className="animate-spin" size={20} /> : "Create Franchise Account"}
-            </button>
-          </form>
+              {!inviteLink ? (
+                <button type="button" onClick={generateInvite} disabled={loading || !selectedCompany} style={{ ...styles.button, padding: isMobile ? "18px" : "16px" }}>
+                  {loading ? <Loader2 className="animate-spin" size={20} /> : "Generate Invite Link"}
+                </button>
+              ) : (
+                <div style={{ marginTop: "16px", padding: "20px", backgroundColor: "#f0fdf4", border: `1.5px dashed ${PRIMARY}`, borderRadius: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                  <div style={{ color: PRIMARY, fontWeight: "700", fontSize: "15px" }}>Invite Link Generated Successfully!</div>
+                  <div style={{ display: "flex", gap: "12px" }}>
+                    <input type="text" readOnly value={inviteLink} style={{ flex: 1, padding: "12px 16px", borderRadius: "10px", border: `1px solid ${PRIMARY_LIGHT}`, outline: "none", backgroundColor: "#fff", fontSize: "14px", color: TEXT_MAIN }} />
+                    <button type="button" onClick={copyToClipboard} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", backgroundColor: PRIMARY, color: "#fff", border: "none", borderRadius: "10px", padding: "0 20px", cursor: "pointer", fontWeight: "600", transition: "opacity 0.2s" }}>
+                      {copied ? <CheckCircle2 size={18} /> : <Copy size={18} />}
+                      {copied ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                  <button type="button" onClick={() => { setInviteLink(""); setSelectedCompany(""); setFranchiseId(""); }} style={{ background: "transparent", border: "none", color: TEXT_MUTED, cursor: "pointer", fontWeight: "600", fontSize: "14px", textAlign: "left", width: "fit-content" }}>
+                    Generate another invite
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            // ================= MANUAL MODE =================
+            <form onSubmit={handleSubmit}>
+              <div style={styles.sectionHeader}>
+                <Building2 size={18} color={PRIMARY} />
+                <h2 style={styles.sectionTitle}>Brand Identity</h2>
+              </div>
+
+              <div style={isMobile ? styles.flexColumn : styles.gridRowThree}>
+                <InputGroup isFocused={focusedField === "company"} label="Select Brand *" isMobile={isMobile}>
+                  <select name="company" required value={selectedCompany} onChange={(e) => setSelectedCompany(e.target.value)} style={styles.selectInput}
+                    onFocus={() => setFocusedField("company")} onBlur={() => setFocusedField(null)}>
+                    <option value="">Choose...</option>
+                    {companiesList.map((compName, idx) => (
+                      <option key={idx} value={compName}>{compName}</option>
+                    ))}
+                  </select>
+                </InputGroup>
+
+                <div style={styles.suggestionWrapper}>
+                  <label style={styles.inputLabel}>Suggested ID</label>
+                  <div style={{ ...styles.suggestionBox, height: isMobile ? "52px" : "48px" }} onClick={applySuggestion}>
+                    <Sparkles size={16} style={{ marginRight: '8px' }} />
+                    {suggestedId || "Select Brand First"}
+                  </div>
+                </div>
+
+                <InputGroup isFocused={focusedField === "franchise_id"} label="Confirm ID *" isMobile={isMobile}>
+                  <input name="franchise_id" required value={franchiseId} placeholder="e.g. TV-10" onChange={(e) => setFranchiseId(e.target.value)} style={styles.cleanInput}
+                    onFocus={() => setFocusedField("franchise_id")} onBlur={() => setFocusedField(null)} />
+                </InputGroup>
+              </div>
+
+              <div style={styles.divider}></div>
+
+              <div style={styles.sectionHeader}>
+                <User size={18} color={PRIMARY} />
+                <h2 style={styles.sectionTitle}>Owner Details</h2>
+              </div>
+
+              <div style={isMobile ? styles.flexColumn : styles.gridRowTwo}>
+                <InputGroup icon={User} isFocused={focusedField === "name"} label="Full Name *" isMobile={isMobile}>
+                  <input name="name" required placeholder="Enter name" style={styles.cleanInput}
+                    onFocus={() => setFocusedField("name")} onBlur={() => setFocusedField(null)} />
+                </InputGroup>
+                <InputGroup icon={Phone} isFocused={focusedField === "phone"} label="Phone *" isMobile={isMobile}>
+                  <input name="phone" required placeholder="+91" type="tel" style={styles.cleanInput}
+                    onFocus={() => setFocusedField("phone")} onBlur={() => setFocusedField(null)} />
+                </InputGroup>
+              </div>
+
+              <div style={isMobile ? styles.flexColumn : styles.gridRowTwo}>
+                <InputGroup icon={Mail} isFocused={focusedField === "email"} label="Email *" isMobile={isMobile}>
+                  <input name="email" required type="email" placeholder="email@domain.com" style={styles.cleanInput}
+                    onFocus={() => setFocusedField("email")} onBlur={() => setFocusedField(null)} />
+                </InputGroup>
+                <InputGroup icon={KeyRound} isFocused={focusedField === "password"} label="Password *" isMobile={isMobile}>
+                  <input name="password" required type={showPassword ? "text" : "password"} placeholder="••••••••" style={styles.cleanInput}
+                    onFocus={() => setFocusedField("password")} onBlur={() => setFocusedField(null)} />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </InputGroup>
+              </div>
+
+              <div style={styles.divider}></div>
+
+              <div style={styles.sectionHeader}>
+                <MapPin size={18} color={PRIMARY} />
+                <h2 style={styles.sectionTitle}>Location</h2>
+              </div>
+
+              <div style={isMobile ? styles.flexColumn : styles.gridRowTwo}>
+                <InputGroup isFocused={focusedField === "branch_location"} label="Branch Name *" isMobile={isMobile}>
+                  <input name="branch_location" required placeholder="e.g. Madhapur" style={styles.cleanInput}
+                    onFocus={() => setFocusedField("branch_location")} onBlur={() => setFocusedField(null)} />
+                </InputGroup>
+                <InputGroup icon={Map} isFocused={focusedField === "addressLine"} label="Street Address *" isMobile={isMobile}>
+                  <input name="addressLine" required placeholder="Door No, Street..." style={styles.cleanInput}
+                    onFocus={() => setFocusedField("addressLine")} onBlur={() => setFocusedField(null)} />
+                </InputGroup>
+              </div>
+
+              <div style={isMobile ? styles.flexColumn : styles.gridRowThree}>
+                <InputGroup isFocused={focusedField === "city"} label="City *" isMobile={isMobile}>
+                  <input name="city" required placeholder="City" style={styles.cleanInput}
+                    onFocus={() => setFocusedField("city")} onBlur={() => setFocusedField(null)} />
+                </InputGroup>
+                <InputGroup isFocused={focusedField === "state"} label="State *" isMobile={isMobile}>
+                  <select name="state" required style={styles.selectInput}
+                    onFocus={() => setFocusedField("state")} onBlur={() => setFocusedField(null)}>
+                    <option value="">Select...</option>
+                    {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </InputGroup>
+                <InputGroup isFocused={focusedField === "pincode"} label="Pincode *" isMobile={isMobile}>
+                  <input name="pincode" required placeholder="6 Digits" maxLength={6} type="number" style={styles.cleanInput}
+                    onFocus={() => setFocusedField("pincode")} onBlur={() => setFocusedField(null)} />
+                </InputGroup>
+              </div>
+
+              <div style={{ marginBottom: "24px" }}>
+                <InputGroup icon={MapPin} isFocused={focusedField === "nearestBusStop"} label="Nearest Bus Stop *" isMobile={isMobile}>
+                  <input name="nearestBusStop" required placeholder="e.g. Jubilee Hills Checkpost" style={styles.cleanInput}
+                    onFocus={() => setFocusedField("nearestBusStop")} onBlur={() => setFocusedField(null)} />
+                </InputGroup>
+              </div>
+
+              <div style={{ marginBottom: "24px" }}>
+                <InputGroup icon={IndianRupee} isFocused={focusedField === "transportation_charge"} label="Transportation Charge (Optional)" isMobile={isMobile}>
+                  <input name="transportation_charge" placeholder="0" type="number" min="0" step="0.01" style={styles.cleanInput}
+                    onFocus={() => setFocusedField("transportation_charge")} onBlur={() => setFocusedField(null)} />
+                </InputGroup>
+              </div>
+
+              <div style={styles.divider}></div>
+
+              <div style={styles.sectionHeader}>
+                <RefreshCw size={18} color={PRIMARY} />
+                <h2 style={styles.sectionTitle}>Menu Sync</h2>
+              </div>
+
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "16px 20px", borderRadius: "12px", marginBottom: "24px",
+                border: `1.5px solid ${syncMenu ? PRIMARY : BORDER}`,
+                backgroundColor: syncMenu ? "#f0fdf4" : "#fcfcfd",
+                transition: "all 0.25s ease",
+                cursor: "pointer"
+              }} onClick={() => setSyncMenu(!syncMenu)}>
+                <div>
+                  <div style={{ fontSize: "15px", fontWeight: "700", color: TEXT_MAIN, marginBottom: "4px" }}>
+                    {syncMenu ? "Sync Menu from Central (TV-1)" : "Don't Sync Menu"}
+                  </div>
+                  <div style={{ fontSize: "12px", color: TEXT_MUTED }}>
+                    {syncMenu ? "The central menu will be cloned to this branch on creation" : "No menu will be copied — you can sync later from Menu Management"}
+                  </div>
+                </div>
+                <div style={{
+                  width: "50px", height: "28px", borderRadius: "14px",
+                  backgroundColor: syncMenu ? PRIMARY : "#cbd5e1",
+                  position: "relative", transition: "background-color 0.25s ease",
+                  flexShrink: 0, marginLeft: "16px"
+                }}>
+                  <div style={{
+                    width: "22px", height: "22px", borderRadius: "50%",
+                    backgroundColor: "#fff", position: "absolute", top: "3px",
+                    left: syncMenu ? "25px" : "3px",
+                    transition: "left 0.25s ease",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.2)"
+                  }} />
+                </div>
+              </div>
+
+              <button type="submit" disabled={loading} style={{ ...styles.button, padding: isMobile ? "18px" : "16px" }}>
+                {loading ? <Loader2 className="animate-spin" size={20} /> : "Create Franchise Account"}
+              </button>
+            </form>
+          )}
+
         </div>
       </div>
     </div>
@@ -420,6 +585,7 @@ const styles = {
   idBoxWrapper: { display: "flex", alignItems: "center" },
   idBox: { padding: "6px 12px", backgroundColor: "#f1f5f9", borderRadius: "8px", color: PRIMARY, fontWeight: "700", border: `1px solid ${BORDER}` },
   mainContent: { flex: 1, overflowY: "auto", width: "100%", boxSizing: "border-box" },
+  tabButton: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "12px", borderRadius: "10px", border: "none", fontSize: "14px", fontWeight: "600", cursor: "pointer", transition: "all 0.2s ease" },
   formCard: { display: "flex", flexDirection: "column", maxWidth: "850px", width: "100%", margin: "0 auto", backgroundColor: "#fff", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" },
   sectionHeader: { display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px", marginTop: "8px" },
   sectionTitle: { fontSize: "13px", fontWeight: "800", color: TEXT_MAIN, textTransform: "uppercase", letterSpacing: "0.8px", margin: 0 },

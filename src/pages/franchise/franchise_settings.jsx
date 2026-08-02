@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import {
   ArrowLeft, Lock, LogOut, Eye, EyeOff,
-  User, X, Check, Save, Hash, MapPin, Utensils, ShieldCheck
+  User, X, Check, Save, Hash, MapPin, Utensils, ShieldCheck, Info, AlertTriangle
 } from "lucide-react";
 import { BRAND_GREEN as brandGreen } from "../../utils/theme";
 
@@ -14,6 +14,8 @@ function FranchiseSettingsCard() {
 
   // --- STATES ---
   const [franchiseId, setFranchiseId] = useState("...");
+  const [refundEnabled, setRefundEnabled] = useState(false);
+  const [refundToggleLoading, setRefundToggleLoading] = useState(false);
 
   // Password Logic
   const [newPassword, setNewPassword] = useState("");
@@ -26,6 +28,7 @@ function FranchiseSettingsCard() {
   // Modals
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showSecurityModal, setShowSecurityModal] = useState(false);
+  const [showRefundInfo, setShowRefundInfo] = useState(false);
 
   // Profile Data
   const [profileData, setProfileData] = useState({
@@ -52,7 +55,7 @@ function FranchiseSettingsCard() {
     try {
       const { data } = await supabase
         .from("profiles")
-        .select("name, email, phone, franchise_id, address, branch_location, company, pincode, state, city, country, nearest_bus_stop")
+        .select("name, email, phone, franchise_id, address, branch_location, company, pincode, state, city, country, nearest_bus_stop, refund_enabled")
         .eq("id", authUser.id)
         .single();
 
@@ -72,6 +75,7 @@ function FranchiseSettingsCard() {
           nearest_bus_stop: data.nearest_bus_stop || ""
         });
         setFranchiseId(data.franchise_id);
+        setRefundEnabled(data.refund_enabled || false);
       }
     } catch (e) {
       console.error("Profile fetch error:", e);
@@ -81,6 +85,18 @@ function FranchiseSettingsCard() {
   useEffect(() => {
     fetchProfile();
   }, [authUser]);
+
+  // Disable background scrolling when any modal is open
+  useEffect(() => {
+    if (showProfileModal || showSecurityModal || showRefundInfo) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [showProfileModal, showSecurityModal, showRefundInfo]);
 
   const openProfile = async () => {
     setShowProfileModal(true);
@@ -149,6 +165,22 @@ function FranchiseSettingsCard() {
       setPasswordMsg("Password updated successfully");
       setTimeout(() => setShowSecurityModal(false), 1500);
     }
+  };
+
+  const handleToggleRefund = async () => {
+    setRefundToggleLoading(true);
+    const newVal = !refundEnabled;
+    setRefundEnabled(newVal);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ refund_enabled: newVal })
+      .eq("id", authUser.id);
+      
+    if (error) {
+      alert("Failed to update refund setting.");
+      setRefundEnabled(!newVal);
+    }
+    setRefundToggleLoading(false);
   };
 
   const handleLogout = async () => {
@@ -238,7 +270,33 @@ function FranchiseSettingsCard() {
             <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-widest">Change Password</p>
           </button>
 
-          {/* 4. LOGOUT CARD */}
+          {/* 4. REFUND OPTION CARD */}
+          <div className="bg-white rounded-[24px] md:rounded-[32px] border border-slate-200 p-8 shadow-sm flex flex-col justify-center items-center text-center transition-all hover:border-black/20 hover:-translate-y-1 hover:shadow-lg min-h-[260px] relative">
+            <button 
+              onClick={() => setShowRefundInfo(true)}
+              className="absolute top-6 right-6 text-slate-400 hover:text-indigo-600 transition-colors p-2 rounded-full hover:bg-indigo-50"
+            >
+              <Info size={24} strokeWidth={2.5} />
+            </button>
+            <div className={`p-4 rounded-3xl transition-all mb-6 ${refundEnabled ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400'}`}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9"/><path d="M12 3v6"/><path d="M10 14h4"/><path d="M12 12v4"/></svg>
+            </div>
+            <h3 className="text-lg font-black text-black uppercase tracking-tight mb-2">Refund Option</h3>
+            <p className="text-[10px] font-bold text-slate-400 mb-6 uppercase tracking-widest">Enable same-day refunds</p>
+            
+            <button
+              onClick={handleToggleRefund}
+              disabled={refundToggleLoading}
+              className={`relative inline-flex h-8 w-16 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${refundEnabled ? 'bg-amber-500' : 'bg-slate-200'}`}
+            >
+              <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${refundEnabled ? 'translate-x-3.5' : '-translate-x-3.5'}`} />
+            </button>
+            <span className={`mt-3 text-[10px] font-black uppercase tracking-widest ${refundEnabled ? 'text-amber-500' : 'text-slate-400'}`}>
+              {refundEnabled ? "Enabled" : "Disabled"}
+            </span>
+          </div>
+
+          {/* 5. LOGOUT CARD */}
           <button
             onClick={handleLogout}
             className="bg-white rounded-[24px] md:rounded-[32px] border p-8 shadow-sm flex flex-col justify-center items-center text-center transition-all hover:bg-rose-50 hover:-translate-y-1 hover:shadow-lg active:scale-95 group min-h-[260px]"
@@ -264,7 +322,7 @@ function FranchiseSettingsCard() {
                 <X size={20} className="text-black" />
               </button>
             </div>
-            <div className="p-6 overflow-y-auto custom-scrollbar">
+            <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
               {profileLoading ? (
                 <div className="py-20 text-center font-black text-slate-300 animate-pulse tracking-[0.2em] uppercase text-xs">Syncing profile...</div>
               ) : (
@@ -466,6 +524,79 @@ function FranchiseSettingsCard() {
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
       `}</style>
+      {/* --- 3. REFUND INFO MODAL --- */}
+      {showRefundInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-slate-900/40 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <Info size={24} strokeWidth={2.5} />
+                </div>
+                <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Refund Feature Guide</h2>
+              </div>
+              <button onClick={() => setShowRefundInfo(false)} className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full transition-colors">
+                <X size={20} className="text-black" />
+              </button>
+            </div>
+            
+            <div className="p-6 md:p-8 overflow-y-auto flex-1 text-slate-600 text-sm text-left">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Left Column */}
+                <div className="space-y-6">
+                  <section>
+                    <h3 className="font-black text-black mb-2 uppercase tracking-wide text-xs">Purpose</h3>
+                    <p className="leading-relaxed">The Refund Feature allows you to process refunds for bills generated on the <strong>same day</strong> (within the last 24 hours). This is useful for accidental billings, customer returns, or payment mode corrections.</p>
+                  </section>
+
+                  <section>
+                    <h3 className="font-black text-black mb-2 uppercase tracking-wide text-xs">How It Works</h3>
+                    <ol className="list-decimal pl-5 space-y-2">
+                      <li><strong>Enable</strong> the feature here in Settings.</li>
+                      <li>Go to <strong>Billing History</strong>.</li>
+                      <li>Tap any bill generated in the last 24 hours.</li>
+                      <li>A yellow <strong>"Refund"</strong> button will appear at the bottom of the bill details.</li>
+                      <li>Tap it and choose whether the refund was given via <strong>CASH</strong> or <strong>UPI</strong>.</li>
+                      <li>The bill is marked as refunded and its amount is subtracted from your daily stats.</li>
+                    </ol>
+                  </section>
+                </div>
+
+                {/* Right Column */}
+                <div className="space-y-6">
+                  <section>
+                    <h3 className="font-black text-black mb-2 uppercase tracking-wide text-xs">Example Scenario</h3>
+                    <p className="bg-slate-50 p-4 rounded-xl border border-slate-100 italic leading-relaxed">
+                      A customer pays ₹500 via UPI, but you accidentally select Cash on the POS. You can enable refunds, go to History, refund the Cash bill (recording the refund mode), and then create a new correct bill for ₹500 UPI.
+                    </p>
+                  </section>
+
+                  <section className="bg-rose-50 p-4 rounded-xl border border-rose-100 text-rose-800">
+                    <h3 className="font-black mb-2 uppercase tracking-wide text-xs flex items-center gap-2">
+                      <AlertTriangle size={14} /> Important Limitations
+                    </h3>
+                    <ul className="list-disc pl-5 space-y-2">
+                      <li>Refunds cannot be undone.</li>
+                      <li>Only bills less than 24 hours old can be refunded.</li>
+                      <li>Refunded amounts are permanently deducted from your reports.</li>
+                    </ul>
+                  </section>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100 shrink-0">
+              <button 
+                onClick={() => setShowRefundInfo(false)}
+                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-black transition-colors"
+              >
+                Got It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

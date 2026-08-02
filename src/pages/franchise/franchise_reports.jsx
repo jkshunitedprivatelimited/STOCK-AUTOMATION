@@ -172,7 +172,8 @@ function FranchiseAnalytics() {
       const { data, error } = await query.order("created_at", { ascending: false });
       if (error) throw error;
 
-      const fetchedBills = data || [];
+      const rawBills = data || [];
+      const fetchedBills = isStore ? rawBills.filter(b => b.payment_mode !== "SYSTEM") : rawBills;
       const generatedGraph = processChartData(fetchedBills);
       const ids = fetchedBills.map(d => d.id);
       const generatedTopItems = ids.length > 0 ? await fetchTopItems(ids) : [];
@@ -373,12 +374,17 @@ function FranchiseAnalytics() {
   }, [activeTab, startDate, endDate, dateRangeMode, franchiseId, fetchData]);
 
   const stats = useMemo(() => {
-    const totalSales = bills.reduce((sum, b) => sum + Number(b.total ?? b.total_amount ?? 0), 0);
-    const upiSales = bills.reduce((sum, b) => (b.payment_mode === "UPI" ? sum + Number(b.total ?? b.total_amount ?? 0) : sum), 0);
-    const cashSales = bills.reduce((sum, b) => (b.payment_mode === "CASH" ? sum + Number(b.total ?? b.total_amount ?? 0) : sum), 0);
-    const totalDiscount = bills.reduce((sum, b) => sum + Number(b.discount ?? 0), 0);
-    const totalOrders = bills.length;
-    return { totalSales, upiSales, cashSales, totalDiscount, totalOrders };
+    const activeBills = bills.filter(b => !b.is_refunded);
+    const refundedBills = bills.filter(b => b.is_refunded);
+
+    const totalSales = activeBills.reduce((sum, b) => sum + Number(b.total ?? b.total_amount ?? 0), 0);
+    const upiSales = activeBills.reduce((sum, b) => (b.payment_mode?.toUpperCase() === "UPI" ? sum + Number(b.total ?? b.total_amount ?? 0) : sum), 0);
+    const cashSales = activeBills.reduce((sum, b) => (b.payment_mode?.toUpperCase() === "CASH" ? sum + Number(b.total ?? b.total_amount ?? 0) : sum), 0);
+    const totalDiscount = activeBills.reduce((sum, b) => sum + Number(b.discount ?? 0), 0);
+    const totalRefunds = refundedBills.reduce((sum, b) => sum + Number(b.total ?? b.total_amount ?? 0), 0);
+    const totalOrders = bills.length; // Keep all for total order count
+    const refundCount = refundedBills.length;
+    return { totalSales, upiSales, cashSales, totalDiscount, totalOrders, totalRefunds, refundCount };
   }, [bills]);
 
   const handleSort = useCallback((key) => {
@@ -420,7 +426,8 @@ function FranchiseAnalytics() {
   const processChartData = (data) => {
     if (!data.length) return [];
     const map = {};
-    data.forEach(r => {
+    const activeData = data.filter(d => !d.is_refunded);
+    activeData.forEach(r => {
       const d = new Date(r.created_at);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       const amt = Number(r.total ?? r.total_amount ?? 0);
@@ -428,6 +435,7 @@ function FranchiseAnalytics() {
     });
     // Fill every day between min and max dates so the chart has no gaps
     const dateKeys = Object.keys(map).sort();
+    if (dateKeys.length === 0) return [];
     const minDate = new Date(dateKeys[0] + 'T00:00:00');
     const maxDate = new Date(dateKeys[dateKeys.length - 1] + 'T00:00:00');
     const result = [];
@@ -470,7 +478,8 @@ function FranchiseAnalytics() {
     // --- SUMMARY SECTION ---
     csvContent += "=== SUMMARY ===\n";
     csvContent += `Total ${isStore ? "Bills" : "Orders"},${bills.length}\n`;
-    csvContent += `Total Amount (INR),${stats.totalSales.toFixed(2)}\n`;
+    csvContent += `Total Revenue (INR),${stats.totalSales.toFixed(2)}\n`;
+    csvContent += `Total Refunded (INR),${stats.totalRefunds?.toFixed(2) || "0.00"}\n`;
     if (isStore) {
       csvContent += `UPI Amount (INR),${stats.upiSales.toFixed(2)}\n`;
       csvContent += `Cash Amount (INR),${stats.cashSales.toFixed(2)}\n`;
@@ -492,7 +501,7 @@ function FranchiseAnalytics() {
     // --- DETAILED TRANSACTIONS ---
     csvContent += `=== DETAILED ${isStore ? "TRANSACTIONS" : "ORDERS"} ===\n`;
     if (isStore) {
-      csvContent += "S.No,Transaction ID,Date,Time,Payment Mode,Subtotal (INR),Discount (INR),Total Amount (INR)\n";
+      csvContent += "S.No,Transaction ID,Date,Time,Bill Status,Customer Paid Via,Refunded Via,Subtotal (INR),Discount (INR),Total Amount (INR)\n";
       bills.forEach((bill, index) => {
         const dateObj = new Date(bill.created_at);
         const dateStr = dateObj.toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' });
@@ -503,7 +512,9 @@ function FranchiseAnalytics() {
         const mode = bill.payment_mode || "N/A";
         const transactionId = bill.franchise_id || bill.id;
         const safeId = String(transactionId).replace(/"/g, '""');
-        csvContent += `${index + 1},"${safeId}",${dateStr},${timeStr},${mode},${subtotal},${discount},${amount}\n`;
+        const status = bill.is_refunded ? "REFUNDED" : "COMPLETED";
+        const refundMode = bill.is_refunded ? (bill.refund_mode || "UNKNOWN") : "N/A";
+        csvContent += `${index + 1},"${safeId}",${dateStr},${timeStr},${status},${mode},${refundMode},${subtotal},${discount},${amount}\n`;
       });
     } else {
       csvContent += "S.No,Invoice ID,Date,Time,Customer,Status,Total Amount (INR)\n";
@@ -736,6 +747,13 @@ function FranchiseAnalytics() {
                     <span className="sc-label">CASH</span>
                     <span className="sc-value" style={{ color: '#059669' }}>₹{stats.cashSales.toLocaleString('en-IN')}</span>
                   </div>
+                  <div className="stat-card">
+                    <span className="sc-label">REFUND AMOUNT</span>
+                    <div className="sc-value-wrapper">
+                      <span className="sc-value" style={{ color: '#f59e0b' }}>₹{stats.totalRefunds.toLocaleString('en-IN')}</span>
+                      <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 'bold', marginTop: '2px', display: 'block' }}>({stats.refundCount} Refunded {stats.refundCount === 1 ? 'Bill' : 'Bills'})</span>
+                    </div>
+                  </div>
                 </>
               )}
             </div>
@@ -781,19 +799,28 @@ function FranchiseAnalytics() {
                           <span className={`mode-badge ${(bill.payment_mode || '').toLowerCase()}`}>{bill.payment_mode || 'N/A'}</span>
                         </div>
                       )}
-                      <div className="col amt-col">₹{Number(bill.total ?? bill.total_amount ?? 0).toLocaleString('en-IN')}</div>
+                      <div className="col amt-col" style={{ textDecoration: bill.is_refunded ? 'line-through' : 'none', color: bill.is_refunded ? '#94a3b8' : 'inherit' }}>
+                        ₹{Number(bill.total ?? bill.total_amount ?? 0).toLocaleString('en-IN')}
+                      </div>
                       <div className="col disc-col">
-                        {Number(bill.discount ?? 0) > 0 ? <span style={{color: '#ef4444'}}>-₹{Number(bill.discount).toLocaleString('en-IN')}</span> : <span style={{color: '#94a3b8'}}>₹0</span>}
+                        {Number(bill.discount ?? 0) > 0 ? <span style={{color: '#ef4444', textDecoration: bill.is_refunded ? 'line-through' : 'none'}}>-₹{Number(bill.discount).toLocaleString('en-IN')}</span> : <span style={{color: '#94a3b8'}}>₹0</span>}
                       </div>
                       {activeTab === "store" && (
                         <div className="col action-col">
-                          <button
-                            className="delete-icon-btn"
-                            title="Delete this bill"
-                            onClick={(e) => { e.stopPropagation(); setBillToDelete(bill); }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {!bill.is_refunded && (
+                            <button
+                              className="delete-icon-btn"
+                              title="Delete this bill"
+                              onClick={(e) => { e.stopPropagation(); setBillToDelete(bill); }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                          {bill.is_refunded && (
+                             <span style={{ background: "#fef3c7", color: "#d97706", fontSize: '9px', padding: '3px 6px', borderRadius: '4px', fontWeight: '900', display: 'inline-block' }}>
+                               {bill.refund_mode ? `REFUNDED VIA ${bill.refund_mode}` : "REFUNDED"}
+                             </span>
+                          )}
                         </div>
                       )}
                       <div className="col arrow-col">{expandedBill === bill.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</div>
@@ -925,6 +952,10 @@ function FranchiseAnalytics() {
         .th-sortable { cursor: pointer; display: flex; align-items: center; gap: 4px; user-select: none; transition: color 0.15s; }
         .th-sortable:hover { color: var(--text-main); }
         .list-scroll { overflow-y: auto; max-height: 600px; overflow-x: hidden; }
+        .list-scroll::-webkit-scrollbar { width: 6px; }
+        .list-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .list-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .list-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         .list-item { border-bottom: 1px solid var(--border); transition: background 0.2s; }
         .list-item:active { background: #f8fafc; }
         .item-summary { display: flex; padding: 12px 16px; align-items: center; cursor: pointer; gap: 8px; }
@@ -952,8 +983,8 @@ function FranchiseAnalytics() {
         .th-amt { width: 60px; flex-shrink: 0; display: flex; justify-content: flex-end; }
         .amt-col { width: 60px; flex-shrink: 0; display: flex; justify-content: flex-end; font-size: 13px; font-weight: 700; color: var(--primary); white-space: nowrap; }
 
-        .th-action { width: 32px; flex-shrink: 0; display: flex; justify-content: center; }
-        .action-col { width: 32px; flex-shrink: 0; display: flex; justify-content: center; }
+        .th-action { width: 100px; flex-shrink: 0; display: flex; justify-content: flex-end; align-items: center; padding-right: 5px; }
+        .action-col { width: 100px; flex-shrink: 0; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding-right: 5px; }
         .delete-icon-btn { display: flex; align-items: center; justify-content: center; background: none; border: 1px solid transparent; color: #ef4444; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
         .delete-icon-btn:hover { color: #dc2626; background: #fef2f2; border-color: #fecaca; }
 
@@ -967,11 +998,13 @@ function FranchiseAnalytics() {
         .stat-card { background: var(--card-bg); border: 1px solid var(--border); padding: 16px; border-radius: 12px; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 1px 2px rgba(0,0,0,0.02); margin-top: 4px; }
         .sc-label { font-size: 11px; font-weight: 800; color: var(--text-sub); margin-bottom: 4px; }
         .sc-value { font-size: 20px; font-weight: 900; color: var(--text-main); }
+        .sc-value-wrapper { display: flex; flex-direction: column; align-items: center; }
         @media (max-width: 767px) {
           .stats-row { flex-direction: column; gap: 12px; }
           .stat-card { flex-direction: row; justify-content: space-between; padding: 12px 16px; margin-top: 0; }
           .sc-label { margin-bottom: 0; }
           .sc-value { font-size: 16px; }
+          .sc-value-wrapper { align-items: flex-end; }
         }
 
         .spinner { width: 24px; height: 24px; border: 3px solid #e2e8f0; border-top-color: var(--primary); border-radius: 50%; margin: 0 auto 10px; animation: spin 1s linear infinite; }
@@ -998,10 +1031,11 @@ function FranchiseAnalytics() {
 
           .th-mode, .mode-col { flex: 1; width: auto; }
           .th-amt, .amt-col { flex: 1; width: auto; }
-          .th-action, .action-col { width: 44px; }
+          .th-action, .action-col { width: 160px; padding-right: 20px; }
           .th-icon, .arrow-col { width: 30px; }
 
-          .item-summary { padding: 14px 16px; }
+          .item-summary { padding: 14px 24px; }
+          .table-header-row { padding: 14px 24px; }
           .mode-badge { font-size: 10px; padding: 3px 8px; }
         }
         @media (min-width: 1024px) {
@@ -1116,7 +1150,7 @@ function BillItems({ billId, type, bill, onDeleteItem }) {
             <span style={{ flex: 2, fontWeight: 600, color: '#334155' }}>{i.item_name}</span>
             <span style={{ flex: 1, textAlign: 'center', color: '#64748b' }}>{qty}</span>
             <span style={{ flex: 1, textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>₹{lineTotal.toLocaleString('en-IN')}</span>
-            {isStore && onDeleteItem ? (
+            {isStore && onDeleteItem && !bill?.is_refunded ? (
               <span style={{ width: 28, display: 'flex', justifyContent: 'center' }}>
                 <button
                   className="bi-delete-btn"
