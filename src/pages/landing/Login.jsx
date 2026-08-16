@@ -145,7 +145,7 @@ function Login() {
                 throw new Error("Your account is disabled, please contact the TVANAMM OFFICE.");
               }
 
-              finalProfileData = { ...staffProfile, role: "staff", ...franchiseInfo };
+              finalProfileData = { ...staffProfile, ...franchiseInfo, id: staffProfile.id, role: "staff", staff_profile_id: staffProfile.id };
             } else {
               throw new Error("Valid profile not found. Please contact your administrator.");
             }

@@ -76,18 +76,30 @@ const LoginTimings = () => {
       let role = "";
       let userId = "";
 
+      // ALWAYS fetch the real authenticated user first — never trust cache blindly
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      userId = user.id;
+
       const cachedContext = sessionStorage.getItem(CACHE_KEY_CONTEXT);
       if (cachedContext) {
         const parsed = JSON.parse(cachedContext);
-        fid = parsed.fid;
-        role = parsed.role;
-        userId = parsed.userId;
-        if (isMounted.current) setFranchiseId(fid);
-      } else {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        userId = user.id;
+        // Only use cache if it belongs to the SAME user who is currently logged in
+        if (parsed.userId === userId) {
+          fid = parsed.fid;
+          role = parsed.role;
+          if (isMounted.current) setFranchiseId(fid);
+        } else {
+          // Cache belongs to a different user (e.g. owner logged out, staff logged in).
+          // Wipe stale data immediately.
+          sessionStorage.removeItem(CACHE_KEY_CONTEXT);
+          sessionStorage.removeItem(CACHE_KEY_LOGS);
+          setLogs([]);
+        }
+      }
 
+      // If cache miss or cache was invalidated, fetch fresh from DB
+      if (!fid) {
         const [ownerCheck, staffCheck] = await Promise.all([
           supabase.from('profiles').select('franchise_id').eq('id', user.id).maybeSingle(),
           supabase.from('staff_profiles').select('franchise_id').eq('id', user.id).maybeSingle()
@@ -198,14 +210,14 @@ const LoginTimings = () => {
     let name = "Unknown";
     let id = "N/A";
 
-    if (mode === "STORE") {
-      isOwner = false;
-      name = log.staff_profiles?.name || location.state?.targetName || "Staff Member";
-      id = log.staff_profiles?.staff_id || log.staff_id || "N/A";
-    } else if (log.owner_profile_id) {
+    if (log.owner_profile_id) {
       isOwner = true;
       name = log.profiles?.name || log.profiles?.company || "Owner";
       id = "OWNER";
+    } else if (mode === "STORE") {
+      isOwner = false;
+      name = log.staff_profiles?.name || location.state?.targetName || "Staff Member";
+      id = log.staff_profiles?.staff_id || log.staff_id || "N/A";
     } else if (log.staff_profile_id || log.staff_id) {
       let profile = log.staff_profiles;
       if (Array.isArray(profile)) profile = profile[0];

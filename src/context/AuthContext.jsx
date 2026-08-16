@@ -137,6 +137,11 @@ export function AuthProvider({ children }) {
 
   /* ================= EXPLICIT LOGIN FUNCTION ================= */
   const login = async (supabaseUser, profileData, chosenMode) => {
+    // CRITICAL: Wipe ALL cached page data from any previous session.
+    // This prevents stale profiles, logs, and user context from a 
+    // different user leaking into the new session.
+    sessionStorage.clear();
+
     // 1. Update React State
     setUser({
       ...supabaseUser,
@@ -202,6 +207,11 @@ export function AuthProvider({ children }) {
     }
 
     await supabase.auth.signOut();
+    
+    // CRITICAL FIX: Clear all session storage on logout to prevent
+    // previous user's cached data (like profiles, logs, and roles) 
+    // from leaking into the next user's session if they log in from the same tab.
+    sessionStorage.clear();
 
     setUser(null);
     setRole(null);

@@ -151,20 +151,20 @@ const CentralStaffLogins = () => {
   const getStaffDetails = (log) => {
     const mode = (log.login_mode || "").toUpperCase();
 
-    // Staff/Store Worker login — login_mode is always "STORE" for staff users
-    if (mode === "STORE") {
-      const staffName = log.staff_profiles?.name || targetName || "Staff Member";
-      const staffId = log.staff_profiles?.staff_id || targetStaffId || "N/A";
-      return { name: staffName, id: staffId, isOwner: false };
-    }
-
-    // Owner/Admin login — any mode that isn't "STORE"
+    // Owner/Admin login — check first to override mode="STORE"
     if (log.owner_profile_id) {
       return { 
         name: log.profiles?.name || log.profiles?.company || "Owner / Admin", 
         id: "OWNER", 
         isOwner: true 
       };
+    }
+
+    // Staff/Store Worker login — login_mode is always "STORE" for staff users
+    if (mode === "STORE") {
+      const staffName = log.staff_profiles?.name || targetName || "Staff Member";
+      const staffId = log.staff_profiles?.staff_id || targetStaffId || "N/A";
+      return { name: staffName, id: staffId, isOwner: false };
     }
 
     // Fallback for old records with no login_mode
