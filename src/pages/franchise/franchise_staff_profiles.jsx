@@ -129,27 +129,30 @@ const FranchiseProfiles = () => {
           });
         }
       } else {
-        // REGISTER NEW STAFF
-        console.log("DEBUG: Attempting Auth Signup...");
-        const { data: authData, error: authError } = await authAdminClient.auth.signUp({
-          email: cleanEmail,
-          password: formData.password,
-          options: {
-            data: {
-              role: 'staff',
-              name: formData.name,
-              franchise_id: franchiseId
-            }
+        // REGISTER NEW STAFF VIA EDGE FUNCTION (to auto-confirm email and send custom credentials)
+        console.log("DEBUG: Attempting Edge Function Signup...");
+        const { data: edgeData, error: edgeError } = await supabase.functions.invoke('create-staff-account', {
+          body: {
+            email: cleanEmail,
+            password: formData.password,
+            name: formData.name,
+            franchiseId: franchiseId,
+            franchiseName: "Your Branch",
+            phone: formData.phone,
+            address: formData.address,
+            staff_id: formData.staff_id
           }
         });
 
-        if (authError) throw new Error(`Auth Error: ${authError.message}`);
-        if (!authData?.user) throw new Error("User creation failed.");
+        if (edgeError || edgeData?.error) {
+          throw new Error(edgeError?.message || edgeData?.error || "Failed to create staff user.");
+        }
 
         console.log("DEBUG: Auth success. Creating DB Profile...");
 
+        // Insert into database using the user_id returned by the edge function
         const { error: dbError } = await supabase.from('staff_profiles').insert([{
-          id: authData.user.id,
+          id: edgeData.user_id,
           name: formData.name,
           staff_id: formData.staff_id,
           phone: formData.phone,

@@ -254,18 +254,16 @@ const CentralStaffProfiles = () => {
         }
         alert("✅ Updated Successfully");
       } else {
-        const { data: edgeData, error: edgeError } = await supabase.functions.invoke('register-user', {
+        const { data: edgeData, error: edgeError } = await supabase.functions.invoke('create-staff-account', {
           body: {
             email: formData.email.trim().toLowerCase(),
             password: formData.password,
-            metadata: {
-              name: formData.name,
-              role: 'staff',
-              franchise_id: searchFranchiseId,
-              staff_id: formData.staff_id,
-              phone: formData.phone,
-              address: formData.address,
-            }
+            name: formData.name,
+            franchiseId: searchFranchiseId,
+            franchiseName: searchFranchiseId, // You could lookup the name if you wanted
+            phone: formData.phone,
+            address: formData.address,
+            staff_id: formData.staff_id
           }
         });
 
@@ -273,11 +271,8 @@ const CentralStaffProfiles = () => {
           throw new Error(edgeError?.message || edgeData?.error || "Failed to create staff user");
         }
 
-        // Edge function returns authData in `edgeData.user`
-        const authData = edgeData;
-
         const { error: dbError } = await supabase.from('staff_profiles').insert([{
-          id: authData.user.id,
+          id: edgeData.user_id,
           name: formData.name,
           staff_id: formData.staff_id,
           email: formData.email.trim().toLowerCase(),
@@ -287,6 +282,7 @@ const CentralStaffProfiles = () => {
         }]);
 
         if (dbError) throw dbError;
+
         alert("✅ Staff Account Created Successfully");
       }
 
