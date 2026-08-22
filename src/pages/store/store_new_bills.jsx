@@ -149,7 +149,19 @@ function Store() {
 
   const totals = useMemo(() => {
     const subtotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
-    const calculatedDiscount = discountType === "percent" ? (subtotal * (discountValue / 100)) : discountValue;
+    
+    let activeDiscountValue = parseFloat(discountValue) || 0;
+    if (activeDiscountValue < 0) activeDiscountValue = 0;
+
+    let calculatedDiscount = 0;
+    if (discountType === "percent") {
+      activeDiscountValue = Math.min(100, activeDiscountValue);
+      calculatedDiscount = subtotal * (activeDiscountValue / 100);
+    } else {
+      activeDiscountValue = Math.floor(activeDiscountValue);
+      calculatedDiscount = Math.min(subtotal, activeDiscountValue);
+    }
+
     return {
       subtotal,
       discountAmt: calculatedDiscount,
@@ -492,10 +504,30 @@ function Store() {
 
                 <div style={{ ...styles.discountBox, padding: isMobile ? '10px' : '15px', marginBottom: isMobile ? '10px' : '20px' }}>
                   <div style={styles.discountToggleRow}>
-                    <button style={{ ...styles.toggleSmall, background: discountType === 'fixed' ? PRIMARY : '#fff', color: discountType === 'fixed' ? '#fff' : BLACK }} onClick={() => setDiscountType('fixed')}>₹ Amt</button>
-                    <button style={{ ...styles.toggleSmall, background: discountType === 'percent' ? PRIMARY : '#fff', color: discountType === 'percent' ? '#fff' : BLACK }} onClick={() => setDiscountType('percent')}>% Off</button>
+                    <button style={{ ...styles.toggleSmall, background: discountType === 'fixed' ? PRIMARY : '#fff', color: discountType === 'fixed' ? '#fff' : BLACK }} onClick={() => {
+                        setDiscountType('fixed');
+                        setDiscountValue(0);
+                    }}>₹ Amt</button>
+                    <button style={{ ...styles.toggleSmall, background: discountType === 'percent' ? PRIMARY : '#fff', color: discountType === 'percent' ? '#fff' : BLACK }} onClick={() => {
+                        setDiscountType('percent');
+                        setDiscountValue(0);
+                    }}>% Off</button>
                   </div>
-                  <input type="number" placeholder="Value..." value={discountValue || ""} onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)} style={styles.modalDiscountInput} />
+                  <input type="number" placeholder="Value..." value={discountValue === 0 ? "" : discountValue} onChange={(e) => {
+                      let rawValue = e.target.value;
+                      if (rawValue === "") {
+                          setDiscountValue(0);
+                          return;
+                      }
+                      
+                      // Use parseInt to grab only the whole number part (e.g. "16.5" becomes 16)
+                      let num = parseInt(rawValue, 10);
+                      
+                      if (isNaN(num) || num < 0) num = 0;
+                      if (discountType === 'percent' && num > 100) num = 100;
+                      
+                      setDiscountValue(num);
+                  }} style={styles.modalDiscountInput} />
                 </div>
                 <div style={{ ...styles.finalAmountDisplay, marginBottom: isMobile ? '10px' : '25px', padding: isMobile ? '10px' : '15px' }}>
                   <div style={{ fontSize: isMobile ? '28px' : '42px', fontWeight: '900', color: PRIMARY }}>₹{totals.total.toFixed(2)}</div>
