@@ -544,9 +544,11 @@ const CentralStockRequests = () => {
           .limit(1);
           
         if (matchedInvoices && matchedInvoices.length > 0) {
-          // Delete invoice items first (cascade should handle this, but just in case)
-          await supabase.from("invoice_items").delete().eq("invoice_id", matchedInvoices[0].id);
-          await supabase.from("invoices").delete().eq("id", matchedInvoices[0].id);
+          // Delete invoice using edge function to bypass RLS
+          const { error: deleteErr } = await supabase.functions.invoke('admin-delete-invoice', {
+            body: { target_invoice_id: matchedInvoices[0].id }
+          });
+          if (deleteErr) console.warn("Failed to delete invoice via edge function:", deleteErr);
         }
         
         // Restore stocks

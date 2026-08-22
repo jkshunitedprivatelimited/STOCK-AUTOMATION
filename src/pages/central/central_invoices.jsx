@@ -365,32 +365,21 @@ function CentralInvoices() {
         if (!invoiceId) return;
 
         try {
-            console.log("[DEBUG] Attempting to delete invoice_items for invoice:", invoiceId);
-            const { data: itemsData, error: itemsError } = await supabase.from("invoice_items").delete().eq("invoice_id", invoiceId).select();
-            if (itemsError) {
-                console.warn("[DEBUG] Error deleting items:", itemsError);
-            } else {
-                console.log("[DEBUG] Deleted items successfully. Items removed:", itemsData?.length || 0);
+            console.log("[DEBUG] Attempting to delete invoice using admin-delete-invoice edge function:", invoiceId);
+            
+            const { data, error } = await supabase.functions.invoke('admin-delete-invoice', {
+                body: { target_invoice_id: invoiceId }
+            });
+
+            if (error || (data && data.error)) {
+                console.error("[DEBUG] Error from edge function on invoice delete:", error || data?.error);
+                throw new Error(error?.message || data?.error || "Failed to delete invoice");
             }
 
-            console.log("[DEBUG] Attempting to delete main invoice record:", invoiceId);
-            const { data: invData, error: invError } = await supabase.from("invoices").delete().eq("id", invoiceId).select();
+            console.log("[DEBUG] Successfully deleted invoice from DB. Removing from UI state...");
+            setInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
+            if (selectedInvoice?.id === invoiceId) setShowModal(false);
             
-            if (invError) {
-                console.error("[DEBUG] Error from Supabase on invoice delete:", invError);
-                throw invError;
-            }
-            
-            console.log("[DEBUG] Delete invoice response data:", invData);
-
-            if (!invData || invData.length === 0) {
-                console.warn("[DEBUG] WARNING: Supabase returned no error, but 0 rows were deleted. This usually means Row Level Security (RLS) silently blocked the deletion.");
-                alert("The system blocked the deletion. This is likely an RLS permission issue. Check console logs.");
-            } else {
-                console.log("[DEBUG] Successfully deleted invoice from DB. Removing from UI state...");
-                setInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
-                if (selectedInvoice?.id === invoiceId) setShowModal(false);
-            }
         } catch (err) {
             console.error("[DEBUG] Delete invoice exception caught:", err);
             alert("Could not delete invoice: " + err.message);
